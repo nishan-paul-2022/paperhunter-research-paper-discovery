@@ -1,108 +1,156 @@
-# A* Conference Paper Database (dblp)
+# paperhunter
 
-Builds a local SQLite database + CSV of papers from the CORE ICORE2026 A* conferences (62 venues), years 2023-2026, from the dblp dump.
+**Staged, auditable pipeline for finding baseline papers: dblp ingest, keyword prefilter, LLM screening with a versioned rubric, human audit.**
 
-## Quick start
+Given a research topic, paperhunter narrows hundreds of thousands of papers to a short, defensible list of candidate baselines. Each step is cheap before it is expensive, every decision is logged, and recall is measured against papers you already know are relevant.
+
+## Status
+
+| Stage | Description | Status |
+|---|---|---|
+| 0. Ingest | dblp dump to SQLite/CSV for CORE A* venues, 2023-2026 | **Working** (`build_dblp_db.py`) |
+| 1. Tier metadata | CORE A*/A/B/C for conferences, SJR Q1-Q4 for journals | Planned |
+| 2. Prefilter | keyword/regex cut of the full set | Planned |
+| 3. Title screen | LLM, fixed rubric, structured JSON, cached | Planned |
+| 4. Enrich | abstracts and code links via OpenAlex / Semantic Scholar / arXiv | Planned |
+| 5. Abstract screen | stricter baseline rubric on the shortlist | Planned |
+| 6. Human audit | sample check and agreement report | Planned |
+
+## Why this exists
+
+General tools (Elicit, Semantic Scholar, Google Scholar) search broadly. Writing a survey or a literature chapter needs something different:
+
+- **Baseline-specific judgment:** same task, comparable benchmark, public code.
+- **Reproducible:** versioned rubric, logged model outputs, rerunnable when the rubric changes.
+- **Measurable:** recall is checked against a gold set of known-relevant papers.
+- **Topic-agnostic:** swap the rubric and keywords to reuse it for another project.
+
+## Pipeline
+
+```
+dblp.xml ──► papers.db ──► prefilter ──► title screen ──► enrich ──► abstract screen ──► human audit
+ (160k+)                   (~3-8k)       (LLM, batch)    (~300-800)   (LLM, strict)      (~50-100)
+```
+
+Design rules:
+
+1. **Cheap before expensive.** Regex first, small model second, stronger model last.
+2. **Tier is metadata, not a filter.** Ingest everything, store `tier`, filter at query time.
+3. **Cache by paper key.** Reruns only process what changed.
+4. **Temperature 0, structured output.** Same input, same label.
+5. **Log everything.** Model, prompt version and raw output go to JSONL.
+
+## Quick start (Stage 0 works today)
 
 ```bash
-cd ~/Downloads/research-paper-database
-python3 -m venv venv && source venv/bin/activate   # first time only
-pip install lxml                                    # first time only
+git clone https://github.com/<you>/paperhunter.git
+cd paperhunter
+python3 -m venv venv && source venv/bin/activate
+pip install lxml
 python3 build_dblp_db.py
 ```
 
-That is all. The script:
+The script downloads `dblp.dtd` and `dblp.xml.gz` if missing (about 1 GB, about 4-5 GB unzipped), scans the dump once and writes `papers.db` and `papers.csv`. Expect 10-30 minutes.
 
-1. downloads `dblp.dtd` and `dblp.xml.gz` if they are missing (about 1 GB, then unzipped to about 4-5 GB)
-2. scans `dblp.xml` once and keeps only A* venues in the year range
-3. writes `papers.db` and `papers.csv`
-4. prints papers per venue and year
-
-Expect 10-30 minutes. Progress is printed as a percentage.
-
-## Update later (new papers, new conferences)
+Update later:
 
 ```bash
-source venv/bin/activate
-python3 build_dblp_db.py --refresh
+python3 build_dblp_db.py --refresh                      # newest dump, rebuilds from scratch
+python3 build_dblp_db.py --from 2024 --to 2027          # change the year range
 ```
 
-`--refresh` deletes the old dump and downloads the newest one. The database is rebuilt from scratch, so there is nothing to merge or clean up. dblp updates its dump daily, but a conference only appears after its proceedings are indexed. Refresh every few months, or after a conference you care about has finished.
+### Why the DTD
 
-Other options:
+`dblp.xml` uses entities such as `&uuml;` that are defined only in `dblp.dtd`. The parser fails without it, so it must sit next to the XML. The script handles this.
 
-| Option | Meaning |
-|---|---|
-| `--from 2023` | first year to keep |
-| `--to 2027` | last year to keep (change when a new year starts) |
-
-Example: `python3 build_dblp_db.py --refresh --from 2024 --to 2027`
-
-## Why a DTD is needed
-
-`dblp.xml` uses entities like `&uuml;` that are defined only in `dblp.dtd`. Without the DTD in the same folder, the parser fails. The script downloads it automatically.
-
-## How papers are matched
+### How venues are matched
 
 Filtering uses dblp **keys** (e.g. `conf/ccs/Smith23`), not title text.
 
-**Conference proceedings** (`<inproceedings>`): the key prefix is mapped to an acronym, e.g. `conf/ccs` = CCS, `conf/sp` = SP, `conf/uss` = USENIX-Security, `conf/ndss` = NDSS. The full table is the `CONF` dict at the top of the script.
-
-**Venues published in journals** (`<article>`), which a plain `conf/` filter misses:
+- **Conferences:** key prefix to acronym (`CONF` dict at the top of the script).
+- **Journal-published venues** that a `conf/` filter would miss:
 
 | Venue | dblp journal | Rule |
 |---|---|---|
-| POPL, PLDI | PACMPL (`journals/pacmpl`) | issue = POPL or PLDI |
-| FSE | PACMSE (`journals/pacmse`) | issue = FSE (ISSTA skipped) |
-| SIGMOD | PACMMOD (`journals/pacmmod`) | all issues |
-| SIGMETRICS | POMACS (`journals/pomacs`) | all issues |
-| SIGGRAPH / SIGGRAPH Asia | ACM TOG (`journals/tog`) | issue 4 / issue 6 |
-| VLDB | PVLDB (`journals/pvldb`) | all |
+| POPL, PLDI | PACMPL | issue = POPL / PLDI |
+| FSE | PACMSE | issue = FSE |
+| SIGMOD | PACMMOD | all issues (PODS mixed in) |
+| SIGMETRICS | POMACS | all issues |
+| SIGGRAPH / SIGGRAPH Asia | ACM TOG | issue 4 / issue 6 |
+| VLDB | PVLDB | all |
 
-ICAPS uses `conf/aips` for older years and `conf/icaps` from 2024. Both are handled, and the booktitle must be exactly `ICAPS`.
+ICAPS moved from `conf/aips` to `conf/icaps` in 2024; both are handled.
+
+### Database schema
+
+Table `papers`: `key, venue, year, title, authors, booktitle, pages, ee, doi`. `authors` is separated by `; `. `ee` is the paper link.
+
+```bash
+sqlite3 papers.db "SELECT venue, COUNT(*) FROM papers GROUP BY venue ORDER BY 2 DESC;"
+sqlite3 -header -csv papers.db "SELECT venue, year, title, ee FROM papers WHERE venue IN ('CCS','SP','NDSS','USENIX-Security') AND lower(title) LIKE '%llm%';" > out.csv
+```
+
+## Planned layout
+
+```
+paperhunter/
+  build_dblp_db.py        # Stage 0 (exists)
+  screen/
+    rubric.md             # baseline criteria, versioned
+    prefilter.py
+    llm_screen.py         # batch, cached, JSONL output
+    enrich.py             # abstracts + code links
+  gold/
+    known_relevant.csv    # papers the pipeline must find
+  data/                   # gitignored: dblp.xml, papers.db
+  results/                # committed: screened.jsonl, shortlist.csv
+```
+
+## Scope and tiers
+
+Target coverage: conferences CORE A*/A/B/C and journals SJR Q1-Q4.
+
+- **Conference tiers:** from the published CORE ICORE list.
+- **Journal quartiles:** from SJR (free). Quartiles are per subject category, so a journal can be Q1 in one and Q3 in another; the rule (best quartile) will be written down in the repo.
+- **Suggested rollout:** A*/A and Q1/Q2 first, plus arXiv cs.CR/cs.AI. Add B and Q3 only if the gold-set recall check shows gaps. C and Q4 stay behind an optional flag.
+- **Tier is not quality.** A lower-tier paper with open code and a clean benchmark can be a better baseline than a top-tier paper without code.
+
+## Quality and audit
+
+- **Gold set:** known-relevant papers (for example, those in an existing survey) must be found. This gives a measured recall.
+- **Sample audit:** manually check about 100 excludes and 100 includes and report agreement.
+- **Reasons are not evidence.** The model's justification is plausible text; judge by the abstract and the code.
+- **Disclosure:** if results feed a publication, state the LLM-assisted screening, model, rubric version and audit agreement in the methodology.
 
 ## Known limits
 
-- **PODS** papers from 2024 onward are inside the SIGMOD set (same journal, no clean split).
-- **SIGMETRICS** may include a few non-main-track POMACS papers.
-- **SIGGRAPH / SiggraphA** come from TOG issues 4 and 6 and may include a few extras.
-- **Recent years can be incomplete.** dblp indexes proceedings after publication, so latest-year counts may be partial, and venues not yet held (or not yet indexed) show no papers. The script prints which venues have none.
-- dblp has **titles and metadata only**, no abstracts.
+- dblp has titles and metadata only, no abstracts (hence the enrich stage).
+- dblp is CS-only; other fields need another source.
+- Recent years can be incomplete; dblp indexes proceedings after publication. The script prints venues with no papers.
+- PODS (2024+) is inside the SIGMOD set; SIGMETRICS and the two SIGGRAPH sets may include a few extras from the same journal.
 - Workshops have their own dblp keys and are excluded.
+- LLMs favor well-known papers; the gold set and audit are there to catch this.
 
-## Database
+## Roadmap
 
-Table `papers`: `key, venue, year, title, authors, booktitle, pages, ee, doi`.
-`authors` is separated by `; `. `ee` is the paper link.
-
-Useful queries:
-
-```bash
-# papers per venue
-sqlite3 papers.db "SELECT venue, COUNT(*) FROM papers GROUP BY venue ORDER BY 2 DESC;"
-
-# top security venues, LLM-related titles
-sqlite3 -header -csv papers.db "SELECT venue, year, title, authors, ee FROM papers WHERE venue IN ('CCS','SP','NDSS','USENIX-Security') AND (lower(title) LIKE '%llm%' OR lower(title) LIKE '%language model%') ORDER BY year DESC;" > security_llm.csv
-
-# pentesting / vulnerability papers
-sqlite3 -header -csv papers.db "SELECT venue, year, title, ee FROM papers WHERE lower(title) LIKE '%penetration%' OR lower(title) LIKE '%pentest%' ORDER BY year DESC;" > pentest.csv
-```
-
-## Add or change venues
-
-Edit the `CONF` dict in `build_dblp_db.py` (key prefix to acronym) and re-run. To find a venue's key prefix:
-
-```bash
-grep -m3 '<booktitle>ICAPS' dblp.xml          # shows records for that booktitle
-grep -m3 'key="conf/icaps/' dblp.xml          # check a guessed prefix
-```
+- [x] Stage 0: dblp ingest, A* venues, 2023-2026
+- [ ] Add tier metadata (CORE, SJR)
+- [ ] Prefilter with configurable keyword file
+- [ ] `rubric.md` and title screen (batch, cached, JSONL)
+- [ ] OpenAlex / Semantic Scholar enrichment
+- [ ] Abstract screen and shortlist export
+- [ ] Gold-set recall report and audit sampling
+- [ ] arXiv source (cs.CR, cs.AI)
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `Missing lxml` | `pip install lxml` (inside the venv) |
-| Entity or DTD error | make sure `dblp.dtd` is next to `dblp.xml`; run with `--refresh` |
-| Looks stuck at start | it prints nothing until 500k records are scanned; wait a minute |
-| Memory keeps growing | should stay flat; if not, report it |
-| Download fails | download `dblp.dtd` and `dblp.xml.gz` manually from https://dblp.org/xml/ into the folder and re-run |
+| `Missing lxml` | `pip install lxml` inside the venv |
+| Entity or DTD error | keep `dblp.dtd` next to `dblp.xml`, or run with `--refresh` |
+| Nothing printed at start | progress appears after 500k records; wait a minute |
+| Download fails | fetch `dblp.dtd` and `dblp.xml.gz` from https://dblp.org/xml/ manually into the folder |
+
+## License
+
+TBD. Note that dblp data is released under CC0.
