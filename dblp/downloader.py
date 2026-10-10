@@ -6,7 +6,11 @@ import os
 import shutil
 import urllib.request
 from typing import Optional
-from .config import BASE, DTD, XML_GZ, XML
+
+try:
+    from .config import BASE, DTD, XML_GZ, XML
+except (ImportError, ValueError):
+    from config import BASE, DTD, XML_GZ, XML
 
 
 def download(url: str, dest: str) -> None:

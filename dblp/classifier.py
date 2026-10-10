@@ -2,7 +2,11 @@
 Venue classification logic for dblp XML records.
 """
 from typing import Optional
-from .config import CONF
+
+try:
+    from .config import CONF
+except (ImportError, ValueError):
+    from config import CONF
 
 
 def classify(el, key: str, conf: Optional[dict] = None) -> Optional[str]:

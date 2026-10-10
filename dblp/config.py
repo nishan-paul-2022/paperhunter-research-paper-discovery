@@ -3,12 +3,14 @@ Configuration constants and venue mappings for dblp paper extraction.
 """
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 BASE = "https://dblp.org/xml/"
-DTD = "dblp.dtd"
-XML_GZ = "dblp.xml.gz"
-XML = "dblp.xml"
-DB = "papers.db"
-CSV = "papers.csv"
+DTD = str(REPO_ROOT / "dblp.dtd")
+XML_GZ = str(REPO_ROOT / "dblp.xml.gz")
+XML = str(REPO_ROOT / "dblp.xml")
+DB = str(REPO_ROOT / "papers.db")
+CSV = str(REPO_ROOT / "papers.csv")
 
 # dblp key prefix -> venue acronym (conference proceedings = <inproceedings>)
 CONF = {

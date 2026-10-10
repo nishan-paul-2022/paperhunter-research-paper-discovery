@@ -4,7 +4,11 @@ Export and reporting utilities for the papers database.
 import csv
 import sqlite3
 from typing import Optional
-from .config import DB, CSV, CONF
+
+try:
+    from .config import DB, CSV, CONF
+except (ImportError, ValueError):
+    from config import DB, CSV, CONF
 
 
 def export_to_csv(db_path: str = DB, csv_path: str = CSV) -> int:

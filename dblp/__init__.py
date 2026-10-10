@@ -7,7 +7,7 @@ from .classifier import classify
 from .downloader import download, prepare
 from .builder import build, create_indexes
 from .exporter import export_to_csv, report_stats, export_and_report
-from .cli import main, build_parser
+from .index import main, build_parser
 
 __all__ = [
     "BASE",

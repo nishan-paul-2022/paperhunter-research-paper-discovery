@@ -8,7 +8,7 @@ Given a research topic, paperhunter narrows hundreds of thousands of papers to a
 
 | Stage | Description | Status |
 |---|---|---|
-| 0. Ingest | dblp dump to SQLite/CSV for CORE A* venues, 2023-2026 | **Working** (`index.py`) |
+| 0. Ingest | dblp dump to SQLite/CSV for CORE A* venues, 2023-2026 | **Working** (`dblp/index.py`) |
 | 1. Tier metadata | CORE A*/A/B/C for conferences, SJR Q1-Q4 for journals | Planned |
 | 2. Prefilter | keyword/regex cut of the full set | Planned |
 | 3. Title screen | LLM, fixed rubric, structured JSON, cached | Planned |
@@ -47,7 +47,7 @@ git clone https://github.com/<you>/paperhunter.git
 cd paperhunter
 python3 -m venv venv && source venv/bin/activate
 pip install lxml
-python3 index.py
+python3 dblp/index.py
 ```
 
 The script downloads `dblp.dtd` and `dblp.xml.gz` if missing (about 1 GB, about 4-5 GB unzipped), scans the dump once and writes `papers.db` and `papers.csv`. Expect 10-30 minutes.
@@ -55,8 +55,8 @@ The script downloads `dblp.dtd` and `dblp.xml.gz` if missing (about 1 GB, about 
 Update later:
 
 ```bash
-python3 index.py --refresh                      # newest dump, rebuilds from scratch
-python3 index.py --from 2024 --to 2027          # change the year range
+python3 dblp/index.py --refresh                      # newest dump, rebuilds from scratch
+python3 dblp/index.py --from 2024 --to 2027          # change the year range
 ```
 
 ### Why the DTD
@@ -94,14 +94,13 @@ sqlite3 -header -csv papers.db "SELECT venue, year, title, ee FROM papers WHERE 
 
 ```
 paperhunter/
-  index.py                # Stage 0 entry point (with index)
-  dblp/                   # Modular dblp pipeline package
+  dblp/                   # Stage 0 ingest pipeline
+    index.py              # Entry point and index runner
     config.py             # URLs, paths, and conference mappings
     classifier.py         # Venue classification
     downloader.py         # DTD and XML download/decompression
     builder.py            # XML parser & database builder (includes SQLite index)
     exporter.py           # CSV export and summary reporting
-    cli.py                # Command-line interface
   screen/
     rubric.md             # baseline criteria, versioned
     prefilter.py

@@ -11,8 +11,12 @@ try:
 except ImportError:
     sys.exit("Missing lxml. Run:  pip install lxml")
 
-from .config import DB, XML, CONF
-from .classifier import classify
+try:
+    from .config import DB, XML, CONF
+    from .classifier import classify
+except (ImportError, ValueError):
+    from config import DB, XML, CONF
+    from classifier import classify
 
 
 def create_indexes(db: sqlite3.Connection) -> None:
