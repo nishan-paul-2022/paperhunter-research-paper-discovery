@@ -99,8 +99,7 @@ paperhunter/
     config.py             # URLs, paths, and conference mappings
     classifier.py         # Venue classification
     downloader.py         # DTD and XML download/decompression
-    indexer.py            # SQLite index management
-    builder.py            # XML parser & database builder
+    builder.py            # XML parser & database builder (includes SQLite index)
     exporter.py           # CSV export and summary reporting
     cli.py                # Command-line interface
   screen/

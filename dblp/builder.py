@@ -13,7 +13,11 @@ except ImportError:
 
 from .config import DB, XML, CONF
 from .classifier import classify
-from .indexer import create_indexes
+
+
+def create_indexes(db: sqlite3.Connection) -> None:
+    """Create indexes for efficient venue and year filtering."""
+    db.execute("CREATE INDEX IF NOT EXISTS idx_venue_year ON papers(venue, year)")
 
 
 def build(
