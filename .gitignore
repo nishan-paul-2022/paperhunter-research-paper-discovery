@@ -1,3 +1,5 @@
 .vscode/
 dblp.xml
 dblp.xml.gz
+__pycache__/
+*.pyc

@@ -94,7 +94,16 @@ sqlite3 -header -csv papers.db "SELECT venue, year, title, ee FROM papers WHERE 
 
 ```
 paperhunter/
-  build_dblp_db.py        # Stage 0 (exists)
+  index.py                # Stage 0 entry point (with index)
+  build_dblp_db.py        # Stage 0 legacy entry point (delegates to index.py)
+  dblp/                   # Modular dblp pipeline package
+    config.py             # URLs, paths, and conference mappings
+    classifier.py         # Venue classification
+    downloader.py         # DTD and XML download/decompression
+    indexer.py            # SQLite index management
+    builder.py            # XML parser & database builder
+    exporter.py           # CSV export and summary reporting
+    cli.py                # Command-line interface
   screen/
     rubric.md             # baseline criteria, versioned
     prefilter.py
