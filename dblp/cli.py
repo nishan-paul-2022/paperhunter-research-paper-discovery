@@ -12,12 +12,11 @@ from .builder import build
 from .exporter import export_and_report
 
 DOC = """
-build_dblp_db.py / index.py - build a paper database of CORE A* conferences from dblp.
+index.py - build a paper database of CORE A* conferences from dblp.
 
 Usage:
     pip install lxml            # once
     python3 index.py            # does everything
-    # or: python3 build_dblp_db.py
 
 Options:
     --refresh        delete local dblp files and download the newest dump
