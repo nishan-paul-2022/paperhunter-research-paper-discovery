@@ -300,8 +300,8 @@ def main() -> None:
                     help=f"Path to dblp.xml  (default: {XML_PATH.name})")
     ap.add_argument("--sjr", default=str(SJR_SRC),
                     help=f"Path to SJR CSV   (default: {SJR_SRC.name})")
-    ap.add_argument("--out", default=str(OUT_CSV),
-                    help=f"Output CSV        (default: {OUT_CSV.name})")
+    ap.add_argument("--out", default=str(OUT_FINAL),
+                    help=f"Output CSV        (default: {OUT_FINAL.name})")
     args = ap.parse_args()
 
     xml_path = Path(args.xml)
