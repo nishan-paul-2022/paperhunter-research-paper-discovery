@@ -12,10 +12,11 @@ try:
 except ImportError:
     sys.exit("Missing lxml.  Run:  pip install lxml")
 
-DBLP_DIR = Path(__file__).resolve().parent
-SJR_SRC = DBLP_DIR / "SJR-WoS-2025-CS.csv"
-XML_PATH = DBLP_DIR / "dblp.xml"
-OUT_CSV = DBLP_DIR / "List-of-Journal.csv"
+HUNTER_DIR = Path(__file__).resolve().parent
+DATA_DIR = HUNTER_DIR.parent / "dblp"
+SJR_SRC = HUNTER_DIR / "SJR-WoS-2025-CS.csv"
+XML_PATH = DATA_DIR / "dblp.xml"
+OUT_CSV = HUNTER_DIR / "List-of-Journal.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2",
               "quartile", "coverage"]

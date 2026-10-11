@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DBLP_DIR = Path(__file__).resolve().parent
+DBLP_DIR = Path(__file__).resolve().parent.parent / "dblp"
 
 GZ_PATH = DBLP_DIR / "dblp.xml.gz"
 XML_PATH = DBLP_DIR / "dblp.xml"
@@ -176,12 +176,13 @@ def main() -> None:
         else:
             _extract(GZ_PATH, XML_PATH)
 
+    DBLP_DIR.mkdir(parents=True, exist_ok=True)
     print("━" * 70)
     print("  Setup complete.")
     print(f"  dblp.xml  →  {XML_PATH}")
     print(f"  dblp.dtd  →  {DTD_PATH}")
     print()
-    print("  Next step: python3 dblp/b_journal.py")
+    print("  Next step: python3 hunter/b_journal.py")
     print("━" * 70)
     print()
 
