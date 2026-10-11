@@ -28,7 +28,7 @@ OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
 def main():
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║            paperhunter  ·  Merge Journals into Final List           ║")
+    print("║            paperhunter  ·  Merge Journals into Final List            ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
     

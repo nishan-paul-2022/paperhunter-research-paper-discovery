@@ -315,10 +315,10 @@ def main() -> None:
 
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Journal List Builder (AI-Ready)             ║")
+    print("║         paperhunter  ·  Journal List Builder (AI-Ready)              ║")
     print("║                                                                      ║")
-    print("║  Strategy: ISSN auto-match + AI-assisted manual matching            ║")
-    print("║  Output: 3 files (ISSN matches, DBLP unmatched, SJR pool)           ║")
+    print("║  Strategy: ISSN auto-match + AI-assisted manual matching             ║")
+    print("║  Output: 3 files (ISSN matches, DBLP unmatched, SJR pool)            ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
 

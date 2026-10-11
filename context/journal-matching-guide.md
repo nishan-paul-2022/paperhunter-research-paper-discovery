@@ -14,7 +14,7 @@ You are an AI agent tasked with matching DBLP journals to SJR journals. You have
 ### Step 1: Run c_match.py First
 ```bash
 cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python hunter/c_match.py
+python3 hunter/c_match.py
 ```
 
 This generates `supplement/4-ai-matched.csv` with:
@@ -132,7 +132,7 @@ site:dblp.org/db/journals/[dblp_key]
 
 ### Phase 1: Algorithmic Matching
 ```bash
-python hunter/c_match.py
+python3 hunter/c_match.py
 ```
 Output: `supplement/4-ai-matched.csv` with ~900+ HIGH confidence matches
 
@@ -156,7 +156,7 @@ Output: `supplement/4-ai-matched.csv` with ~900+ HIGH confidence matches
 ### Phase 3: Generate Final List
 Once `supplement/4-ai-matched.csv` is complete:
 ```bash
-python hunter/d_merge.py
+python3 hunter/d_merge.py
 ```
 This merges:
 - `supplement/1-issn-matched.csv` (ISSN auto-matches)
@@ -225,7 +225,7 @@ Before finalizing:
 
 ```bash
 # Step 1: Run algorithm
-python hunter/c_match.py
+python3 hunter/c_match.py
 # Output: 4-ai-matched.csv created with 932 HIGH, 920 NONE
 
 # Step 2: Review NO_MATCH entries
