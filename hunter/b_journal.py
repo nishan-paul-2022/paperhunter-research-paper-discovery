@@ -212,12 +212,13 @@ def phase_match(
     print(f"  ├─ DBLP unmatched: {len(dblp_unmatched)}")
     print(f"  └─ SJR available pool: {len(sjr_available)}")
     print()
-    print(f"  Summary:")
-    print(f"  ├─ Total DBLP journals: {total_dblp}")
-    print(f"  ├─ Total SJR journals: {total_sjr}")
-    print(f"  ├─ AUTO-APPROVED (ISSN): {len(issn_matched)}")
-    print(f"  ├─ NEEDS AI MATCHING: {len(dblp_unmatched)} DBLP × {len(sjr_available)} SJR")
-    print(f"  └─ AI will perform {len(dblp_unmatched)} × {len(sjr_available)} = {len(dblp_unmatched) * len(sjr_available):,} comparisons\n")
+    print(f"  Summary Statistics:")
+    print(f"  ├─ Total DBLP journals in XML: {total_dblp:,}")
+    print(f"  ├─ Total SJR journals (Q1-Q4): {total_sjr:,}")
+    print(f"  ├─ ISSN auto-matched: {len(issn_matched):,} ({len(issn_matched)/total_dblp*100:.1f}% of DBLP)")
+    print(f"  ├─ DBLP needs matching: {len(dblp_unmatched):,} ({len(dblp_unmatched)/total_dblp*100:.1f}% of DBLP)")
+    print(f"  ├─ SJR available for matching: {len(sjr_available):,} ({len(sjr_available)/total_sjr*100:.1f}% of SJR)")
+    print(f"  └─ Potential comparisons: {len(dblp_unmatched):,} × {len(sjr_available):,} = {len(dblp_unmatched) * len(sjr_available):,}\n")
     
     return issn_matched, dblp_unmatched, sjr_available
 
@@ -284,6 +285,12 @@ def phase_write(
     print(f"  NEXT STEP:")
     print(f"  → Run c_match.py to generate matches")
     print(f"  → Or use AI prompt with files 2 & 3\n")
+    
+    print(f"  Overall Statistics:")
+    print(f"  ├─ 1-issn-matched.csv: {len(issn_matched):,} journals (AUTO-APPROVED)")
+    print(f"  ├─ 2-dblp-todo.csv: {len(dblp_unmatched):,} journals (NEED MATCHING)")
+    print(f"  ├─ 3-sjr-pool.csv: {len(sjr_available):,} journals (AVAILABLE)")
+    print(f"  └─ Expected final output: ~{len(issn_matched) + int(len(dblp_unmatched)*0.5):,} matched journals\n")
 
 
 def main() -> None:
