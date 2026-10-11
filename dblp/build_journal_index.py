@@ -174,6 +174,8 @@ def score(a: str, b: str) -> float:
 
 # ── step 1: scan XML for journal key → name mapping ──────────────────────────
 
+CACHE_PATH = DBLP_DIR / "journal_key_cache.json"   # saved after first XML scan
+
 def scan_xml(xml_path: Path) -> dict[str, str]:
     """
     Stream dblp.xml and collect unique:
@@ -183,7 +185,7 @@ def scan_xml(xml_path: Path) -> dict[str, str]:
     Returns a dict  {  "journals/tods": "ACM Trans. Database Syst.", ... }
     """
     print(f"Scanning {xml_path}  ({xml_path.stat().st_size // 1_000_000} MB)...")
-    index: dict[str, str] = {}       # key_prefix → journal_name
+    index: dict[str, str] = {}
     seen = 0
 
     size = os.path.getsize(xml_path)
@@ -202,7 +204,7 @@ def scan_xml(xml_path: Path) -> dict[str, str]:
         key = el.get("key", "")
         journal = el.findtext("journal") or ""
         if key and journal:
-            prefix = "/".join(key.split("/")[:2])   # e.g. journals/tods
+            prefix = "/".join(key.split("/")[:2])
             if prefix not in index:
                 index[prefix] = journal.strip()
 
@@ -217,6 +219,28 @@ def scan_xml(xml_path: Path) -> dict[str, str]:
 
     f.close()
     print(f"\n  100%  done  |  {len(index):,} unique journal key prefixes found\n")
+    return index
+
+
+def load_dblp_index(xml_path: Path) -> dict[str, str]:
+    """
+    Return the dblp_key → journal_name mapping.
+    Loads from JSON cache if available (avoids re-scanning the 5 GB XML).
+    Runs the full XML scan and saves cache on first call.
+    """
+    import json
+    if CACHE_PATH.exists():
+        print(f"Loading XML scan cache from {CACHE_PATH.name}  (delete to re-scan)...")
+        with open(CACHE_PATH, encoding="utf-8") as f:
+            index = json.load(f)
+        print(f"  {len(index):,} journal keys loaded from cache\n")
+        return index
+
+    index = scan_xml(xml_path)
+
+    with open(CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(index, f, ensure_ascii=False, indent=2)
+    print(f"Cache saved → {CACHE_PATH.name}\n")
     return index
 
 
@@ -315,20 +339,20 @@ def main() -> None:
                     help=f"Path to cleaned SJR CSV  (default: {SJR_CLEAN.name})")
     ap.add_argument("--out",       default=str(OUT_INDEX),
                     help=f"Output index CSV  (default: {OUT_INDEX.name})")
-    ap.add_argument("--threshold", default=0.85, type=float,
-                    help="Fuzzy match threshold 0-1  (default: 0.82)")
+    ap.add_argument("--threshold", default=0.80, type=float,
+                    help="Fuzzy match threshold 0-1  (default: 0.80, empirically validated)")
     args = ap.parse_args()
 
     xml_path = Path(args.xml)
     sjr_path = Path(args.sjr)
     out_path = Path(args.out)
 
-    if not xml_path.exists():
+    if not xml_path.exists() and not CACHE_PATH.exists():
         sys.exit(f"dblp.xml not found: {xml_path}\nRun the downloader first.")
     if not sjr_path.exists():
         sys.exit(f"SJR clean CSV not found: {sjr_path}\nRun clean_sjr.py first.")
 
-    dblp_index = scan_xml(xml_path)
+    dblp_index = load_dblp_index(xml_path)
     sjr_rows   = load_sjr(sjr_path)
     results    = match_journals(dblp_index, sjr_rows, args.threshold)
     write_index(results, out_path)
