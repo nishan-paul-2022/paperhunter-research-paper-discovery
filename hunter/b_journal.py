@@ -16,13 +16,14 @@ HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 DATA_DIR = REPO_ROOT / "database"
 CONTEXT_DIR = REPO_ROOT / "context"
+SUPPLEMENT_DIR = REPO_ROOT / "supplement"
 SJR_SRC = CONTEXT_DIR / "sjr-2025-cs.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
 
 # Output files with indexed names
-OUT_1_ISSN = CONTEXT_DIR / "1-issn-matched.csv"
-OUT_2_DBLP_TODO = CONTEXT_DIR / "2-dblp-todo.csv"
-OUT_3_SJR_POOL = CONTEXT_DIR / "3-sjr-pool.csv"
+OUT_1_ISSN = SUPPLEMENT_DIR / "1-issn-matched.csv"
+OUT_2_DBLP_TODO = SUPPLEMENT_DIR / "2-dblp-todo.csv"
+OUT_3_SJR_POOL = SUPPLEMENT_DIR / "3-sjr-pool.csv"
 OUT_FINAL = CONTEXT_DIR / "list-of-journals.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]

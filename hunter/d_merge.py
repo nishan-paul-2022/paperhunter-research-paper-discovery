@@ -16,9 +16,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTEXT_DIR = REPO_ROOT / "context"
+SUPPLEMENT_DIR = REPO_ROOT / "supplement"
 
-IN_ISSN = CONTEXT_DIR / "1-issn-matched.csv"
-IN_AI = CONTEXT_DIR / "4-ai-matched.csv"
+IN_ISSN = SUPPLEMENT_DIR / "1-issn-matched.csv"
+IN_AI = SUPPLEMENT_DIR / "4-ai-matched.csv"
 OUT_FINAL = CONTEXT_DIR / "list-of-journals.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
