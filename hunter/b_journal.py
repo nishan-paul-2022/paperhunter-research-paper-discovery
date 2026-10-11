@@ -13,10 +13,12 @@ except ImportError:
     sys.exit("Missing lxml.  Run:  pip install lxml")
 
 HUNTER_DIR = Path(__file__).resolve().parent
-DATA_DIR = HUNTER_DIR.parent / "dblp"
-SJR_SRC = HUNTER_DIR / "SJR-WoS-2025-CS.csv"
+REPO_ROOT = HUNTER_DIR.parent
+DATA_DIR = REPO_ROOT / "dblp"
+CONTEXT_DIR = REPO_ROOT / "context"
+SJR_SRC = CONTEXT_DIR / "SJR-WoS-2025-CS.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
-OUT_CSV = HUNTER_DIR / "List-of-Journal.csv"
+OUT_CSV = CONTEXT_DIR / "List-of-Journal.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2",
               "quartile", "coverage"]

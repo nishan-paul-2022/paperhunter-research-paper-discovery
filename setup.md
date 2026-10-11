@@ -8,7 +8,7 @@ Builds a local SQLite database + CSV of papers from the CORE ICORE2026 A* confer
 cd ~/Downloads/research-paper-database
 python3 -m venv venv && source venv/bin/activate   # first time only
 pip install lxml                                    # first time only
-python3 dblp/index.py
+python3 hunter/index.py
 ```
 
 That is all. The script:
@@ -24,7 +24,7 @@ Expect 10-30 minutes. Progress is printed as a percentage.
 
 ```bash
 source venv/bin/activate
-python3 dblp/index.py --refresh
+python3 hunter/index.py --refresh
 ```
 
 `--refresh` deletes the old dump and downloads the newest one. The database is rebuilt from scratch, so there is nothing to merge or clean up. dblp updates its dump daily, but a conference only appears after its proceedings are indexed. Refresh every few months, or after a conference you care about has finished.
@@ -36,7 +36,7 @@ Other options:
 | `--from 2023` | first year to keep |
 | `--to 2027` | last year to keep (change when a new year starts) |
 
-Example: `python3 dblp/index.py --refresh --from 2024 --to 2027`
+Example: `python3 hunter/index.py --refresh --from 2024 --to 2027`
 
 ## Why a DTD is needed
 

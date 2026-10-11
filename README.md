@@ -47,7 +47,7 @@ git clone https://github.com/<you>/paperhunter.git
 cd paperhunter
 python3 -m venv venv && source venv/bin/activate
 pip install lxml
-python3 dblp/index.py
+python3 hunter/index.py
 ```
 
 The script downloads `dblp.dtd` and `dblp.xml.gz` if missing (about 1 GB, about 4-5 GB unzipped), scans the dump once and writes `papers.db` and `papers.csv`. Expect 10-30 minutes.
@@ -55,8 +55,8 @@ The script downloads `dblp.dtd` and `dblp.xml.gz` if missing (about 1 GB, about 
 Update later:
 
 ```bash
-python3 dblp/index.py --refresh                      # newest dump, rebuilds from scratch
-python3 dblp/index.py --from 2024 --to 2027          # change the year range
+python3 hunter/index.py --refresh                      # newest dump, rebuilds from scratch
+python3 hunter/index.py --from 2024 --to 2027          # change the year range
 ```
 
 ### Why the DTD
@@ -94,7 +94,10 @@ sqlite3 -header -csv papers.db "SELECT venue, year, title, ee FROM papers WHERE 
 
 ```
 paperhunter/
-  dblp/                   # Stage 0 ingest pipeline
+  dblp/                   # Raw DBLP dump files (dblp.xml, dblp.dtd, dblp.xml.gz)
+  hunter/                 # Pipeline scripts and modules
+    a_setup.py            # Dataset download and extraction
+    b_journal.py          # Journal list builder (List-of-Journal.csv)
     index.py              # Entry point and index runner
     config.py             # URLs, paths, and conference mappings
     classifier.py         # Venue classification
