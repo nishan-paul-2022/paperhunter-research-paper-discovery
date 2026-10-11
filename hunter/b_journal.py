@@ -14,7 +14,7 @@ except ImportError:
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
-DATA_DIR = REPO_ROOT / "dblp"
+DATA_DIR = REPO_ROOT / "database"
 CONTEXT_DIR = REPO_ROOT / "context"
 SJR_SRC = CONTEXT_DIR / "SJR-WoS-2025-CS.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
@@ -264,6 +264,7 @@ def phase_write(rows: list[dict], out_path: Path) -> None:
     deduped = sorted(deduped,
                      key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUT_FIELDS, delimiter=",",
                                 quoting=csv.QUOTE_MINIMAL)

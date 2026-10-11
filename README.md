@@ -94,7 +94,8 @@ sqlite3 -header -csv papers.db "SELECT venue, year, title, ee FROM papers WHERE 
 
 ```
 paperhunter/
-  dblp/                   # Raw DBLP dump files (dblp.xml, dblp.dtd, dblp.xml.gz)
+  context/                # Reference datasets (List-of-Journal.csv, SJR-WoS-2025-CS.csv)
+  database/               # Raw DBLP dump files (dblp.xml, dblp.dtd, dblp.xml.gz)
   hunter/                 # Pipeline scripts and modules
     a_setup.py            # Dataset download and extraction
     b_journal.py          # Journal list builder (List-of-Journal.csv)

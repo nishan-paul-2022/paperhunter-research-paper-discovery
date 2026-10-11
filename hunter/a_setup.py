@@ -8,12 +8,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DBLP_DIR = Path(__file__).resolve().parent.parent / "dblp"
+DB_DIR = Path(__file__).resolve().parent.parent / "database"
 
-GZ_PATH = DBLP_DIR / "dblp.xml.gz"
-XML_PATH = DBLP_DIR / "dblp.xml"
-DTD_PATH = DBLP_DIR / "dblp.dtd"
-MD5_PATH = DBLP_DIR / "dblp.xml.gz.md5"
+GZ_PATH = DB_DIR / "dblp.xml.gz"
+XML_PATH = DB_DIR / "dblp.xml"
+DTD_PATH = DB_DIR / "dblp.dtd"
+MD5_PATH = DB_DIR / "dblp.xml.gz.md5"
 
 BASE = "https://dblp.org/xml"
 URL_GZ = f"{BASE}/dblp.xml.gz"
@@ -137,6 +137,7 @@ def main() -> None:
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
 
+    DB_DIR.mkdir(parents=True, exist_ok=True)
     print("━" * 70)
     print("  Step 1 – dblp.dtd")
     print("━" * 70)
@@ -176,7 +177,7 @@ def main() -> None:
         else:
             _extract(GZ_PATH, XML_PATH)
 
-    DBLP_DIR.mkdir(parents=True, exist_ok=True)
+    DB_DIR.mkdir(parents=True, exist_ok=True)
     print("━" * 70)
     print("  Setup complete.")
     print(f"  dblp.xml  →  {XML_PATH}")
