@@ -1,5 +1,6 @@
 import argparse
 import csv
+import json
 import os
 import re
 import sys
@@ -18,6 +19,7 @@ DATA_DIR = REPO_ROOT / "database"
 CONTEXT_DIR = REPO_ROOT / "context"
 SJR_SRC = CONTEXT_DIR / "SJR-WoS-2025-CS.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
+CACHE_PATH = DATA_DIR / "journal_key_cache.json"
 OUT_CSV = CONTEXT_DIR / "List-of-Journal.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2",
@@ -36,6 +38,7 @@ _ABBREV = [
     (r"\bSci\b\.?", "Science"),
     (r"\bTechnol\b\.?", "Technology"),
     (r"\bAppl\b\.?", "Applied"),
+    (r"\bApplic\b\.?", "Applications"),
     (r"\bMach\b\.?", "Machine"),
     (r"\bIntell\b\.?", "Intelligence"),
     (r"\bArtif\b\.?", "Artificial"),
@@ -68,6 +71,50 @@ _ABBREV = [
     (r"\bRes\b\.?", "Research"),
     (r"\bPract\b\.?", "Practice"),
     (r"\bProc\b\.?", "Proceedings"),
+    (r"\bMin\b\.?", "Mining"),
+    (r"\bMath\b\.?", "Mathematics"),
+    (r"\bProcess\b\.?", "Processing"),
+    (r"\bSoc\b\.?", "Society"),
+    (r"\bDigit\b\.?", "Digital"),
+    (r"\bElectron\b\.?", "Electronics"),
+    (r"\bLearn\b\.?", "Learning"),
+    (r"\bModel\b\.?", "Modeling"),
+    (r"\bKnowl\b\.?", "Knowledge"),
+    (r"\bInteract\b\.?", "Interaction"),
+    (r"\bRev\b\.?", "Review"),
+    (r"\bAutom\b\.?", "Automation"),
+    (r"\bLog\b\.?", "Logic"),
+    (r"\bLang\b\.?", "Language"),
+    (r"\bFound\b\.?", "Foundations"),
+    (r"\bOper\b\.?", "Operations"),
+    (r"\bControl\b\.?", "Control"),
+    (r"\bHum\b\.?", "Human"),
+    (r"\bProgram\b\.?", "Programming"),
+    (r"\bServ\b\.?", "Services"),
+    (r"\bMultim\b\.?", "Multimedia"),
+    (r"\bMob\b\.?", "Mobile"),
+    (r"\bDecis\b\.?", "Decision"),
+    (r"\bWirel\b\.?", "Wireless"),
+    (r"\bDes\b\.?", "Design"),
+    (r"\bBus\b\.?", "Business"),
+    (r"\bMag\b\.?", "Magazine"),
+    (r"\bComb\b\.?", "Combinatorics"),
+    (r"\bGraph\b\.?", "Graphics"),
+    (r"\bBull\b\.?", "Bulletin"),
+    (r"\bEnviron\b\.?", "Environment"),
+    (r"\bSens\b\.?", "Sensors"),
+    (r"\bStat\b\.?", "Statistics"),
+    (r"\bDev\b\.?", "Development"),
+    (r"\bIntegr\b\.?", "Integration"),
+    (r"\bBiomed\b\.?", "Biomedical"),
+    (r"\bLibr\b\.?", "Library"),
+    (r"\bTech\b\.?", "Technical"),
+    (r"\bPerform\b\.?", "Performance"),
+    (r"\bNat\b\.?", "Natural"),
+    (r"\bDiscret\b\.?", "Discrete"),
+    (r"\bGeom\b\.?", "Geometry"),
+    (r"\bTheor\b\.?", "Theoretical"),
+    (r"\bComputat\b\.?", "Computational"),
 ]
 
 _STOP = {
@@ -80,6 +127,10 @@ def normalize(text: str) -> str:
     for pat, rep in _ABBREV:
         text = re.sub(pat, rep, text, flags=re.IGNORECASE)
     text = text.lower()
+    text = re.sub(r"\banalytics?\b|\banalysis\b", "analysis", text)
+    text = re.sub(r"\bcomput(er|ing|ational|ation)?\b", "computer", text)
+    text = re.sub(r"\belectronic(s)?\b", "electronics", text)
+    text = re.sub(r"\btechnolog(y|ies)\b", "technology", text)
     text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return " ".join(t for t in text.split() if t not in _STOP)
@@ -91,9 +142,13 @@ def match_score(a: str, b: str) -> float:
     if not ta or not tb:
         return 0.0
     shared = len(ta & tb)
+    if not shared:
+        return 0.0
     jaccard = shared / len(ta | tb)
-    containment = min(shared / len(ta), shared / len(tb))
-    token_sim = max(jaccard, containment)
+    containment = shared / min(len(ta), len(tb))
+    token_sim = containment if containment >= 0.90 else jaccard
+    if token_sim < 0.65:
+        return 0.0
     seq = SequenceMatcher(None, a, b, autojunk=False).ratio()
     return min(token_sim, seq)
 
@@ -174,14 +229,34 @@ def _scan_xml(xml_path: Path) -> dict[str, str]:
     return result
 
 
-def phase_index(xml_path: Path) -> dict[str, str]:
+def phase_index(xml_path: Path, cache_path: Path = CACHE_PATH, no_cache: bool = False) -> dict[str, str]:
     print("━" * 70)
     print("  Phase 2 – DBLP Journal Index")
     print("━" * 70)
+
+    if not no_cache and cache_path.exists():
+        print(f"  Loading cached journal index from {cache_path.name}...")
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                idx = json.load(f)
+            print(f"  ✓  {len(idx):,} unique journal keys loaded from cache\n")
+            return idx
+        except Exception as e:
+            print(f"  (Cache read failed: {e}. Falling back to XML scan.)")
+
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB)")
     print("  (This takes ~15–20 min.)\n")
     idx = _scan_xml(xml_path)
     print(f"\n  ✓  {len(idx):,} unique journal keys found\n")
+
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(idx, f)
+        print(f"  ✓  Saved journal index cache to {cache_path.name}\n")
+    except Exception as e:
+        print(f"  (Warning: could not save cache: {e})\n")
+
     return idx
 
 
@@ -220,11 +295,11 @@ def phase_match(
                 "coverage": best_row["coverage"],
             })
             tick = "✓"
+            label = f"{best_row['quartile']}  {dblp_name[:35]}"
+            print(f"  [{n:4}/{total}]  {tick}  {label}")
         else:
-            tick = "·"
-
-        label = f"{matched[-1]['quartile']}  {dblp_name[:35]}" if tick == "✓" else dblp_name[:45]
-        print(f"  [{n:4}/{total}]  {tick}  {label}", end="\n" if tick == "✓" else "\r")
+            if n % 50 == 0 or n == total:
+                print(f"  [{n:4}/{total}]  ·  {dblp_name[:45]}", end="\r", flush=True)
 
     print()
     print(f"\n  ✓  {len(matched)} journals matched to DBLP"
@@ -285,6 +360,10 @@ def main() -> None:
                     help=f"Path to SJR CSV   (default: {SJR_SRC.name})")
     ap.add_argument("--out", default=str(OUT_CSV),
                     help=f"Output CSV        (default: {OUT_CSV.name})")
+    ap.add_argument("--cache", default=str(CACHE_PATH),
+                    help=f"Path to journal index cache (default: {CACHE_PATH.name})")
+    ap.add_argument("--no-cache", action="store_true",
+                    help="Force re-scan of dblp.xml instead of using cached index")
     ap.add_argument("--threshold", default=DEFAULT_THRESHOLD, type=float,
                     help=f"Match threshold 0-1  (default: {DEFAULT_THRESHOLD})")
     args = ap.parse_args()
@@ -292,10 +371,13 @@ def main() -> None:
     xml_path = Path(args.xml)
     sjr_path = Path(args.sjr)
     out_path = Path(args.out)
+    cache_path = Path(args.cache)
 
     if not sjr_path.exists():
         sys.exit(f"SJR CSV not found: {sjr_path}")
-    if not xml_path.exists():
+    if not args.no_cache and cache_path.exists():
+        pass
+    elif not xml_path.exists():
         sys.exit(f"dblp.xml not found: {xml_path}\nRun the downloader first.")
 
     print()
@@ -305,7 +387,7 @@ def main() -> None:
     print()
 
     sjr_rows = phase_clean(sjr_path)
-    dblp_index = phase_index(xml_path)
+    dblp_index = phase_index(xml_path, cache_path, no_cache=args.no_cache)
     matched = phase_match(dblp_index, sjr_rows, args.threshold)
     phase_write(matched, out_path)
 
