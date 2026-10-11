@@ -4,11 +4,12 @@ Configuration constants and venue mappings for dblp paper extraction.
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+DBLP_DIR = Path(__file__).resolve().parent
 
 BASE = "https://dblp.org/xml/"
-DTD = str(REPO_ROOT / "dblp.dtd")
-XML_GZ = str(REPO_ROOT / "dblp.xml.gz")
-XML = str(REPO_ROOT / "dblp.xml")
+DTD = str(DBLP_DIR / "dblp.dtd")
+XML_GZ = str(DBLP_DIR / "dblp.xml.gz")
+XML = str(DBLP_DIR / "dblp.xml")
 DB = str(REPO_ROOT / "papers.db")
 CSV = str(REPO_ROOT / "papers.csv")
 
