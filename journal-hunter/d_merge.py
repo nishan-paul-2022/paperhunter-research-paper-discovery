@@ -15,8 +15,8 @@ from collections import Counter
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CONTEXT_DIR = REPO_ROOT / "context"
-SUPPLEMENT_DIR = REPO_ROOT / "supplement"
+CONTEXT_DIR = REPO_ROOT / "journal-context"
+SUPPLEMENT_DIR = REPO_ROOT / "journal-supplement"
 
 IN_ISSN = SUPPLEMENT_DIR / "1-issn-matched.csv"
 IN_AI = SUPPLEMENT_DIR / "4-ai-matched.csv"

@@ -25,8 +25,8 @@ except ImportError:
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 DATA_DIR = REPO_ROOT / "database"
-CONTEXT_DIR = REPO_ROOT / "context"
-SUPPLEMENT_DIR = REPO_ROOT / "supplement"
+CONTEXT_DIR = REPO_ROOT / "conference-context"
+SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 
 CORE_SRC = CONTEXT_DIR / "core-2026.csv"
 XML_PATH = DATA_DIR / "dblp.xml"

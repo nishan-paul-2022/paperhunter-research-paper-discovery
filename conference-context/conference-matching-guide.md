@@ -14,14 +14,14 @@ Match DBLP conferences to CORE rankings using:
 ### Step 1: Run c_conf_match.py
 ```bash
 cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python hunter/c_conf_match.py
+python conference-hunter/c_conf_match.py
 ```
 
-Generates `supplement/4-conf-matched.csv` with HIGH and NONE confidence entries.
+Generates `conference-supplement/4-conf-matched.csv` with HIGH and NONE confidence entries.
 
 ### Step 2: Review Algorithm Output
 
-Check `supplement/4-conf-matched.csv`:
+Check `conference-supplement/4-conf-matched.csv`:
 - **HIGH confidence** → Likely correct, spot-check
 - **NONE (NO_MATCH)** → Need your review
 

@@ -15,7 +15,7 @@ import unicodedata
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SUPPLEMENT_DIR = REPO_ROOT / "supplement"
+SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 
 DBLP_CSV = SUPPLEMENT_DIR / "2-conf-todo.csv"
 CORE_CSV = SUPPLEMENT_DIR / "3-core-pool.csv"

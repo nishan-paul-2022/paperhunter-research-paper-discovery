@@ -15,8 +15,8 @@ from collections import Counter
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CONTEXT_DIR = REPO_ROOT / "context"
-SUPPLEMENT_DIR = REPO_ROOT / "supplement"
+CONTEXT_DIR = REPO_ROOT / "conference-context"
+SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 
 IN_EXACT = SUPPLEMENT_DIR / "1-conf-exact-matched.csv"
 IN_FUZZY = SUPPLEMENT_DIR / "4-conf-matched.csv"
