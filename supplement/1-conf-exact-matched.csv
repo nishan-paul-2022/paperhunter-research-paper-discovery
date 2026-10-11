@@ -1,0 +1,657 @@
+dblp_key,dblp_acronym,title,ranking
+conf/sigcomm,SIGCOMM,"ACM Conference on Applications, Technologies, Architectures, and Protocols for Computer Communication",A*
+conf/ccs,CCS,ACM Conference on Computer and Communications Security,A*
+conf/ec,EC,ACM Conference on Economics and Computation,A*
+conf/kdd,KDD,ACM International Conference on Knowledge Discovery and Data Mining,A*
+conf/mobicom,MOBICOM,ACM International Conference on Mobile Computing and Networking,A*
+conf/sigir,SIGIR,ACM International Conference on Research and Development in Information Retrieval,A*
+conf/fse,FSE,"ACM International Conference on the Foundations of Software Engineering (was ESEC/FSE, changed 2024; duplicate previously listed as ESEC, removed from DB)",A*
+conf/isca,ISCA,ACM International Symposium on Computer Architecture,A*
+conf/siggraph,SIGGRAPH,ACM SIG International Conference on Computer Graphics and Interactive Techniques,A*
+conf/pods,PODS,ACM SIGMOD-SIGACT-SIGART Conference on Principles of Database Systems,A*
+conf/sosp,SOSP,ACM SIGOPS Symposium on Operating Systems Principles,A*
+conf/sigmod,SIGMOD,ACM Special Interest Group on Management of Data Conference,A*
+conf/podc,PODC,ACM Symposium on Principles of Distributed Computing,A*
+conf/stoc,STOC,ACM Symposium on Theory of Computing,A*
+conf/uist,UIST,ACM Symposium on User Interface Software and Technology,A*
+conf/popl,POPL,ACM-SIGACT Symposium on Principles of Programming Languages,A*
+conf/pldi,PLDI,ACM-SIGPLAN Conference on Programming Language Design and Implementation,A*
+conf/hri,HRI,ACM/IEEE International Conference on Human-Robot Interaction,A*
+conf/soda,SODA,ACM/SIAM Symposium on Discrete Algorithms,A*
+conf/crypto,CRYPTO,Advances in Cryptology,A*
+conf/asplos,ASPLOS,Architectural Support for Programming Languages and Operating Systems,A*
+conf/acl,ACL,Association for Computational Linguistics,A*
+conf/cav,CAV,Computer Aided Verification,A*
+conf/colt,COLT,Conference on Learning Theory,A*
+conf/dac,DAC,Design Automation Conf,A*
+conf/emnlp,EMNLP,Empirical Methods in Natural Language Processing,A*
+conf/eccv,ECCV,European Conference on Computer Vision,A*
+conf/cvpr,CVPR,IEEE Conference on Computer Vision and Pattern Recognition,A*
+conf/vr,VR,IEEE Conference on Virtual Reality and 3D User Interfaces,A*
+conf/infocom,INFOCOM,IEEE International Conference on Computer Communications,A*
+conf/iccv,ICCV,IEEE International Conference on Computer Vision,A*
+conf/icdm,ICDM,IEEE International Conference on Data Mining,A*
+conf/percom,PERCOM,IEEE International Conference on Pervasive Computing and Communications,A*
+conf/icra,ICRA,IEEE International Conference on Robotics and Automation,A*
+conf/focs,FOCS,IEEE Symposium on Foundations of Computer Science,A*
+conf/lics,LICS,IEEE Symposium on Logic in Computer Science,A*
+conf/sp,SP,IEEE Symposium on Security and Privacy,A*
+conf/ismar,ISMAR,IEEE/ACM International Symposium on Mixed and Augmented Reality,A*
+conf/icalp,ICALP,International Colloquium on Automata Languages and Programming,A*
+conf/icaps,ICAPS,International Conference on Automated Planning and Scheduling,A*
+conf/icde,ICDE,International Conference on Data Engineering,A*
+conf/chi,CHI,International Conference on Human Factors in Computing Systems,A*
+conf/iclr,ICLR,International Conference on Learning Representations,A*
+conf/icml,ICML,International Conference on Machine Learning,A*
+conf/icse,ICSE,International Conference on Software Engineering,A*
+conf/kr,KR,International Conference on the Principles of Knowledge Representation and Reasoning,A*
+conf/eurocrypt,EUROCRYPT,International Conference on the Theory and Application of Cryptographic Techniques,A*
+conf/vldb,VLDB,International Conference on Very Large Databases,A*
+conf/ijcai,IJCAI,International Joint Conference on Artificial Intelligence,A*
+conf/hpca,HPCA,International Symposium on High Performance Computer Architecture,A*
+conf/micro,MICRO,International Symposium on Microarchitecture,A*
+conf/www,WWW,International World Wide Web Conference,A*
+conf/sigmetrics,SIGMETRICS,Measurement and Modeling of Computer Systems,A*
+conf/aaai,AAAI,National Conference of the American Association for Artificial Intelligence,A*
+conf/siggrapha,SIGGRAPHA,SIGGRAPH Asia,A*
+conf/ndss,NDSS,Usenix Network and Distributed System Security Symposium,A*
+conf/osdi,OSDI,Usenix Symposium on Operating Systems Design and Implementation,A*
+conf/cscw,CSCW,ACM Conference on Computer Supported Cooperative Work,A
+conf/oopsla,OOPSLA,ACM Conference on Object Oriented Programming Systems Languages and Applications,A
+conf/fpga,FPGA,ACM Int'l Symposium on Field Programmable Gate Arrays,A
+conf/conext,CONEXT,ACM International Conference on Emerging Networking Experiments and Technologies,A
+conf/cikm,CIKM,ACM International Conference on Information and Knowledge Management,A
+conf/recsys,RECSYS,ACM International Conference on Recommender Systems,A
+conf/ics,ICS,ACM International Conference on Supercomputing,A
+conf/wsdm,WSDM,ACM International Conference on Web Search and Data Mining,A
+conf/hpdc,HPDC,ACM International Symposium on High Performance Distributed Computing,A
+conf/mmsys,MMSYS,ACM Multimedia Systems Conference,A
+conf/mobisys,MOBISYS,"ACM SIGMOBILE International Conference on Mobile Systems, Applications and Services",A
+conf/sigcse,SIGCSE,ACM Special Interest Group on Computer Science Education Conference,A
+conf/mswim,MSWIM,"ACM/IEEE International Conference on Modelling, Analysis and Simulation of Wireless and Mobile Systems",A
+conf/middleware,MIDDLEWARE,ACM/IFIP/USENIX International Middleware Conference,A
+conf/acsac,ACSAC,Annual Computer Security Applications Conference,A
+conf/asiaccs,ASIACCS,"Asia Conference on Information, Computer and Communications Security",A
+conf/bmvc,BMVC,British Machine Vision Conference,A
+conf/uai,UAI,Conference in Uncertainty in Artificial Intelligence,A
+conf/fast,FAST,Conference on File and Storage Technologies,A
+conf/cidr,CIDR,Conference on Innovative Data Systems Research,A
+conf/date,DATE,"Design, Automation and Test in Europe Conference",A
+conf/dis,DIS,Designing Interactive Systems,A
+conf/eacl,EACL,European Association for Computational Linguistics,A
+conf/ecai,ECAI,European Conference on Artificial Intelligence,A
+conf/ecir,ECIR,European Conference on Information Retrieval,A
+conf/ecoop,ECOOP,European Conference on Object-Oriented Programming,A
+conf/esa,ESA,European Symposium on Algorithms,A
+conf/esop,ESOP,European Symposium on Programming,A
+conf/esorics,ESORICS,European Symposium On Research In Computer Security,A
+conf/eurosys,EUROSYS,Eurosys Conference,A
+conf/fc,FC,Financial Cryptography and Data Security Conference,A
+conf/foga,FOGA,Foundations of Genetic Algorithms,A
+conf/gecco,GECCO,Genetic and Evolutionary Computations,A
+conf/gd,GD,Graph Drawing,A
+conf/ccc,CCC,IEEE Conference on Computational Complexity,A
+conf/icdar,ICDAR,IEEE International Conference on Document Analysis and Recognition,A
+conf/saner,SANER,"IEEE International Conference on Software Analysis, Evolution and Reengineering",A
+conf/icws,ICWS,IEEE International Conference on Web Services,A
+conf/re,RE,IEEE International Requirements Engineering Conference,A
+conf/itc,ITC,IEEE International Test Conference,A
+conf/msr,MSR,IEEE International Working Conference on Mining Software Repositories,A
+conf/rtas,RTAS,IEEE Real-Time and Embedded Technology and Applications Symposium,A
+conf/wacv,WACV,IEEE Workshop on Applications of Computer Vision,A
+conf/iccad,ICCAD,IEEE/ACM International Conference on Computer-Aided Design,A
+conf/islped,ISLPED,IEEE/ACM International Symposium on Low Power Electronics and Design,A
+conf/dsn,DSN,IEEE/IFIP International Conference on Dependable Systems and Networks,A
+conf/iros,IROS,IEEE/RSJ International Conference on Intelligent Robots and Systems,A
+conf/itcs,ITCS,Innovations in Theoretical Computer Science,A
+conf/ismb,ISMB,Intelligent Systems in Molecular Biology,A
+conf/assets,ASSETS,International ACM SIGACCESS Conference on Computers and Accessibility,A
+conf/icer,ICER,International Computing Education Research Workshop,A
+conf/sc,SC,"International Conference for High Performance Computing, Networking, Storage and Analysis (was Supercomputing Conference)",A
+conf/bpm,BPM,International Conference in Business Process Management,A
+conf/caise,CAISE,International Conference on Advanced Information Systems Engineering,A
+conf/aistats,AISTATS,International Conference on Artificial Intelligence and Statistics,A
+conf/aied,AIED,International Conference on Artificial Intelligence in Education,A
+conf/cade,CADE,International Conference on Automated Deduction,A
+conf/er,ER,International Conference on Conceptual Modelling,A
+conf/icdt,ICDT,International Conference on Database Theory,A
+conf/icdcs,ICDCS,International Conference on Distributed Computing Systems,A
+conf/ease,EASE,International Conference on Evaluation and Assessment in Software Engineering,A
+conf/icfp,ICFP,International Conference on Functional Programming,A
+conf/iui,IUI,International Conference on Intelligent User Interfaces,A
+conf/lak,LAK,International Conference on Learning Analytics and Knowledge,A
+conf/models,MODELS,"International Conference on Model Driven Engineering Languages and Systems (Previously UML, changed in 2005)",A
+conf/cp,CP,International Conference on Principles and Practice of Constraint Programming,A
+conf/icsoc,ICSOC,International Conference on Service Oriented Computing,A
+conf/icsa,ICSA,International Conference on Software Architecture (was previously WICSA),A
+conf/icst,ICST,"International Conference on Software Testing, Verification and Validation",A
+conf/asiacrypt,ASIACRYPT,International Conference on the Theory and Application of Cryptology and Information Security,A
+conf/sat,SAT,International Conference on Theory and Applications of Satisfiability Testing,A
+conf/icwsm,ICWSM,International Conference on Web and Social Media,A
+conf/ijcar,IJCAR,International Joint Conference on Automated Reasoning,A
+conf/aamas,AAMAS,"International Joint Conference on Autonomous Agents and Multiagent Systems (previously the International Conference on Multiagent Systems, ICMAS, changed in 2000)",A
+conf/iswc,ISWC,International Semantic Web Conference,A
+conf/cgo,CGO,International Symposium on Code Generation and Optimization,A
+conf/esem,ESEM,International Symposium on Empirical Software Engineering and Measurement,A
+conf/seams,SEAMS,International Symposium on Software Engineering for Adaptive and Self-Managing Systems,A
+conf/issre,ISSRE,International Symposium on Software Reliability Engineering,A
+conf/issta,ISSTA,International Symposium on Software Testing and Analysis,A
+conf/stacs,STACS,International Symposium on Theoretical Aspects of Computer Science,A
+conf/imc,IMC,Internet Measurement Conference,A
+conf/interspeech,INTERSPEECH,Interspeech (combined EuroSpeech and ICSLP in 2000),A
+conf/miccai,MICCAI,Medical Image Computing and Computer-Assisted Intervention,A
+conf/naacl,NAACL,North American Association for Computational Linguistics,A
+conf/ppsn,PPSN,Parallel Problem Solving from Nature,A
+conf/rtss,RTSS,Real Time Systems Symposium,A
+conf/sdm,SDM,SIAM International Conference on Data Mining,A
+conf/soups,SOUPS,Symposium On Usable Privacy and Security,A
+conf/raid,RAID,"The International Symposium on Research in Attacks, Intrusions and Defenses (was International Symposium on Recent Advances in Intrusion Detection)",A
+conf/tacas,TACAS,Tools and Algorithms for Construction and Analysis of Systems,A
+conf/usenix,USENIX,Usenix Annual Technical Conference,A
+conf/hotos,HOTOS,USENIX Workshop on Hot Topics in Operating Systems,A
+conf/alenex,ALENEX,Workshop on Algorithm Engineering and Experiments,A
+conf/ches,CHES,Workshop on Cryptographic Hardware and Embedded Systems,A
+conf/hcomp,HCOMP,AAAI Conference on Human Computation and Crowdsourcing,B
+conf/iwcmc,IWCMC,ACM International Wireless Communications and Mobile Computing Conference,B
+conf/sca,SCA,ACM SIGGRAPH/Eurographics Symposium on Computer Animation,B
+conf/chiir,CHIIR,ACM SIGIR Conference on Human Information Interaction And Retrieval,B
+conf/pads,PADS,ACM SIGSIM Conference on Principles of Advanced Discrete Simulation (was Parallel and Distributed Simulation),B
+conf/group,GROUP,ACM Special Interest Group on Supporting Group Work (was SIGGRoup),B
+conf/doceng,DOCENG,ACM Symposium on Document Engineering,B
+conf/mobihoc,MOBIHOC,ACM Symposium on Mobile Ad Hoc Networking and Computing,B
+conf/vrst,VRST,ACM Virtual Reality Software and Technology,B
+conf/acivs,ACIVS,Advanced Concepts for Intelligent Vision Systems,B
+conf/avi,AVI,Advanced Visual Interfaces,B
+conf/aft,AFT,Advances in Financial Technologies,B
+conf/aiml,AIML,Advances in Modal Logic,B
+conf/alt,ALT,Algorithmic Learning Theory,B
+conf/wads,WADS,Algorithms and Data Structures Symposium (was Workshop on Algorithms and Data Structures),B
+conf/csl,CSL,Annual Conference on Computer Science Logic,B
+conf/iticse,ITICSE,Annual Conference on Innovation and Technology in Computer Science Education,B
+conf/cogsci,COGSCI,Annual Meeting of the Cognitive Science Society,B
+conf/sigdial,SIGDIAL,Annual Meeting of the Special Interest Group on Discourse and Dialog,B
+conf/aspdac,ASPDAC,Asia and South Pacific Design Automation Conference,B
+conf/apbc,APBC,Asia-Pacific Bioinformatics Conference,B
+conf/accv,ACCV,Asian Conference on Computer Vision,B
+conf/aciids,ACIIDS,Asian Conference on Intelligent Information and Database Systems,B
+conf/aplas,APLAS,ASIAN Symposium on Programming Languages and Systems,B
+conf/cpp,CPP,Certified Programs and Proofs,B
+conf/cpm,CPM,Combinatorial Pattern Matching,B
+conf/casc,CASC,Computer Algebra in Scientific Computing,B
+conf/xp,XP,Conference on Agile Software Development,B
+conf/calco,CALCO,Conference on Algebra and Coalgebra in Computer Science,B
+conf/conll,CONLL,Conference on Computational Natural Language Learning,B
+conf/ipco,IPCO,Conference on Integer Programming and Combinatorial Optimization,B
+conf/itp,ITP,"Conference on Interactive Theorem Proving (previously TPHOLs, changed in 2009)",B
+conf/sofsem,SOFSEM,Current Trends in Theory and Practice of Computer Science,B
+conf/dcc,DCC,Data Compression Conference,B
+conf/dawak,DAWAK,Data Warehousing and Knowledge Discovery,B
+conf/ds,DS,Discovery Science,B
+conf/dna,DNA,DNA Computing and Molecular Programming,B
+conf/edm,EDM,Educational Data Mining,B
+conf/emas,EMAS,"EMAS (merger of DALT, AOSE and PROMAS)",B
+conf/ecrts,ECRTS,Euromicro Conference on Real-Time Systems,B
+conf/seaa,SEAA,Euromicro Conference on Software Engineering and Advanced Applications,B
+conf/ecscw,ECSCW,European Conference on Computer Supported Cooperative Work,B
+conf/evocop,EVOCOP,European Conference on Evolutionary Computation in Combinatorial Optimisation,B
+conf/eurogp,EUROGP,European Conference on Genetic Programming,B
+conf/ecsa,ECSA,European Conference on Software Architecture,B
+conf/eurospi,EUROSPI,European SPI,B
+conf/esann,ESANN,European Symposium on Artificial Neural Networks,B
+conf/edbt,EDBT,Extending Database Technology,B
+conf/etra,ETRA,Eye Tracking Research and Applications,B
+conf/fpl,FPL,Field Programmable Logic and Applications,B
+conf/fmcad,FMCAD,Formal Methods in Computer-Aided Design,B
+conf/fossacs,FOSSACS,Foundations of Software Science and Computational Structures,B
+conf/fase,FASE,Fundamental Approaches to Software Engineering,B
+conf/dimva,DIMVA,"GI International Conference on Detection of Intrusions and Malware, and Vulnerability Assessment",B
+conf/gi,GI,Graphics Interface,B
+conf/hai,HAI,Human-Agent Interaction,B
+conf/lcn,LCN,IEEE Conference on Local Computer Networks,B
+conf/smc,SMC,"IEEE Conference on Systems, Man and Cybernetics",B
+conf/cec,CEC,IEEE Congress on Evolutionary Computation,B
+conf/services,SERVICES,IEEE Congress on Services,B
+conf/ets,ETS,IEEE European Test Symposium,B
+conf/globecom,GLOBECOM,IEEE Global Telecommunications Conference,B
+conf/icalt,ICALT,IEEE International Conference on Advanced Learning Technologies,B
+conf/avss,AVSS,IEEE International Conference on Advanced Video and Signal Based Surveillance,B
+conf/fg,FG,IEEE International Conference on Automatic Face and Gesture Recognition,B
+conf/bigdata,BIGDATA,IEEE International Conference on Big Data,B
+conf/cloud,CLOUD,IEEE International Conference on Cloud Computing,B
+conf/iccp,ICCP,IEEE International Conference on Computational Photography,B
+conf/dsaa,DSAA,IEEE International Conference on Data Science and Advanced Analytics,B
+conf/dcoss,DCOSS,IEEE International Conference on Distributed Computing in Sensor Systems,B
+conf/iceccs,ICECCS,IEEE International Conference on Engineering of Complex Computer Systems,B
+conf/icip,ICIP,IEEE International Conference on Image Processing,B
+conf/mass,MASS,IEEE International Conference on Mobile Ad-hoc and Sensor Systems,B
+conf/ro-man,RO-MAN,IEEE International Conference on Robot and Human Interactive Communication,B
+conf/secon,SECON,"IEEE International Conference on Sensing, Communication and Networking",B
+conf/smartcomp,SMARTCOMP,IEEE International Conference on Smart Computing,B
+conf/wimob,WIMOB,"IEEE International Conference on Wireless and Mobile Computing, Networking and Communications",B
+conf/edoc,EDOC,IEEE International Enterprise Distributed Object Computing Conference,B
+conf/ijcnn,IJCNN,IEEE International Joint Conference on Neural Networks,B
+conf/ccgrid,CCGRID,"IEEE International Symposium on Cluster, Cloud and Grid Computing",B
+conf/cbms,CBMS,IEEE International Symposium on Computer-Based Medical Systems,B
+conf/isit,ISIT,IEEE International Symposium on Information Theory,B
+conf/nca,NCA,IEEE International Symposium on Network Computing and Applications,B
+conf/ispass,ISPASS,IEEE International Symposium on Performance Analysis of Systems and Software,B
+conf/pimrc,PIMRC,IEEE International Symposium on Personal and Indoor Mobile Radio Conference,B
+conf/vissoft,VISSOFT,IEEE International Working Conference on Software Visualisation,B
+conf/iwqos,IWQOS,IEEE International Workshop on Quality of Service,B
+conf/noms,NOMS,IEEE Network Operations and Management Symposium,B
+conf/pacificvis,PACIFICVIS,IEEE Pacific Visualization Symposium (was APVIS),B
+conf/vtc,VTC,IEEE Vehicular Technology Conference,B
+conf/wcnc,WCNC,IEEE Wireless Communications and Networking Conference,B
+conf/wi,WI,IEEE/WIC/ACM International Conference on Web Intelligence (previously joint with Intelligent Agent Technology WI-IAT),B
+conf/networking,NETWORKING,IFIP International Conference on Networking,B
+conf/interact,INTERACT,IFIP TC13 Conference on Human-Computer Interaction,B
+conf/dbsec,DBSEC,IFIP WG 11.3 Working Conference on Data and Applications Security (also known as DBSEC),B
+conf/im,IM,IFIP/IEEE International Symposium on Integrated Management (even years sharing with NOMS),B
+conf/ilp,ILP,Inductive Logic Programming,B
+conf/itw,ITW,Information Theory Workshop,B
+conf/ifm,IFM,Integrated Formal Methods,B
+conf/ida,IDA,Intelligent Data Analysis,B
+conf/iva,IVA,Intelligent Virtual Agents,B
+conf/idc,IDC,Interaction Design and Children (ACM),B
+conf/sirocco,SIROCCO,International Colloquium on Structural Information and Communication Complexity,B
+conf/compsac,COMPSAC,International Computer Software and Applications Conference,B
+conf/walcom,WALCOM,International Conference and Workshops on Algorithms and Computation,B
+conf/aina,AINA,International Conference on Advanced Information Networking and Applications (was ICOIN),B
+conf/acii,ACII,International Conference on Affective Computing and Intelligent,B
+conf/icaart,ICAART,International Conference on Agents and Artificial Intelligence,B
+conf/cain,CAIN,International Conference on AI Engineering – Software Engineering for AI,B
+conf/acns,ACNS,International Conference on Applied Cryptography and Network Security,B
+conf/aime,AIME,International Conference on Artificial Intelligence in Medicine,B
+conf/ares,ARES,"International Conference on Availability, Reliability and Security",B
+conf/ic2e,IC2E,International Conference on Cloud Engineering,B
+conf/cc,CC,International Conference on Compiler Construction,B
+conf/iccci,ICCCI,International Conference on Computational Collective Intelligence,B
+conf/coling,COLING,International Conference on Computational Linguistics,B
+conf/recomb,RECOMB,International Conference on Computational Molecular Biology,B
+conf/icccn,ICCCN,International Conference on Computer Communication and Networks,B
+conf/safecomp,SAFECOMP,"International Conference on Computer Safety, Reliability and Security",B
+conf/csedu,CSEDU,International Conference on Computer Supported Education,B
+conf/concur,CONCUR,International Conference on Concurrency Theory,B
+conf/chase,CHASE,International Conference on Cooperative and Human Aspects of Software Engineering,B
+conf/coopis,COOPIS,International Conference on Cooperative Information Systems,B
+conf/cans,CANS,International Conference on Cryptology and Network Security,B
+conf/dasfaa,DASFAA,International Conference on Database Systems for Advanced Applications,B
+conf/rtcsa,RTCSA,International Conference on Embedded and Real Time Computing Systems and Applications,B
+conf/ewsn,EWSN,International Conference on Embedded Wireless Systems and Networks (wasEuropean Conference on Wireless Sensor Networks),B
+conf/enase,ENASE,International Conference on Evaluation of Novel Approaches to Software Engineering,B
+conf/fscd,FSCD,International Conference on Formal Structures for Computation and Deduction,B
+conf/icfhr,ICFHR,International Conference on Frontiers of Handwriting Recognition,B
+conf/gpce,GPCE,International Conference on Generative Programming and Component Engineering,B
+conf/icgt,ICGT,International Conference on Graph Transformations,B
+conf/cpaior,CPAIOR,International Conference on Integration of Artificial Intelligence and Operations Research Techniques in Constraint Programming for Combinatorial Optimization Problems,B
+conf/its,ITS,International Conference on Intelligent Tutoring Systems,B
+conf/ekaw,EKAW,International Conference on Knowledge Engineering and Knowledge Management,B
+conf/kes,KES,International Conference on Knowledge-Based and Intelligent Information and Engineering Systems,B
+conf/iclp,ICLP,International Conference on Logic Programming,B
+conf/lpnmr,LPNMR,International Conference on Logic Programming and Non-monotonic Reasoning,B
+conf/mfps,MFPS,International Conference on Mathematical Foundations of Programming Semantics,B
+conf/mdm,MDM,International Conference on Mobile Data Management,B
+conf/mdai,MDAI,International Conference on Modelling Decisions for Artificial Intelligence,B
+conf/mmm,MMM,International Conference on Multimedia Modelling,B
+conf/icmi,ICMI,International Conference on Multimodal Interaction (was International Conference on Multimodal Interfaces),B
+conf/cnsm,CNSM,International Conference on Network and Service Management (amalgamation of DSOM and related workshops from 2010),B
+conf/nss,NSS,International Conference on network and System Security,B
+conf/icnp,ICNP,International Conference on Network Protocols,B
+conf/netsoft,NETSOFT,International Conference on Network Softwarization,B
+conf/iconip,ICONIP,International Conference on Neural Information Processing,B
+conf/icpads,ICPADS,International Conference on Parallel and Distributed Systems,B
+conf/pact,PACT,International Conference on Parallel Architecture and Compilation Techniques,B
+conf/icpp,ICPP,International Conference on Parallel Processing,B
+conf/icpr,ICPR,International Conference on Pattern Recognition,B
+conf/persuasive,PERSUASIVE,International Conference on Persuasive Technology,B
+conf/pkc,PKC,International Conference on Practice and Theory in Public Key Cryptography,B
+conf/opodis,OPODIS,International Conference on Principles of Distributed Systems,B
+conf/prima,PRIMA,International Conference on Principles of Practice in Multi-Agent Systems (prior to 2009 was Pacific Rim International Workshop on Multi-Agents),B
+conf/icpm,ICPM,International Conference on Process Mining,B
+conf/qomex,QOMEX,International Conference on Quality of Multimedia Experience,B
+conf/rcis,RCIS,International Conference on Research Challenges in Information Science,B
+conf/rv,RV,International Conference on Runtime Verification (was workshop pre 2010),B
+conf/ssdbm,SSDBM,International Conference on Scientific and Statistical Data Base Management,B
+conf/sisap,SISAP,International Conference on Similarity Search and Applications,B
+conf/sefm,SEFM,International Conference on Software Engineering and Formal Methods,B
+conf/sle,SLE,International Conference on Software Language Engineering,B
+conf/icsr,ICSR,International Conference on Software Reuse,B
+conf/techdebt,TECHDEBT,International Conference on Technical Debt,B
+conf/tableaux,TABLEAUX,International Conference on Theorem Proving with Analytic Tableaux and Related Methods,B
+conf/ictai,ICTAI,International Conference on Tools with Artificial Intelligence,B
+conf/trustbus,TRUSTBUS,"International Conference on Trust, Privacy and Security in Digital Business",B
+conf/trustcom,TRUSTCOM,"International Conference on Trust, Security and Privacy in Computing and Communications",B
+conf/vee,VEE,International Conference on Virtual Execution Environments,B
+conf/icwe,ICWE,International Conference on Web Engineering,B
+conf/wise,WISE,International Conference on Web Information Systems Engineering,B
+conf/europar,EUROPAR,International European Conference on Parallel and Distributed Computing (was International Conference on Parallel Processing),B
+conf/ijcnlp,IJCNLP,International Joint Conference on Natural Language Processing,B
+conf/inlg,INLG,International Natural Language Generation Conference,B
+conf/sagt,SAGT,International Symposium on Algorithmic Game Theory,B
+conf/isaac,ISAAC,International Symposium on Algorithms and Computation,B
+conf/atva,ATVA,International Symposium on Automated Technology for Verification and Analysis,B
+conf/fm,FM,International Symposium on Formal Methods (was Formal Methods Europe FME),B
+conf/fct,FCT,International Symposium on Fundamentals of Computation Theory,B
+conf/latin,LATIN,International Symposium on Latin American Theoretical Informatics,B
+conf/mfcs,MFCS,International Symposium on Mathematical Foundations of Computer Science,B
+conf/wiopt,WIOPT,"International Symposium on Modelling and Optimization in Mobile, Ad Hoc, and Wireless Networks",B
+conf/ipec,IPEC,International Symposium on Parameterized and Exact Computation (was IWPEC pre 2004),B
+conf/ssbse,SSBSE,International Symposium on Search Based Software Engineering,B
+conf/issac,ISSAC,International Symposium on Symbolic and Algebraic Computation,B
+conf/das,DAS,International Workshop on Document Analysis Systems,B
+conf/wg,WG,International Workshop on Graph-Theoretic Concepts in Computer Science,B
+conf/refsq,REFSQ,International Workshop on Requirements Engineering: Foundation for Software Quality,B
+conf/lrec,LREC,Language Resources and Evaluation Conference,B
+conf/lpar,LPAR,Logic Programming and Automated Reasoning,B
+conf/jelia,JELIA,"Logics in Artificial Intelligence, European Conference",B
+conf/mpc,MPC,Mathematics of Program Construction,B
+conf/mum,MUM,Mobile and Ubiquitous Multimedia (ACM),B
+conf/nossdav,NOSSDAV,Network and Operating System Support for Digital Audio and Video,B
+conf/pricai,PRICAI,Pacific Rim International Conference on Artificial Intelligence,B
+conf/pakdd,PAKDD,Pacific-Asia Conference on Knowledge Discovery and Data Mining,B
+conf/pam,PAM,Passive and Active Measurement Conference,B
+conf/ppopp,PPOPP,Principles and Practice of Parallel Programming,B
+conf/profes,PROFES,Product Focused Software Process Improvement,B
+conf/sac,SAC,Selected Areas in Cryptography,B
+conf/splc,SPLC,Software Product Lines Conference,B
+conf/sas,SAS,Static Analysis Symposium,B
+conf/sspr,SSPR,Structural and Syntactical Pattern Recognition,B
+conf/mascots,MASCOTS,Symposium Model Analysis and Simulation of Computer and Telecommunications Systems,B
+conf/sgp,SGP,Symposium on Geometry Processing,B
+conf/spaa,SPAA,Symposium on Parallelism in Algorithms and Architectures,B
+conf/srds,SRDS,Symposium on Reliable Distributed Systems,B
+conf/tei,TEI,"Tangible, Embedded, and Embodied Interaction",B
+conf/ie,IE,The International Conference on Intelligent Environments,B
+conf/socs,SOCS,The Symposium of Combinatorial Search,B
+conf/tark,TARK,Theoretical Aspects of Rationality and Knowledge,B
+conf/tcc,TCC,Theory of Cryptography Conference,B
+conf/vmcai,VMCAI,"Verification, Model Checking and Abstract Interpretation",B
+conf/waoa,WAOA,Workshop on Approximation and Online Algorithms,B
+conf/aies,AIES,"AAAI/ACM Conference on AI, Ethics, and Society",C
+conf/sera,SERA,"ACIS Conference on Software Engineering Research, Management and Applications",C
+conf/ace,ACE,"ACM International Conference on Advances in Computer Entertainment (merged with DIMEA, Digital Interactive Media in Entertainment and Arts, in 2009)",C
+conf/mig,MIG,ACM SIGGRAPH conference on Motion Interaction and Games,C
+conf/pepm,PEPM,ACM SIGPLAN Workshop on Partial Evaluation and Program Manipulation,C
+conf/sacmat,SACMAT,"ACM Symposium on Access Control Models and Technologies (previously ACM Workshop on Role-Based Access Control, RBAC, changed in 2000)",C
+conf/spm,SPM,ACM Symposium on Solid and Physical Modelling,C
+conf/aiccsa,AICCSA,ACS/IEEE International Conference on Computer Systems and Applications,C
+conf/pst,PST,"Annual Conference on Privacy, Security and Trust",C
+conf/ispr,ISPR,Annual International Workshop on Presence,C
+conf/nldb,NLDB,Applications of Natural Language to Data Bases,C
+conf/acc,ACC,Applied Computing Conference,C
+conf/artsit,ARTSIT,"ArtsIT, Interactivity & Game Creation (was International Conference on Arts and Technology)",C
+conf/apcc,APCC,Asia Pacific Conference on Communications,C
+conf/ies,IES,Asia Pacific Symposium on Intelligent and Evolutionary Systems (was Australia-Japan Joint Workshop on Intelligent and Evolutionary Systems),C
+conf/apnoms,APNOMS,Asia-Pacific Network Operations and Management Symposium,C
+conf/apscc,APSCC,Asia-Pacific Services Computing Conference,C
+conf/apsec,APSEC,Asia-Pacific Software Engineering Conference,C
+conf/acml,ACML,Asian Conference on Machine Learning,C
+conf/ast,AST,Automation of Software Test,C
+conf/bsn,BSN,Body Sensor Networks,C
+conf/cie,CIE,Computability in Europe: Logic and Theory of Algorithms,C
+conf/cgi,CGI,Computer Graphics International,C
+conf/isaga,ISAGA,Conference for the International Simulation and Gaming Association,C
+conf/eamt,EAMT,Conference of the European Association for Machine Translation,C
+conf/eusflat,EUSFLAT,Conference of the European Society for Fuzzy Logic and Technologies,C
+conf/aaim,AAIM,Conference on Algorithmic Aspects in Information and Management,C
+conf/cocoa,COCOA,Conference on Combinatorial Optimization and Applications,C
+conf/fedcsis,FEDCSIS,CONFERENCE ON COMPUTER SCIENCE AND INTELLIGENCE SYSTEMS,C
+conf/tamc,TAMC,Conference on Theory and Applications of Models of Computation,C
+conf/cdve,CDVE,"Cooperative Design, Visualization, and Engineering",C
+conf/dese,DESE,Developments in eSystems Engineering,C
+conf/dlt,DLT,Developments in Language Theory,C
+conf/dafx,DAFX,Digital Audio Effects Conference,C
+conf/digra,DIGRA,Digital Games Research Conference,C
+conf/dls,DLS,Dynamic Languages Symposium,C
+conf/ethicomp,ETHICOMP,ETHICOMP Conference,C
+conf/eatis,EATIS,EURO AMERICAN CONFERENCE ON TELEMATICS AND INFORMATION SYSTEMS,C
+conf/egpgv,EGPGV,Eurographics Symposium on Parallel Graphics and Visualization,C
+conf/dsd,DSD,Euromicro Conference Series on Digital System Design,C
+conf/pdp,PDP,"Euromicro International Conference on Parallel, Distributed and Network Based Processing",C
+conf/eccb,ECCB,European Conference on Computational Biology,C
+conf/eumas,EUMAS,European Conference on Multi-Agent Systems,C
+conf/ecsqaru,ECSQARU,European Conference on Symbolic and Quantitative Approaches to Reasoning with Uncertainty,C
+conf/ejc,EJC,European-Japanese Conference on Information Modelling and Knowledge Bases,C
+conf/emmsad,EMMSAD,Exploring Modelling Methods in Systems Analysis and Design,C
+conf/fqas,FQAS,Flexible Query-Answering Systems,C
+conf/fdl,FDL,Forum on Specification and Design Languages,C
+conf/fie,FIE,Frontiers in Education,C
+conf/gmp,GMP,Geometry Modeling and Processing,C
+conf/haskell,HASKELL,Haskell Workshop,C
+conf/hcw,HCW,Heterogeneity in Computing Workshop,C
+conf/hsi,HSI,Human System Interaction,C
+conf/ciarp,CIARP,IberoAmerican Congress on Pattern Recognition,C
+conf/asru,ASRU,IEEE Automatic Speech Recognition and Understanding Workshop,C
+conf/bibe,BIBE,IEEE Bioinformatics and Bioengineering,C
+conf/educon,EDUCON,IEEE Global Engineering Education Conference,C
+conf/iecon,IECON,IEEE Industrial Electronics Society,C
+conf/icbc,ICBC,IEEE International Conference on Blockchain and Cryptocurrency,C
+conf/cloudcom,CLOUDCOM,IEEE International Conference on Cloud Computing Technology and Science (International Conference on Cloud Computing pre 2010),C
+conf/cluster,CLUSTER,IEEE International Conference on Cluster Computing,C
+conf/icci,ICCI,IEEE International Conference on Cognitive Informatics,C
+conf/cit,CIT,IEEE International Conference on Computer and Information Technology,C
+conf/iccd,ICCD,IEEE International Conference on Computer Design,C
+conf/cbmi,CBMI,IEEE International Conference on Content-Based Multimedia Indexing,C
+conf/cis,CIS,IEEE International Conference on Cybernetics and Intelligent Systems,C
+conf/healthcom,HEALTHCOM,IEEE international conference on ehealth networking applications and services (was International Workshop on Enterprise Networking and Computing in Health Care Industry; changed 2006),C
+conf/etfa,ETFA,IEEE International Conference on Emerging Technologies and Factory Automation,C
+conf/icfec,ICFEC,IEEE International Conference on Fog and Edge Computing,C
+conf/icgse,ICGSE,IEEE International Conference on Global Software Engineering,C
+conf/hpcc,HPCC,IEEE International Conference on High Performance Computing and Communications,C
+conf/indin,INDIN,IEEE International Conference on Industrial Informatics,C
+conf/isi,ISI,IEEE International Conference on Intelligence and Security Informatics,C
+conf/vcip,VCIP,IEEE International Conference on Visual Communications and Image Processing (was SPIE ... pre 2011),C
+conf/igarss,IGARSS,IEEE International Geoscience and Remote Sensing Symposium,C
+conf/ipccc,IPCCC,IEEE International Performance Computing and Communications Conference,C
+conf/wowmom,WOWMOM,"IEEE International Symposium on a World of Wireless, Mobile and Multimedia Networks",C
+conf/iscas,ISCAS,IEEE International Symposium on Circuits and Systems,C
+conf/ism,ISM,IEEE International Symposium on Multimedia,C
+conf/ispa,ISPA,IEEE International Symposium on Parallel and Distributed Processing with Applications,C
+conf/rsp,RSP,IEEE International Symposium on Rapid System Prototyping (was IEEE Symposium on Rapid Prototyping),C
+conf/isorc,ISORC,IEEE International Symposium on Real-Time Distributed Computing,C
+conf/scam,SCAM,IEEE International Working Conference on Source Code Analysis and Manipulation,C
+conf/lanman,LANMAN,IEEE LAN/MAN Workshop,C
+conf/tencon,TENCON,IEEE Region 10 Conference,C
+conf/sew,SEW,IEEE Software Engineering Workshop,C
+conf/cidm,CIDM,IEEE Symposium on Computational Intelligence and Data Mining,C
+conf/cibcb,CIBCB,IEEE Symposium on Computational Intelligence in Bioinformatics and Computational Biology,C
+conf/arith,ARITH,IEEE Symposium on Computer Arithmetic,C
+conf/iscc,ISCC,IEEE Symposium on Computers and Communications,C
+conf/hpsr,HPSR,IEEE Workshop on High Performance Switching and Routing,C
+conf/icis,ICIS,IEEE/ACIS International Conference on Computer and Information Science,C
+conf/euc,EUC,IEEE/IFIP International Conference on Embedded and Ubiquitous Computing,C
+conf/safeprocess,SAFEPROCESS,"IFAC Symposium on Fault Detection, Supervision and Safety of Technical Processes",C
+conf/dais,DAIS,IFIP International Conference on Distributed Applications and Interoperable Systems,C
+conf/npc,NPC,IFIP International Conference on Network and Parallel Computing,C
+conf/forte,FORTE,"IFIP Joint International Conference on Formal Description Techniques and Protocol Specification, Testing, And Verification",C
+conf/pemwn,PEMWN,IFIP/IEEE International Conference on Performance Evaluation and Modeling in Wired and Wireless Networks,C
+conf/ifsa,IFSA,IFSA World Congress,C
+conf/iiwas,IIWAS,Information Integration and Web-based Applications and Services,C
+conf/ispec,ISPEC,Information Security Practice and Experience Conference,C
+conf/iaai,IAAI,Innovative Applications in AI,C
+conf/fmics,FMICS,Int. Workshop on Formal Methods for Industrial Critical Systems,C
+conf/ictac,ICTAC,International Colloquium on Theoretical Aspects of Computing,C
+conf/icfca,ICFCA,International Conference Formal Concept Analysis Conference,C
+conf/ilrn,ILRN,International Conference of the Immersive Learning Research Network,C
+conf/atc,ATC,International Conference on Advanced and Trusted Computing (was International Conference on Autonomic and Trusted Computing),C
+conf/adma,ADMA,International Conference on Advanced Data Mining and Applications,C
+conf/achi,ACHI,International Conference on Advances in Computer-Human Interactions,C
+conf/momm,MOMM,International Conference on Advances in Mobile Computing and Multimedia,C
+conf/ica3pp,ICA3PP,International Conference on Algorithms and Architectures for Parallel Processing,C
+conf/ciac,CIAC,International Conference on Algorithms and Complexity (was Italian Conference ),C
+conf/icail,ICAIL,International Conference on Artificial Intelligence and Law,C
+conf/evomusart,EVOMUSART,"International Conference on Artificial Intelligence in Music, Sound, Art and Design",C
+conf/icann,ICANN,International Conference on Artificial Neural Networks,C
+conf/egve,EGVE,International Conference on Artificial Reality and Telexistance & Eurographics Symposium on Virtual Environments,C
+conf/broadnets,BROADNETS,"International Conference on Broadband Communications, Networks and Systems",C
+conf/iccbr,ICCBR,International Conference on Case-Based Reasoning,C
+conf/closer,CLOSER,International Conference on Cloud Computing and Services Science,C
+conf/iccsa,ICCSA,International Conference on Communication Systems and Applications,C
+conf/cisis,CISIS,"International Conference on Complex, Intelligent and Software Intensive Systems",C
+conf/complexis,COMPLEXIS,"International Conference on Complexity, Future Information Systems and Risk",C
+conf/cca,CCA,International Conference on Computability and Complexity in Analysis,C
+conf/iccc,ICCC,International Conference on Computational Creativity,C
+conf/comma,COMMA,International Conference on Computational Models of Argument,C
+conf/caip,CAIP,International Conference on Computer Analysis of Images and Patterns,C
+conf/cscwd,CSCWD,International Conference on Computer Supported Cooperative Work in Design,C
+conf/icvs,ICVS,International Conference on Computer Vision Systems,C
+conf/chira,CHIRA,International Conference on Computer-Human Interaction Research and Applications,C
+conf/icchp,ICCHP,International Conference on Computers Helping People with Special Needs,C
+conf/icce,ICCE,International Conference on Computers in Education,C
+conf/icarcv,ICARCV,"International Conference on Control, Automation, Robotics and Vision",C
+conf/codit,CODIT,"International Conference on Control, Decision and Information Technologies",C
+conf/coordination,COORDINATION,International Conference on Coordination Models and Languages,C
+conf/cw,CW,International Conference on Cyberworlds (was International Symposium on Cyberworlds),C
+conf/data,DATA,"International Conference on Data Science, Technology and Applications",C
+conf/dexa,DEXA,International Conference on Database and Expert Systems Applications,C
+conf/dasc,DASC,"International Conference on Dependable, Autonomic and Secure Computing",C
+conf/icds,ICDS,International Conference on Digital Society,C
+conf/dc,DC,International Conference on Dublin Core and Metadata Applications,C
+conf/icec,ICEC,International Conference on Electronic Commerce,C
+conf/eann,EANN,International Conference on Engineering Applications of Neural Networks,C
+conf/emo,EMO,International Conference on Evolutionary Multi-Criterion Optimization,C
+conf/wfcs,WFCS,International Conference on Factory Communication Systems,C
+conf/icfem,ICFEM,International Conference on Formal Engineering Methods,C
+conf/memocode,MEMOCODE,International Conference on Formal Methods and Models for Co-Design,C
+conf/fois,FOIS,International Conference on Formal Ontology in Information Systems,C
+conf/gpc,GPC,"International Conference on Green, Pervasive and Cloud Computing (was Grid and Pervasive Computing)",C
+conf/qshine,QSHINE,"International Conference on Heterogeneous Networking for Quality, Reliability, Security and Robustness (was International Conference on Quality of Service in Heterogeneous Wired/Wireless Networks)",C
+conf/his,HIS,International Conference on Hybrid Intelligent Systems,C
+conf/icisp,ICISP,International Conference on Image and Signal Processing,C
+conf/ipas,IPAS,International Conference on Image Processing Applications and Systems,C
+conf/ipin,IPIN,International Conference on Indoor Positioning and Indoor Navigation,C
+conf/iddm,IDDM,International Conference on Informatics & Data-Driven Medicine,C
+conf/icinco,ICINCO,"International Conference on Informatics in Control, Automation and Robotics",C
+conf/ictd,ICTD,International Conference on Information and Communication Technologies and Development,C
+conf/enter,ENTER,International Conference on Information and Communication Technologies in Tourism,C
+conf/icics,ICICS,International Conference on Information and Communications Security,C
+conf/fusion,FUSION,International Conference on Information Fusion,C
+conf/ipmu,IPMU,International Conference on Information Processing and Management of Uncertainty,C
+conf/secrypt,SECRYPT,International Conference on Information Security and Cryptography,C
+conf/icissp,ICISSP,International Conference on Information Systems Security and Privacy,C
+conf/iv,IV,International Conference on Information Visualisation,C
+conf/i4cs,I4CS,International Conference on Innovations for Community Services (was Innovative Internet Computer Systems IICS until 2014),C
+conf/ideal,IDEAL,International Conference on Intelligent Data Engineering and Automated Learning,C
+conf/somet,SOMET,"International Conference on Intelligent Software Methodologies, Tools, and Techniques (was International Conference on Software Methods and Tools)",C
+conf/isda,ISDA,International Conference on Intelligent Systems Designs and Applications,C
+conf/cicling,CICLING,International Conference on Intelligent Text Processing and Computational Linguistics,C
+conf/icids,ICIDS,International Conference on Interactive Digital Storytelling (2008 merger of 'ICVS International Conference on Virtual Storytelling' and 'TIDSE Technology for Interactive Digital Storytelling'),C
+conf/iciw,ICIW,International Conference on Internet and Web Applications and Services,C
+conf/ksem,KSEM,"International Conference on Knowledge Science, Engineering and Management",C
+conf/lata,LATA,International Conference on Language and Automata Theory and Applications,C
+conf/jurix,JURIX,International Conference on Legal Knowledge and Information Systems,C
+conf/icmla,ICMLA,International Conference on Machine Learning and Applications,C
+conf/icmv,ICMV,International Conference on Machine Vision,C
+conf/medes,MEDES,International Conference on Management of Digital EcoSystems,C
+conf/mobiquitous,MOBIQUITOUS,International Conference on Mobile and Ubiquitous Systems: Networks and Services,C
+conf/medi,MEDI,International Conference on Model and Data Engineering,C
+conf/modelsward,MODELSWARD,International Conference on Model-Driven Engineering and Software Development,C
+conf/ecms,ECMS,International Conference on Modelling and Simulation,C
+conf/nesy,NESY,International Conference on Neurosymbolic Learning and Reasoning,C
+conf/icores,ICORES,International Conference on Operations Research and Enterprise Systems,C
+conf/pairing,PAIRING,International Conference on Pairing-based Cryptography,C
+conf/pdcat,PDCAT,"International Conference on Parallel and Distributed Computing, Applications and Technologies",C
+conf/icpram,ICPRAM,International Conference on Pattern Recognition Applications and Methods,C
+conf/ppdp,PPDP,International Conference on Principles and Practice of Declarative Programming,C
+conf/aofa,AOFA,"International Conference on Probabilistic, Combinatorial, and Asymptotic Methods in the Analysis of Algorithms (was Conference on Analysis of Algorithms)",C
+conf/provsec,PROVSEC,International Conference on Provable Security,C
+conf/rc,RC,International Conference on Reversible Computation,C
+conf/crisis,CRISIS,International Conference on Risks and Security of Internet and Systems,C
+conf/securecomm,SECURECOMM,International Conference on Security and Privacy for Communication Networks,C
+conf/sin,SIN,International Conference on Security of Information and Networks,C
+conf/seta,SETA,International Conference on Sequences and their Applications,C
+conf/simultech,SIMULTECH,"International Conference on Simulation and Modeling Methodologies, Technologies and Applications",C
+conf/icost,ICOST,International Conference on Smart homes and health Telematics,C
+conf/icsoft,ICSOFT,International Conference on Software and Data Technologies,C
+conf/icsea,ICSEA,International Conference on Software Engineering Advances,C
+conf/seke,SEKE,International Conference on Software Engineering and Knowledge Engineering,C
+conf/snpd,SNPD,"International Conference on Software Engineering, Artificial Intelligence, Networking and Parallel/Distributed Computing",C
+conf/icseng,ICSENG,International Conference on Systems Engineering,C
+conf/tap,TAP,International Conference on Tests and Proofs,C
+conf/fdg,FDG,International Conference on the Foundations of Digital Games,C
+conf/alife,ALIFE,International Conference on the Simulation and Synthesis of Living Systems,C
+conf/uic,UIC,International Conference on Ubiquitous Intelligence and Computing,C
+conf/uc,UC,International Conference on Unconventional Computation and Natural Computation (was International Conference on Unconventional Computation),C
+conf/vehits,VEHITS,International Conference on Vehicle Technology and Intelligent Transport Systems,C
+conf/webist,WEBIST,International Conference on Web Information Systems and Technologies,C
+conf/wincom,WINCOM,International Conference on Wireless Networks and Mobile Communications,C
+conf/ideas,IDEAS,International Database Engineering and Applications Symposium,C
+conf/ijcci,IJCCI,International Joint Conference on Computational Intelligence,C
+conf/ic3k,IC3K,"International Joint Conference on Knowledge Discovery, Knowledge Engineering and Knowledge Management",C
+conf/inoc,INOC,International Network Optimization Conference,C
+conf/pcs,PCS,International Picture Coding Symposium,C
+conf/algosensors,ALGOSENSORS,International Symposium on Algorithms and Experiments for Wireless Networks,C
+conf/isads,ISADS,International Symposium on Autonomous Decentralized Systems,C
+conf/isco,ISCO,International Symposium on Combinatorial Optimisation,C
+conf/sbac-pad,SBAC-PAD,International Symposium on Computer Architecture and High Performance Computing,C
+conf/ddecs,DDECS,International Symposium on Design and Diagnostics of Electronic Circuits and Systems,C
+conf/ismis,ISMIS,International Symposium on Foundations of Intelligent Systems,C
+conf/ias,IAS,International Symposium on Information Assurance and Security,C
+conf/isita,ISITA,International Symposium on Information Theory and Its Applications,C
+conf/inista,INISTA,International Symposium on Innovations in Intelligent Systems and Applications,C
+conf/isola,ISOLA,"International Symposium on Leveraging Applications of Formal Methods, Verification and Validation",C
+conf/lopstr,LOPSTR,International Symposium on Logic-based Program Synthesis and Transformation,C
+conf/ismm,ISMM,International Symposium on Memory Management,C
+conf/isncc,ISNCC,"International Symposium on Networks, Computers and Communications",C
+conf/isnn,ISNN,International Symposium on Neural Networks,C
+conf/onward,ONWARD,"International Symposium on New Ideas, New Paradigms, and Reflections on Programming and Software",C
+conf/ispdc,ISPDC,International Symposium on Parallel and Distributed Computing,C
+conf/isrr,ISRR,International Symposium on Robotics Research,C
+conf/sdh,SDH,International Symposium on Spatial Data Handling,C
+conf/spire,SPIRE,International Symposium on String Processing and Information Retrieval,C
+conf/istas,ISTAS,International Symposium on Technology and Society,C
+conf/time,TIME,International Symposium on Temporal Representation and Reasoning,C
+conf/iwoca,IWOCA,International Workshop on Combinatorial Algorithm,C
+conf/iwcia,IWCIA,International Workshop on Combinatorial Image Analysis: Theory and Applications,C
+conf/critis,CRITIS,International Workshop on Critical Information Infrastructures Security,C
+conf/damon,DAMON,International Workshop on Data Management on New Hardware,C
+conf/dolap,DOLAP,International Workshop on Data Warehousing and OLAP,C
+conf/iwdw,IWDW,International Workshop on Digital Watermarking,C
+conf/hips,HIPS,International Workshop on High-Level Parallel Programming Models and Supportive Environments,C
+conf/mabs,MABS,International Workshop on MultiAgent Based Simulation,C
+conf/mmsp,MMSP,International Workshop on Multimedia Signal Processing,C
+conf/pqcrypto,PQCRYPTO,International Workshop on Post-Quantum Cryptography,C
+conf/dx,DX,International Workshop on Principles of Diagnosis,C
+conf/scopes,SCOPES,International Workshop on Software and Compilers for Embedded Systems,C
+conf/wafr,WAFR,International Workshop on the Algorithmic Foundations of Robotics,C
+conf/vizsec,VIZSEC,International Workshop on Visualization for Cyber Security,C
+conf/w2gis,W2GIS,International Workshop on Web and Wireless Geographical Information Systems,C
+conf/wetice,WETICE,International Workshops on Enabling Technologies: Infrastructures for Collaborative Enterprises,C
+conf/caine,CAINE,ISCA International Conference on Computer Applications in Industry and Engineering,C
+conf/ldk,LDK,"Language, Data and Knowledge",C
+conf/clei,CLEI,Latin American Conference on Informatics,C
+conf/lagos,LAGOS,"Latin-American Algorithms, Graphs and Optimization Symposium",C
+conf/mcu,MCU,"Machines, Computations and Universality (was Universal Machines and Computations)",C
+conf/nspw,NSPW,New Security Paradigms Workshop,C
+conf/iolts,IOLTS,On-Line Testing and Robust System Design,C
+conf/paclic,PACLIC,"Pacific Asia Conference on Language, Information and Computation",C
+conf/prdc,PRDC,Pacific Rim International Symposium on Dependable Computing,C
+conf/pkaw,PKAW,Pacific Rim Knowledge Acquisition Workshop,C
+conf/psivt,PSIVT,Pacific-Rim Symposium on Image and Video Technology,C
+conf/plop,PLOP,Pattern Languages of Programs,C
+conf/padl,PADL,Practical Aspects of Declarative Languages,C
+conf/patat,PATAT,Practice and Theory of Automated Timetabling,C
+conf/psd,PSD,Privacy in Statistical Databases,C
+conf/robocup,ROBOCUP,Robot Soccer World Cup,C
+conf/cardis,CARDIS,Smart Card Research and Advanced Application Conference,C
+conf/spice,SPICE,Software Process Improvement and Capability Determination,C
+conf/qrs,QRS,"Software Quality, Reliability, and Security (was International Conference on Quality Software, QSIC, that merged with SERE 2015)",C
+conf/adbis,ADBIS,Symposium on Advances in DB and Information Systems,C
+conf/sss,SSS,"Symposium on Stabilization, Safety, and Security of Distributed Systems",C
+conf/compass,COMPASS,The ACM SIGCAS/SIGCHI Conference on Computing and Sustainable Societies,C
+conf/vecos,VECOS,The International Conference on Verification and Evaluation of Computer and Communication Systems,C
+conf/diagrams,DIAGRAMS,The Theory and Application of Diagrams,C
+conf/vinci,VINCI,Visual Information Communication and Interaction,C
+conf/apweb,APWEB,Web and Big Data,C
+conf/wistp,WISTP,Workshop in Information Security Theory and Practices,C
+conf/atmos,ATMOS,"Workshop on Algorithmic Approaches for Transportation Modelling, Optimization, and Systems",C
+conf/waw,WAW,Workshop on Algorithms And Models For The Web Graph,C
+conf/wabi,WABI,Workshop on Algorithms in Bioinformatics,C
+conf/wco,WCO,Workshop on Computational Optimization,C
+conf/fdtc,FDTC,Workshop on Fault Diagnosis and Tolerance in Cryptography,C
+conf/ftfjp,FTFJP,Workshop on Formal Techniques for Java-like Programs,C
+conf/jsspp,JSSPP,Workshop on Job Scheduling Strategies for Parallel Processing,C
+conf/wollic,WOLLIC,"Workshop on Logic, Language, Information and Computation",C
+conf/plos,PLOS,Workshop on Programming Languages and Operating Systems,C
+conf/waifi,WAIFI,Workshop on the Arithmetic of Finite Fields,C
+conf/worldcist,WORLDCIST,World Conference on Information Systems and Technologies,C

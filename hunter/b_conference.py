@@ -283,11 +283,19 @@ def phase_write(
     print(f"  → Use 1-conf-exact-matched.csv directly")
     print(f"  → Run c_conf_match.py to match remaining\n")
     
+    # Calculate expected final output
+    # Maximum is limited by CORE list size (we can't exceed total CORE conferences)
+    # Best case: all CORE conferences get matched
+    # Realistic estimate: current matches + partial matches from remaining CORE
+    max_possible = len(exact_matched) + len(core_available)  # All CORE matched
+    estimated = len(exact_matched) + int(len(core_available) * 0.3)  # ~30% more matches
+    
     print(f"  Overall Statistics:")
     print(f"  ├─ 1-conf-exact-matched.csv: {len(exact_matched):,} conferences (AUTO-APPROVED)")
     print(f"  ├─ 2-conf-todo.csv: {len(dblp_unmatched):,} conferences (NEED MATCHING)")
     print(f"  ├─ 3-core-pool.csv: {len(core_available):,} conferences (AVAILABLE)")
-    print(f"  └─ Expected final output: ~{len(exact_matched) + int(len(dblp_unmatched)*0.3):,} matched conferences\n")
+    print(f"  ├─ Expected: ~{estimated:,} conferences (realistic)")
+    print(f"  └─ Maximum possible: {max_possible:,} conferences (all CORE matched)\n")
 
 
 def main() -> None:
