@@ -4,7 +4,6 @@ import os
 import re
 import sys
 from collections import Counter, defaultdict
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 
@@ -19,146 +18,17 @@ DATA_DIR = REPO_ROOT / "database"
 CONTEXT_DIR = REPO_ROOT / "context"
 SJR_SRC = CONTEXT_DIR / "SJR-WoS-2025-CS.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
-OUT_CSV = CONTEXT_DIR / "List-of-Journal.csv"
+OUT_CSV = CONTEXT_DIR / "List-of-Journal-ISSN.csv"
+OUT_DBLP_UNMATCHED = CONTEXT_DIR / "DBLP-unmatched.csv"
+OUT_SJR_AVAILABLE = CONTEXT_DIR / "SJR-available.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2",
-              "quartile", "coverage", "match_method", "match_score"]
+              "quartile", "coverage"]
+
+OUT_FIELDS_DBLP = ["dblp_key", "dblp_name"]
+OUT_FIELDS_SJR = ["title", "issn_1", "issn_2", "quartile", "coverage"]
 
 VALID_QUARTILES = {"Q1", "Q2", "Q3", "Q4"}
-DEFAULT_THRESHOLD = 0.80
-
-_ABBREV = [
-    (r"\bTrans\b\.?", "Transactions"),
-    (r"\bJ\b\.?", "Journal"),
-    (r"\bInt\b\.?", "International"),
-    (r"\bComput\b\.?", "Computer"),
-    (r"\bSyst\b\.?", "Systems"),
-    (r"\bEng\b\.?", "Engineering"),
-    (r"\bSci\b\.?", "Science"),
-    (r"\bTechnol\b\.?", "Technology"),
-    (r"\bAppl\b\.?", "Applied"),
-    (r"\bApplic\b\.?", "Applications"),
-    (r"\bMach\b\.?", "Machine"),
-    (r"\bIntell\b\.?", "Intelligence"),
-    (r"\bArtif\b\.?", "Artificial"),
-    (r"\bInf\b\.?", "Information"),
-    (r"\bCommun\b\.?", "Communications"),
-    (r"\bAnal\b\.?", "Analysis"),
-    (r"\bRecogn\b\.?", "Recognition"),
-    (r"\bVis\b\.?", "Vision"),
-    (r"\bNetw\b\.?", "Networks"),
-    (r"\bDistrib\b\.?", "Distributed"),
-    (r"\bAuton\b\.?", "Autonomous"),
-    (r"\bEduc\b\.?", "Education"),
-    (r"\bLett\b\.?", "Letters"),
-    (r"\bManag\b\.?", "Management"),
-    (r"\bAdv\b\.?", "Advanced"),
-    (r"\bAI\b", "Artificial Intelligence"),
-    (r"\bMed\b\.?", "Medical"),
-    (r"\bBiol\b\.?", "Biological"),
-    (r"\bBioinform\b\.?", "Bioinformatics"),
-    (r"\bNeur\b\.?", "Neural"),
-    (r"\bRobot\b\.?", "Robotics"),
-    (r"\bOptim\b\.?", "Optimization"),
-    (r"\bSimul\b\.?", "Simulation"),
-    (r"\bSoftw\b\.?", "Software"),
-    (r"\bAlgor\b\.?", "Algorithms"),
-    (r"\bArchit\b\.?", "Architecture"),
-    (r"\bSecur\b\.?", "Security"),
-    (r"\bBehav\b\.?", "Behavior"),
-    (r"\bCogn\b\.?", "Cognitive"),
-    (r"\bRes\b\.?", "Research"),
-    (r"\bPract\b\.?", "Practice"),
-    (r"\bProc\b\.?", "Proceedings"),
-    (r"\bMin\b\.?", "Mining"),
-    (r"\bMath\b\.?", "Mathematics"),
-    (r"\bProcess\b\.?", "Processing"),
-    (r"\bSoc\b\.?", "Society"),
-    (r"\bDigit\b\.?", "Digital"),
-    (r"\bElectron\b\.?", "Electronics"),
-    (r"\bLearn\b\.?", "Learning"),
-    (r"\bModel\b\.?", "Modeling"),
-    (r"\bKnowl\b\.?", "Knowledge"),
-    (r"\bInteract\b\.?", "Interaction"),
-    (r"\bRev\b\.?", "Review"),
-    (r"\bAutom\b\.?", "Automation"),
-    (r"\bLog\b\.?", "Logic"),
-    (r"\bLang\b\.?", "Language"),
-    (r"\bFound\b\.?", "Foundations"),
-    (r"\bOper\b\.?", "Operations"),
-    (r"\bControl\b\.?", "Control"),
-    (r"\bHum\b\.?", "Human"),
-    (r"\bProgram\b\.?", "Programming"),
-    (r"\bServ\b\.?", "Services"),
-    (r"\bMultim\b\.?", "Multimedia"),
-    (r"\bMob\b\.?", "Mobile"),
-    (r"\bDecis\b\.?", "Decision"),
-    (r"\bWirel\b\.?", "Wireless"),
-    (r"\bDes\b\.?", "Design"),
-    (r"\bBus\b\.?", "Business"),
-    (r"\bMag\b\.?", "Magazine"),
-    (r"\bComb\b\.?", "Combinatorics"),
-    (r"\bGraph\b\.?", "Graphics"),
-    (r"\bBull\b\.?", "Bulletin"),
-    (r"\bEnviron\b\.?", "Environment"),
-    (r"\bSens\b\.?", "Sensors"),
-    (r"\bStat\b\.?", "Statistics"),
-    (r"\bDev\b\.?", "Development"),
-    (r"\bIntegr\b\.?", "Integration"),
-    (r"\bBiomed\b\.?", "Biomedical"),
-    (r"\bLibr\b\.?", "Library"),
-    (r"\bTech\b\.?", "Technical"),
-    (r"\bPerform\b\.?", "Performance"),
-    (r"\bNat\b\.?", "Natural"),
-    (r"\bDiscret\b\.?", "Discrete"),
-    (r"\bGeom\b\.?", "Geometry"),
-    (r"\bTheor\b\.?", "Theoretical"),
-    (r"\bComputat\b\.?", "Computational"),
-]
-
-_STOP = {
-    "a", "an", "the", "&",
-}
-
-
-def normalize(text: str, preserve_order: bool = True) -> str:
-    for pat, rep in _ABBREV:
-        text = re.sub(pat, rep, text, flags=re.IGNORECASE)
-    text = text.lower()
-    text = re.sub(r"\b(electronic|electronics)\b", "electronics", text)
-    text = re.sub(r"\b(technology|technologies)\b", "technology", text)
-    text = re.sub(r"[^\w\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    
-    tokens = [t for t in text.split() if t not in _STOP]
-    
-    if preserve_order:
-        return " ".join(tokens)
-    else:
-        return " ".join(sorted(tokens))
-
-
-def match_score(a: str, b: str) -> float:
-    ta = set(a.split())
-    tb = set(b.split())
-    if not ta or not tb:
-        return 0.0
-    
-    shared = len(ta & tb)
-    if not shared:
-        return 0.0
-    
-    jaccard = shared / len(ta | tb)
-    containment = shared / min(len(ta), len(tb))
-    
-    token_sim = containment if containment >= 0.90 else jaccard
-    
-    if token_sim < 0.65:
-        return 0.0
-    
-    seq = SequenceMatcher(None, a, b, autojunk=False).ratio()
-    
-    return 0.4 * token_sim + 0.6 * seq
 
 
 def _format_issn(raw: str) -> str:
@@ -202,7 +72,6 @@ def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
                 "issn_2": i2,
                 "quartile": q,
                 "coverage": row["Coverage"].strip(),
-                "norm": normalize(row["Title"].strip()),
             }
             rows.append(record)
             
@@ -275,13 +144,19 @@ def phase_match(
     dblp_index: dict[str, tuple[str, set[str]]],
     sjr_rows: list[dict],
     sjr_issn_index: dict[str, dict],
-    threshold: float,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Match DBLP and SJR journals using ISSN only.
+    
+    Returns:
+        - issn_matched: ISSN exact matches (auto-approved)
+        - dblp_unmatched: DBLP journals without ISSN match (for AI review)
+        - sjr_available: SJR journals without ISSN match (pool for AI)
+    """
     print("━" * 70)
-    print(f"  Phase 3 – Multi-Strategy Matching  (threshold = {threshold})")
+    print("  Phase 3 – ISSN Matching Only")
     print("━" * 70)
 
-    print("\n  Stage 3.1 – ISSN Exact Matching")
+    print("\n  ISSN Exact Matching (Auto-Approved)")
     print("  " + "─" * 66)
     
     issn_matched = []
@@ -303,175 +178,115 @@ def phase_match(
                     "issn_2": sjr_record["issn_2"],
                     "quartile": sjr_record["quartile"],
                     "coverage": sjr_record["coverage"],
-                    "match_method": "ISSN",
-                    "match_score": 1.0,
                 })
                 dblp_matched_keys.add(dblp_key)
                 sjr_matched_titles.add(sjr_record["title"])
                 print(f"  ✓  {sjr_record['quartile']}  {dblp_name[:50]}")
                 break
     
-    print(f"\n  ✓  {len(issn_matched)} journals matched by ISSN\n")
+    print(f"\n  ✓  {len(issn_matched)} journals matched by ISSN (AUTO-APPROVED)\n")
     
-    print("  Stage 3.2 – Fuzzy Name Matching (Bidirectional)")
-    print("  " + "─" * 66)
-    
-    remaining_dblp = {
-        k: v for k, v in dblp_index.items() 
+    # Collect unmatched DBLP journals
+    dblp_unmatched = [
+        {"dblp_key": k, "dblp_name": dblp_name}
+        for k, (dblp_name, _) in dblp_index.items()
         if k not in dblp_matched_keys
-    }
-    remaining_sjr = [
-        r for r in sjr_rows 
+    ]
+    
+    # Collect available SJR journals (not yet matched)
+    sjr_available = [
+        {
+            "title": r["title"],
+            "issn_1": r["issn_1"],
+            "issn_2": r["issn_2"],
+            "quartile": r["quartile"],
+            "coverage": r["coverage"],
+        }
+        for r in sjr_rows
         if r["title"] not in sjr_matched_titles
     ]
     
-    sjr_norms = [(r["norm"], r) for r in remaining_sjr]
-    
-    dblp_to_sjr = {}
-    
-    for dblp_key, (dblp_name, _) in remaining_dblp.items():
-        nd = normalize(dblp_name)
-        
-        best_score = 0.0
-        best_row = None
-        
-        for ns, sr in sjr_norms:
-            s = match_score(nd, ns)
-            if s > best_score:
-                best_score = s
-                best_row = sr
-        
-        if best_score >= threshold and best_row is not None:
-            dblp_to_sjr[dblp_key] = (best_row, best_score)
-    
-    sjr_to_dblp = {}
-    
-    for ns, sr in sjr_norms:
-        best_score = 0.0
-        best_dblp_key = None
-        best_dblp_name = None
-        
-        for dblp_key, (dblp_name, _) in remaining_dblp.items():
-            nd = normalize(dblp_name)
-            s = match_score(nd, ns)
-            
-            if s > best_score:
-                best_score = s
-                best_dblp_key = dblp_key
-                best_dblp_name = dblp_name
-        
-        if best_score >= threshold and best_dblp_key is not None:
-            sjr_to_dblp[sr["title"]] = (best_dblp_key, best_dblp_name, best_score)
-    
-    fuzzy_matched = []
-    conflict_count = 0
-    
-    for dblp_key, (sjr_record, fwd_score) in dblp_to_sjr.items():
-        sjr_title = sjr_record["title"]
-        
-        if sjr_title in sjr_to_dblp:
-            rev_dblp_key, rev_dblp_name, rev_score = sjr_to_dblp[sjr_title]
-            
-            if rev_dblp_key == dblp_key:
-                fuzzy_matched.append({
-                    "dblp_key": dblp_key,
-                    "dblp_name": remaining_dblp[dblp_key][0],
-                    "title": sjr_record["title"],
-                    "issn_1": sjr_record["issn_1"],
-                    "issn_2": sjr_record["issn_2"],
-                    "quartile": sjr_record["quartile"],
-                    "coverage": sjr_record["coverage"],
-                    "match_method": "Fuzzy",
-                    "match_score": round(fwd_score, 3),
-                })
-                print(f"  ✓  {sjr_record['quartile']}  {remaining_dblp[dblp_key][0][:45]} (score: {fwd_score:.3f})")
-            else:
-                conflict_count += 1
-    
-    print(f"\n  ✓  {len(fuzzy_matched)} journals matched by fuzzy matching")
-    print(f"  ⚠  {conflict_count} conflicting matches excluded (not mutual best)\n")
-    
-    all_matched = issn_matched + fuzzy_matched
-    
     total_dblp = len(dblp_index)
     total_sjr = len(sjr_rows)
+    
+    print(f"  Unmatched Journals (Need AI Review)")
+    print(f"  " + "─" * 66)
+    print(f"  ├─ DBLP unmatched: {len(dblp_unmatched)}")
+    print(f"  └─ SJR available pool: {len(sjr_available)}")
+    print()
     print(f"  Summary:")
-    print(f"  ├─ DBLP journals in XML: {total_dblp}")
-    print(f"  ├─ SJR journals (valid Q1-Q4): {total_sjr}")
-    print(f"  ├─ Matched (ISSN): {len(issn_matched)}")
-    print(f"  ├─ Matched (Fuzzy): {len(fuzzy_matched)}")
-    print(f"  ├─ Total matched: {len(all_matched)}")
-    print(f"  ├─ DBLP unmatched: {total_dblp - len(all_matched)}")
-    print(f"  └─ SJR unmatched: {total_sjr - len(all_matched)}\n")
+    print(f"  ├─ Total DBLP journals: {total_dblp}")
+    print(f"  ├─ Total SJR journals: {total_sjr}")
+    print(f"  ├─ AUTO-APPROVED (ISSN): {len(issn_matched)}")
+    print(f"  ├─ NEEDS AI MATCHING: {len(dblp_unmatched)} DBLP × {len(sjr_available)} SJR")
+    print(f"  └─ AI will perform {len(dblp_unmatched)} × {len(sjr_available)} = {len(dblp_unmatched) * len(sjr_available):,} comparisons\n")
     
-    return all_matched
+    return issn_matched, dblp_unmatched, sjr_available
 
 
-def phase_write(rows: list[dict], out_path: Path) -> None:
+def phase_write(
+    issn_matched: list[dict],
+    dblp_unmatched: list[dict],
+    sjr_available: list[dict],
+    out_issn: Path,
+    out_dblp: Path,
+    out_sjr: Path
+) -> None:
     print("━" * 70)
-    print("  Phase 4 – Writing List-of-Journal.csv")
+    print("  Phase 4 – Writing Output Files")
     print("━" * 70)
 
-    by_title = defaultdict(list)
-    for r in rows:
-        by_title[r["title"]].append(r)
-
-    deduped = []
-    dupes_removed = 0
-    
-    for title, group in by_title.items():
-        if len(group) == 1:
-            deduped.append(group[0])
-        else:
-            best = max(
-                group,
-                key=lambda r: (
-                    1 if r["match_method"] == "ISSN" else 0,
-                    r["match_score"],
-                    -len(r["dblp_key"]),
-                ),
-            )
-            deduped.append(best)
-            dupes_removed += len(group) - 1
-            
-            if dupes_removed <= 20:
-                print(f"  ⚠  Duplicate: '{title}' matched by multiple DBLP journals")
-                for r in group:
-                    mark = "→" if r == best else " "
-                    print(f"      {mark} {r['dblp_key']} ({r['match_method']}, score={r['match_score']:.3f})")
-
-    if dupes_removed:
-        print(f"\n  Deduplication: removed {dupes_removed} lower-scoring duplicate matches")
-
+    # File 1: ISSN-matched journals (auto-approved)
     order = {"Q1": 0, "Q2": 1, "Q3": 2, "Q4": 3}
-    deduped = sorted(deduped,
-                     key=lambda r: (
-                         order.get(r["quartile"], 9),
-                         -r["match_score"],
-                         r["title"].lower()
-                     ))
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8", newline="") as f:
+    issn_sorted = sorted(issn_matched,
+                        key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
+    
+    out_issn.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_issn, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUT_FIELDS, delimiter=",",
                                 quoting=csv.QUOTE_MINIMAL)
         writer.writeheader()
-        writer.writerows(deduped)
-
-    qtrs = Counter(r["quartile"] for r in deduped)
-    methods = Counter(r["match_method"] for r in deduped)
+        writer.writerows(issn_sorted)
     
-    print(f"\n  Output → {out_path}")
-    print(f"  Total  : {len(deduped)} journals")
-    print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}")
-    print(f"  Match methods: ISSN={methods['ISSN']}   Fuzzy={methods['Fuzzy']}\n")
+    qtrs = Counter(r["quartile"] for r in issn_matched)
+    print(f"\n  File 1: AUTO-APPROVED (ISSN Matches)")
+    print(f"  → {out_issn}")
+    print(f"  Total: {len(issn_matched)} journals")
+    print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n")
     
-    avg_score = sum(r["match_score"] for r in deduped) / len(deduped) if deduped else 0
-    low_confidence = sum(1 for r in deduped if r["match_score"] < 0.90)
+    # File 2: Unmatched DBLP journals
+    dblp_sorted = sorted(dblp_unmatched, key=lambda r: r["dblp_key"])
     
-    print(f"  Quality Metrics:")
-    print(f"  ├─ Average match score: {avg_score:.3f}")
-    print(f"  └─ Low confidence matches (<0.90): {low_confidence}\n")
+    with open(out_dblp, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS_DBLP, delimiter=",",
+                                quoting=csv.QUOTE_MINIMAL)
+        writer.writeheader()
+        writer.writerows(dblp_sorted)
+    
+    print(f"  File 2: DBLP Journals (Need AI Matching)")
+    print(f"  → {out_dblp}")
+    print(f"  Total: {len(dblp_unmatched)} journals\n")
+    
+    # File 3: Available SJR journals
+    sjr_sorted = sorted(sjr_available,
+                       key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
+    
+    with open(out_sjr, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS_SJR, delimiter=",",
+                                quoting=csv.QUOTE_MINIMAL)
+        writer.writeheader()
+        writer.writerows(sjr_sorted)
+    
+    qtrs_sjr = Counter(r["quartile"] for r in sjr_available)
+    print(f"  File 3: SJR Pool (Available for Matching)")
+    print(f"  → {out_sjr}")
+    print(f"  Total: {len(sjr_available)} journals")
+    print(f"  Q1: {qtrs_sjr['Q1']}   Q2: {qtrs_sjr['Q2']}   Q3: {qtrs_sjr['Q3']}   Q4: {qtrs_sjr['Q4']}\n")
+    
+    print(f"  NEXT STEP:")
+    print(f"  → Use {out_issn.name} directly (100% certain)")
+    print(f"  → Feed {out_dblp.name} and {out_sjr.name} to AI agent")
+    print(f"  → AI will match each DBLP journal to ONE SJR journal (or NONE)\n")
 
 
 def main() -> None:
@@ -482,8 +297,6 @@ def main() -> None:
                     help=f"Path to SJR CSV   (default: {SJR_SRC.name})")
     ap.add_argument("--out", default=str(OUT_CSV),
                     help=f"Output CSV        (default: {OUT_CSV.name})")
-    ap.add_argument("--threshold", default=DEFAULT_THRESHOLD, type=float,
-                    help=f"Match threshold 0-1  (default: {DEFAULT_THRESHOLD})")
     args = ap.parse_args()
 
     xml_path = Path(args.xml)
@@ -497,20 +310,25 @@ def main() -> None:
 
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Journal List Builder (Enhanced)              ║")
+    print("║         paperhunter  ·  Journal List Builder (AI-Ready)             ║")
     print("║                                                                      ║")
-    print("║  Features: ISSN matching, bidirectional fuzzy matching,              ║")
-    print("║            conflict resolution, quality scoring                      ║")
+    print("║  Strategy: ISSN auto-match + AI-assisted manual matching            ║")
+    print("║  Output: 3 files (ISSN matches, DBLP unmatched, SJR pool)           ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
 
     sjr_rows, sjr_issn_index = phase_clean(sjr_path)
     dblp_index = phase_index(xml_path)
-    matched = phase_match(dblp_index, sjr_rows, sjr_issn_index, args.threshold)
-    phase_write(matched, out_path)
+    issn_matched, dblp_unmatched, sjr_available = phase_match(dblp_index, sjr_rows, sjr_issn_index)
+    phase_write(
+        issn_matched, dblp_unmatched, sjr_available,
+        out_path, OUT_DBLP_UNMATCHED, OUT_SJR_AVAILABLE
+    )
 
     print("━" * 70)
-    print("  Done.  Run the extractor next to pull papers from dblp.xml.")
+    print("  Done.")
+    print("  → Use List-of-Journal-ISSN.csv directly")
+    print("  → Feed DBLP-unmatched.csv + SJR-available.csv to AI for matching")
     print("━" * 70)
     print()
 
