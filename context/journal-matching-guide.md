@@ -134,18 +134,18 @@ site:dblp.org/db/journals/[dblp_key]
 ```bash
 python hunter/c_match.py
 ```
-Output: `4-ai-matched.csv` with ~900+ HIGH confidence matches
+Output: `supplement/4-ai-matched.csv` with ~900+ HIGH confidence matches
 
 ### Phase 2: AI Review (Your Task)
 1. **Count NO_MATCH entries**:
    ```bash
-   grep "NO_MATCH" context/4-ai-matched.csv | wc -l
+   grep "NO_MATCH" supplement/4-ai-matched.csv | wc -l
    ```
 
 2. **For each NO_MATCH**:
    - Search DBLP journal online
    - Find ISSN
-   - Check if ISSN in `3-sjr-pool.csv`
+   - Check if ISSN in `supplement/3-sjr-pool.csv`
    - Update row if match found
 
 3. **Quality check HIGH confidence**:
@@ -154,15 +154,15 @@ Output: `4-ai-matched.csv` with ~900+ HIGH confidence matches
    - Flag any suspicious ones
 
 ### Phase 3: Generate Final List
-Once `4-ai-matched.csv` is complete:
+Once `supplement/4-ai-matched.csv` is complete:
 ```bash
 python hunter/d_merge.py
 ```
 This merges:
-- `1-issn-matched.csv` (ISSN auto-matches)
-- `4-ai-matched.csv` (your verified matches)
+- `supplement/1-issn-matched.csv` (ISSN auto-matches)
+- `supplement/4-ai-matched.csv` (your verified matches)
 
-Output: `list-of-journals.csv` (final)
+Output: `context/list-of-journals.csv` (final)
 
 ---
 
@@ -229,7 +229,7 @@ python hunter/c_match.py
 # Output: 4-ai-matched.csv created with 932 HIGH, 920 NONE
 
 # Step 2: Review NO_MATCH entries
-grep "NO_MATCH" context/4-ai-matched.csv | head -5
+grep "NO_MATCH" supplement/4-ai-matched.csv | head -5
 # journals/obscure1,Obscure J.,NO_MATCH,,,,NONE,No matching journal found...
 
 # Step 3: Search one
@@ -237,10 +237,10 @@ grep "NO_MATCH" context/4-ai-matched.csv | head -5
 # Found: ISSN 1234-5678
 
 # Step 4: Check if in SJR pool
-grep "1234-5678" context/3-sjr-pool.csv
+grep "1234-5678" supplement/3-sjr-pool.csv
 # Result: Obscure Journal,1234-5678,,Q3
 
-# Step 5: Update 4-ai-matched.csv
+# Step 5: Update supplement/4-ai-matched.csv
 # Change: journals/obscure1,Obscure J.,NO_MATCH,...
 # To: journals/obscure1,Obscure J.,Obscure Journal,1234-5678,,Q3,HIGH,ISSN verified online
 
