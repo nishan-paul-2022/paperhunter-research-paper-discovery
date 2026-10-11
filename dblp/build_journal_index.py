@@ -59,51 +59,117 @@ OUT_FIELDS = ["dblp_key", "dblp_journal_name", "sjr_title", "quartile"]
 # ── text normalisation ────────────────────────────────────────────────────────
 
 # Common DBLP abbreviations → full words
-_ABBREV = {
-    r"\bTrans\b\.?":       "Transactions",
-    r"\bJ\b\.?":           "Journal",
-    r"\bInt\b\.?":         "International",
-    r"\bComput\b\.?":      "Computer",
-    r"\bSyst\b\.?":        "Systems",
-    r"\bEng\b\.?":         "Engineering",
-    r"\bSci\b\.?":         "Science",
-    r"\bTechnol\b\.?":     "Technology",
-    r"\bAppl\b\.?":        "Applications",
-    r"\bProc\b\.?":        "Proceedings",
-    r"\bMach\b\.?":        "Machine",
-    r"\bIntell\b\.?":      "Intelligence",
-    r"\bArtif\b\.?":       "Artificial",
-    r"\bInf\b\.?":         "Information",
-    r"\bCommun\b\.?":      "Communications",
-    r"\bAnal\b\.?":        "Analysis",
-    r"\bRecogn\b\.?":      "Recognition",
-    r"\bVis\b\.?":         "Vision",
-    r"\bPattern\b":        "Pattern",
-    r"\bNeural\b":         "Neural",
-    r"\bNetw\b\.?":        "Networks",
-    r"\bProc\b\.?":        "Processing",
-    r"\bSignal\b":         "Signal",
-    r"\bImage\b":          "Image",
-    r"\bParallel\b":       "Parallel",
-    r"\bDistrib\b\.?":     "Distributed",
+# Applied BEFORE lowercasing so word-boundary matching works correctly.
+_ABBREV = [
+    (r"\bTrans\b\.?",       "Transactions"),
+    (r"\bJ\b\.?",           "Journal"),
+    (r"\bInt\b\.?",         "International"),
+    (r"\bComput\b\.?",      "Computer"),
+    (r"\bSyst\b\.?",        "Systems"),
+    (r"\bEng\b\.?",         "Engineering"),
+    (r"\bSci\b\.?",         "Science"),
+    (r"\bTechnol\b\.?",     "Technology"),
+    (r"\bAppl\b\.?",        "Applied"),
+    (r"\bProc\b\.?",        "Proceedings"),
+    (r"\bMach\b\.?",        "Machine"),
+    (r"\bIntell\b\.?",      "Intelligence"),
+    (r"\bArtif\b\.?",       "Artificial"),
+    (r"\bInf\b\.?",         "Information"),
+    (r"\bCommun\b\.?",      "Communications"),
+    (r"\bAnal\b\.?",        "Analysis"),
+    (r"\bRecogn\b\.?",      "Recognition"),
+    (r"\bVis\b\.?",         "Vision"),
+    (r"\bNetw\b\.?",        "Networks"),
+    (r"\bSignal\b",         "Signal"),
+    (r"\bImage\b",          "Image"),
+    (r"\bParallel\b",       "Parallel"),
+    (r"\bDistrib\b\.?",     "Distributed"),
+    (r"\bAuton\b\.?",       "Autonomous"),
+    (r"\bEduc\b\.?",        "Education"),
+    (r"\bLett\b\.?",        "Letters"),
+    (r"\bManag\b\.?",       "Management"),
+    (r"\bAdv\b\.?",         "Advanced"),
+    (r"\bAI\b",             "Artificial Intelligence"),
+    (r"\bACM\b",            "ACM"),
+    (r"\bIEEE\b",           "IEEE"),
+    (r"\bProc\b\.?",        "Proceedings"),
+    (r"\bMed\b\.?",         "Medical"),
+    (r"\bBiol\b\.?",        "Biological"),
+    (r"\bBioinform\b\.?",   "Bioinformatics"),
+    (r"\bNeur\b\.?",        "Neural"),
+    (r"\bRobot\b\.?",       "Robotics"),
+    (r"\bOptim\b\.?",       "Optimization"),
+    (r"\bSimul\b\.?",       "Simulation"),
+    (r"\bSoftw\b\.?",       "Software"),
+    (r"\bAlgor\b\.?",       "Algorithms"),
+    (r"\bArchit\b\.?",      "Architecture"),
+    (r"\bSecur\b\.?",       "Security"),
+    (r"\bBehav\b\.?",       "Behavior"),
+    (r"\bCogn\b\.?",        "Cognitive"),
+    (r"\bRes\b\.?",         "Research"),
+    (r"\bPract\b\.?",       "Practice"),
+]
+
+_STOP_WORDS = {
+    "a", "an", "the", "and", "or", "of", "in", "on", "at", "to",
+    "for", "with", "by", "from", "its", "&",
 }
 
 def normalize(text: str) -> str:
     """
     Normalise a journal name for fuzzy comparison:
-    expand abbreviations, lowercase, strip punctuation and extra spaces.
+    1. Expand common abbreviations  (done BEFORE lowercasing)
+    2. Lowercase and strip punctuation
+    3. Remove stop-words  (so 'Journal of X' and 'Journal X' compare equally)
     """
-    for pattern, replacement in _ABBREV.items():
+    for pattern, replacement in _ABBREV:
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     text = text.lower()
-    text = re.sub(r"[^\w\s]", " ", text)   # remove punctuation
+    text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    return text
+    tokens = [t for t in text.split() if t not in _STOP_WORDS]
+    return " ".join(tokens)
 
 
-def similarity(a: str, b: str) -> float:
-    """Return SequenceMatcher ratio between two normalised strings."""
-    return SequenceMatcher(None, a, b, autojunk=False).ratio()
+def score(a: str, b: str) -> float:
+    """
+    Combined similarity designed for abbreviated DBLP names vs full SJR titles.
+
+    Strategy:
+      token_sim  = max(symmetric_jaccard, min_side_containment)
+      final      = min(token_sim, seq_ratio)
+
+    symmetric_jaccard    — high when both strings share most tokens (full-name matches)
+    min_side_containment — high when the SHORTER string's tokens are mostly in the longer
+                           string; handles abbreviated → full expansion correctly while
+                           still rejecting true subset false-positives:
+                             'Bioinformatics' ⊂ 'Advances in Bioinformatics'
+                             containment of shorter in longer = 1.0 BUT
+                             containment of longer in shorter = 0.33  → min = 0.33 ✗
+
+    seq_ratio            — guards against token-set collisions on short strings
+    """
+    ta = set(a.split())
+    tb = set(b.split())
+    if not ta or not tb:
+        return 0.0
+
+    # Symmetric Jaccard
+    jaccard = len(ta & tb) / len(ta | tb)
+
+    # Min-side containment: fraction of the SMALLER set covered by the LARGER
+    # (penalises cases where one string is a true subset of the other)
+    shared = len(ta & tb)
+    contain_a_in_b = shared / len(ta)   # how much of a is in b
+    contain_b_in_a = shared / len(tb)   # how much of b is in a
+    containment = min(contain_a_in_b, contain_b_in_a)   # symmetric: both must cover each other
+
+    token_sim = max(jaccard, containment)
+
+    # Character-level SequenceMatcher as a sanity gate
+    seq = SequenceMatcher(None, a, b, autojunk=False).ratio()
+
+    return min(token_sim, seq)
 
 
 # ── step 1: scan XML for journal key → name mapping ──────────────────────────
@@ -195,9 +261,9 @@ def match_journals(
         best_score = 0.0
         best_row   = None
         for norm_sjr, sjr_row in sjr_norms:
-            score = similarity(norm_dblp, norm_sjr)
-            if score > best_score:
-                best_score = score
+            s = score(norm_dblp, norm_sjr)
+            if s > best_score:
+                best_score = s
                 best_row   = sjr_row
 
         if best_score >= threshold and best_row is not None:
@@ -249,7 +315,7 @@ def main() -> None:
                     help=f"Path to cleaned SJR CSV  (default: {SJR_CLEAN.name})")
     ap.add_argument("--out",       default=str(OUT_INDEX),
                     help=f"Output index CSV  (default: {OUT_INDEX.name})")
-    ap.add_argument("--threshold", default=0.82, type=float,
+    ap.add_argument("--threshold", default=0.85, type=float,
                     help="Fuzzy match threshold 0-1  (default: 0.82)")
     args = ap.parse_args()
 
