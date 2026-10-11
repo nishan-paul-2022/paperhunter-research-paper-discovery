@@ -3,7 +3,7 @@
 ## Objective
 
 Match DBLP conferences to CORE rankings using:
-1. **c_conf_match.py** - Intelligent matching algorithm
+1. **b_match.py** - Intelligent matching algorithm
 2. **Web search** - Verify conference names and acronyms
 3. **Your intelligence** - Handle edge cases
 
@@ -11,10 +11,10 @@ Match DBLP conferences to CORE rankings using:
 
 ## Strategy: Hybrid Algorithm + AI Review
 
-### Step 1: Run c_conf_match.py
+### Step 1: Run b_match.py
 ```bash
 cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python conference-hunter/c_conf_match.py
+python conference-hunter/b_match.py
 ```
 
 Generates `conference-supplement/4-conf-matched.csv` with HIGH and NONE confidence entries.
@@ -123,7 +123,7 @@ Example: "AAAI" (main) vs "AAAI-Asia" (regional)
 
 ### Phase 1: Algorithmic Matching
 ```bash
-python hunter/c_conf_match.py
+python conference-hunter/b_match.py
 ```
 Output: `supplement/4-conf-matched.csv`
 
@@ -146,7 +146,7 @@ Output: `supplement/4-conf-matched.csv`
 
 ### Phase 3: Generate Final List
 ```bash
-python hunter/d_conf_merge.py
+python conference-hunter/c_merge.py
 ```
 
 Merges:
