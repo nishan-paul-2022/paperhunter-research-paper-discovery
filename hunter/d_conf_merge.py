@@ -28,7 +28,7 @@ OUT_FIELDS = ["dblp_key", "dblp_acronym", "title", "ranking"]
 def main():
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║        paperhunter  ·  Merge Conferences into Final List            ║")
+    print("║        paperhunter  ·  Merge Conferences into Final List             ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
     

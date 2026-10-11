@@ -316,9 +316,9 @@ def main() -> None:
 
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Conference List Builder                     ║")
+    print("║         paperhunter  ·  Conference List Builder                      ║")
     print("║                                                                      ║")
-    print("║  Strategy: Acronym matching (A*, A, B, C rankings)                  ║")
+    print("║  Strategy: Acronym matching (A*, A, B, C rankings)                   ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
 
