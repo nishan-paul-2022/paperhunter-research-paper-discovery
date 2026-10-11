@@ -16,17 +16,18 @@ HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 DATA_DIR = REPO_ROOT / "database"
 CONTEXT_DIR = REPO_ROOT / "context"
-SJR_SRC = CONTEXT_DIR / "SJR-WoS-2025-CS.csv"
+SJR_SRC = CONTEXT_DIR / "sjr-2025-cs.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
-OUT_CSV = CONTEXT_DIR / "List-of-Journal-ISSN.csv"
-OUT_DBLP_UNMATCHED = CONTEXT_DIR / "DBLP-unmatched.csv"
-OUT_SJR_AVAILABLE = CONTEXT_DIR / "SJR-available.csv"
 
-OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2",
-              "quartile", "coverage"]
+# Output files with indexed names
+OUT_1_ISSN = CONTEXT_DIR / "1-issn-matched.csv"
+OUT_2_DBLP_TODO = CONTEXT_DIR / "2-dblp-todo.csv"
+OUT_3_SJR_POOL = CONTEXT_DIR / "3-sjr-pool.csv"
+OUT_FINAL = CONTEXT_DIR / "list-of-journals.csv"
 
+OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
 OUT_FIELDS_DBLP = ["dblp_key", "dblp_name"]
-OUT_FIELDS_SJR = ["title", "issn_1", "issn_2", "quartile", "coverage"]
+OUT_FIELDS_SJR = ["title", "issn_1", "issn_2", "quartile"]
 
 VALID_QUARTILES = {"Q1", "Q2", "Q3", "Q4"}
 
@@ -71,7 +72,6 @@ def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
                 "issn_1": i1,
                 "issn_2": i2,
                 "quartile": q,
-                "coverage": row["Coverage"].strip(),
             }
             rows.append(record)
             
@@ -177,7 +177,6 @@ def phase_match(
                     "issn_1": sjr_record["issn_1"],
                     "issn_2": sjr_record["issn_2"],
                     "quartile": sjr_record["quartile"],
-                    "coverage": sjr_record["coverage"],
                 })
                 dblp_matched_keys.add(dblp_key)
                 sjr_matched_titles.add(sjr_record["title"])
@@ -200,7 +199,6 @@ def phase_match(
             "issn_1": r["issn_1"],
             "issn_2": r["issn_2"],
             "quartile": r["quartile"],
-            "coverage": r["coverage"],
         }
         for r in sjr_rows
         if r["title"] not in sjr_matched_titles
@@ -249,12 +247,12 @@ def phase_write(
         writer.writerows(issn_sorted)
     
     qtrs = Counter(r["quartile"] for r in issn_matched)
-    print(f"\n  File 1: AUTO-APPROVED (ISSN Matches)")
+    print(f"\n  File 1: 1-issn-matched.csv (AUTO-APPROVED)")
     print(f"  → {out_issn}")
     print(f"  Total: {len(issn_matched)} journals")
     print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n")
     
-    # File 2: Unmatched DBLP journals
+    # File 2: DBLP journals needing matching
     dblp_sorted = sorted(dblp_unmatched, key=lambda r: r["dblp_key"])
     
     with open(out_dblp, "w", encoding="utf-8", newline="") as f:
@@ -263,11 +261,11 @@ def phase_write(
         writer.writeheader()
         writer.writerows(dblp_sorted)
     
-    print(f"  File 2: DBLP Journals (Need AI Matching)")
+    print(f"  File 2: 2-dblp-todo.csv (Need Matching)")
     print(f"  → {out_dblp}")
     print(f"  Total: {len(dblp_unmatched)} journals\n")
     
-    # File 3: Available SJR journals
+    # File 3: SJR pool for matching
     sjr_sorted = sorted(sjr_available,
                        key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
     
@@ -278,15 +276,14 @@ def phase_write(
         writer.writerows(sjr_sorted)
     
     qtrs_sjr = Counter(r["quartile"] for r in sjr_available)
-    print(f"  File 3: SJR Pool (Available for Matching)")
+    print(f"  File 3: 3-sjr-pool.csv (Available for Matching)")
     print(f"  → {out_sjr}")
     print(f"  Total: {len(sjr_available)} journals")
     print(f"  Q1: {qtrs_sjr['Q1']}   Q2: {qtrs_sjr['Q2']}   Q3: {qtrs_sjr['Q3']}   Q4: {qtrs_sjr['Q4']}\n")
     
     print(f"  NEXT STEP:")
-    print(f"  → Use {out_issn.name} directly (100% certain)")
-    print(f"  → Feed {out_dblp.name} and {out_sjr.name} to AI agent")
-    print(f"  → AI will match each DBLP journal to ONE SJR journal (or NONE)\n")
+    print(f"  → Run c_match.py to generate matches")
+    print(f"  → Or use AI prompt with files 2 & 3\n")
 
 
 def main() -> None:
@@ -322,13 +319,13 @@ def main() -> None:
     issn_matched, dblp_unmatched, sjr_available = phase_match(dblp_index, sjr_rows, sjr_issn_index)
     phase_write(
         issn_matched, dblp_unmatched, sjr_available,
-        out_path, OUT_DBLP_UNMATCHED, OUT_SJR_AVAILABLE
+        OUT_1_ISSN, OUT_2_DBLP_TODO, OUT_3_SJR_POOL
     )
 
     print("━" * 70)
     print("  Done.")
-    print("  → Use List-of-Journal-ISSN.csv directly")
-    print("  → Feed DBLP-unmatched.csv + SJR-available.csv to AI for matching")
+    print("  → 1-issn-matched.csv ready to use")
+    print("  → Run c_match.py to process 2-dblp-todo.csv + 3-sjr-pool.csv")
     print("━" * 70)
     print()
 

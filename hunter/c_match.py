@@ -6,9 +6,9 @@ from collections import defaultdict
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTEXT_DIR = REPO_ROOT / "context"
-DBLP_CSV = CONTEXT_DIR / "DBLP-unmatched.csv"
-SJR_CSV = CONTEXT_DIR / "SJR-available.csv"
-OUT_CSV = CONTEXT_DIR / "AI-matched-journals.csv"
+DBLP_CSV = CONTEXT_DIR / "2-dblp-todo.csv"
+SJR_CSV = CONTEXT_DIR / "3-sjr-pool.csv"
+OUT_CSV = CONTEXT_DIR / "4-ai-matched.csv"
 
 STOPWORDS = {
     'of', 'the', 'and', 'in', 'on', 'for', 'to', 'a', 'an', '&', 'at', 'by', 'with', 'part',
@@ -352,7 +352,6 @@ def build_matcher():
                 'issn_1': s['issn_1'],
                 'issn_2': s['issn_2'],
                 'quartile': s['quartile'],
-                'coverage': s['coverage'],
                 'confidence': conf,
                 'reasoning': reason[:100],
             })
@@ -365,7 +364,6 @@ def build_matcher():
                 'issn_1': '',
                 'issn_2': '',
                 'quartile': '',
-                'coverage': '',
                 'confidence': 'NONE',
                 'reasoning': 'No matching journal found in SJR pool',
             })
@@ -373,7 +371,7 @@ def build_matcher():
     # Write output CSV
     fieldnames = [
         'dblp_key', 'dblp_name', 'sjr_title', 'issn_1', 'issn_2',
-        'quartile', 'coverage', 'confidence', 'reasoning'
+        'quartile', 'confidence', 'reasoning'
     ]
     with open(OUT_CSV, 'w', encoding='utf-8', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
