@@ -116,26 +116,17 @@ _ABBREV = [
     (r"\bComputat\b\.?", "Computational"),
 ]
 
-# Reduced stopwords - preserve important prepositions that distinguish journals
 _STOP = {
     "a", "an", "the", "&",
 }
 
 
 def normalize(text: str, preserve_order: bool = True) -> str:
-    """Normalize journal names for matching.
-    
-    Args:
-        text: Journal name to normalize
-        preserve_order: If True, keep words in original order (more conservative)
-    """
     for pat, rep in _ABBREV:
         text = re.sub(pat, rep, text, flags=re.IGNORECASE)
     text = text.lower()
-    # Less aggressive stemming - only normalize clear variants
     text = re.sub(r"\b(electronic|electronics)\b", "electronics", text)
     text = re.sub(r"\b(technology|technologies)\b", "technology", text)
-    # Remove punctuation and extra spaces
     text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     
@@ -144,15 +135,10 @@ def normalize(text: str, preserve_order: bool = True) -> str:
     if preserve_order:
         return " ".join(tokens)
     else:
-        # Fallback: sort tokens for more lenient matching
         return " ".join(sorted(tokens))
 
 
 def match_score(a: str, b: str) -> float:
-    """Calculate similarity score between two normalized journal names.
-    
-    Returns score between 0.0 and 1.0, with higher being more similar.
-    """
     ta = set(a.split())
     tb = set(b.split())
     if not ta or not tb:
@@ -162,34 +148,25 @@ def match_score(a: str, b: str) -> float:
     if not shared:
         return 0.0
     
-    # Calculate both Jaccard and containment
     jaccard = shared / len(ta | tb)
     containment = shared / min(len(ta), len(tb))
     
-    # Prefer containment for subset matches (e.g., abbreviated vs full name)
     token_sim = containment if containment >= 0.90 else jaccard
     
-    # Early exit if token similarity too low
     if token_sim < 0.65:
         return 0.0
     
-    # Sequence similarity to account for word order
     seq = SequenceMatcher(None, a, b, autojunk=False).ratio()
     
-    # Weighted combination: prioritize sequence match more heavily
-    # to avoid matching journals with same words in different order
     return 0.4 * token_sim + 0.6 * seq
 
 
 def _format_issn(raw: str) -> str:
-    """Format ISSN to standard XXXX-XXXX format."""
     s = raw.strip().replace("-", "").replace(" ", "")
     return f"{s[:4]}-{s[4:]}" if len(s) == 8 and s.isdigit() else raw.strip()
 
 
 def _extract_issns(text: str) -> set[str]:
-    """Extract all ISSNs from text, returning standardized format."""
-    # Match ISSN patterns: XXXX-XXXX or XXXXXXXX
     issn_pattern = r'\b\d{4}-?\d{3}[\dXx]\b'
     matches = re.findall(issn_pattern, text)
     return {_format_issn(m) for m in matches}
@@ -204,12 +181,6 @@ def _split_issns(cell: str) -> tuple[str, str]:
 
 
 def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
-    """Clean SJR CSV and build ISSN index.
-    
-    Returns:
-        - List of valid SJR journal records
-        - Dict mapping ISSN -> SJR record (for fast ISSN lookup)
-    """
     print("━" * 70)
     print("  Phase 1 – Cleaning SJR CSV")
     print("━" * 70)
@@ -235,7 +206,6 @@ def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
             }
             rows.append(record)
             
-            # Build ISSN index for fast lookup
             if i1:
                 issn_index[i1] = record
             if i2:
@@ -247,11 +217,6 @@ def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
 
 
 def _scan_xml(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
-    """Scan DBLP XML and extract journal info including ISSNs.
-    
-    Returns:
-        Dict mapping journal key prefix -> (journal name, set of ISSNs)
-    """
     size = os.path.getsize(xml_path)
     seen = index = 0
     result: dict[str, tuple[str, set[str]]] = {}
@@ -269,7 +234,6 @@ def _scan_xml(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
         if key.startswith("journals/") and journal:
             prefix = "/".join(key.split("/")[:2])
             if prefix not in result:
-                # Extract ISSNs from <ee> tags (DOI URLs, etc.)
                 issns = set()
                 for ee_elem in el.findall("ee"):
                     ee_text = ee_elem.text or ""
@@ -294,11 +258,6 @@ def _scan_xml(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
 
 
 def phase_index(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
-    """Build DBLP journal index with ISSNs.
-    
-    Returns:
-        Dict mapping journal key -> (journal name, set of ISSNs)
-    """
     print("━" * 70)
     print("  Phase 2 – DBLP Journal Index")
     print("━" * 70)
@@ -318,15 +277,10 @@ def phase_match(
     sjr_issn_index: dict[str, dict],
     threshold: float,
 ) -> list[dict]:
-    """Match DBLP and SJR journals using ISSN-first, then fuzzy matching.
-    
-    Uses bidirectional matching to ensure mutual best matches.
-    """
     print("━" * 70)
     print(f"  Phase 3 – Multi-Strategy Matching  (threshold = {threshold})")
     print("━" * 70)
 
-    # Stage 1: ISSN-based exact matching
     print("\n  Stage 3.1 – ISSN Exact Matching")
     print("  " + "─" * 66)
     
@@ -338,7 +292,6 @@ def phase_match(
         if not dblp_issns:
             continue
         
-        # Check if any DBLP ISSN matches SJR
         for issn in dblp_issns:
             if issn in sjr_issn_index:
                 sjr_record = sjr_issn_index[issn]
@@ -356,15 +309,13 @@ def phase_match(
                 dblp_matched_keys.add(dblp_key)
                 sjr_matched_titles.add(sjr_record["title"])
                 print(f"  ✓  {sjr_record['quartile']}  {dblp_name[:50]}")
-                break  # Found match, move to next DBLP journal
+                break
     
     print(f"\n  ✓  {len(issn_matched)} journals matched by ISSN\n")
     
-    # Stage 2: Fuzzy matching for remaining journals
     print("  Stage 3.2 – Fuzzy Name Matching (Bidirectional)")
     print("  " + "─" * 66)
     
-    # Filter out already matched journals
     remaining_dblp = {
         k: v for k, v in dblp_index.items() 
         if k not in dblp_matched_keys
@@ -374,11 +325,9 @@ def phase_match(
         if r["title"] not in sjr_matched_titles
     ]
     
-    # Precompute normalized names
     sjr_norms = [(r["norm"], r) for r in remaining_sjr]
     
-    # Forward pass: For each DBLP, find best SJR match
-    dblp_to_sjr = {}  # dblp_key -> (sjr_record, score)
+    dblp_to_sjr = {}
     
     for dblp_key, (dblp_name, _) in remaining_dblp.items():
         nd = normalize(dblp_name)
@@ -395,8 +344,7 @@ def phase_match(
         if best_score >= threshold and best_row is not None:
             dblp_to_sjr[dblp_key] = (best_row, best_score)
     
-    # Reverse pass: For each SJR, find best DBLP match
-    sjr_to_dblp = {}  # sjr_title -> (dblp_key, dblp_name, score)
+    sjr_to_dblp = {}
     
     for ns, sr in sjr_norms:
         best_score = 0.0
@@ -415,19 +363,16 @@ def phase_match(
         if best_score >= threshold and best_dblp_key is not None:
             sjr_to_dblp[sr["title"]] = (best_dblp_key, best_dblp_name, best_score)
     
-    # Bidirectional match: Keep only mutual best matches
     fuzzy_matched = []
     conflict_count = 0
     
     for dblp_key, (sjr_record, fwd_score) in dblp_to_sjr.items():
         sjr_title = sjr_record["title"]
         
-        # Check if this SJR's best match is also this DBLP journal
         if sjr_title in sjr_to_dblp:
             rev_dblp_key, rev_dblp_name, rev_score = sjr_to_dblp[sjr_title]
             
             if rev_dblp_key == dblp_key:
-                # Mutual best match!
                 fuzzy_matched.append({
                     "dblp_key": dblp_key,
                     "dblp_name": remaining_dblp[dblp_key][0],
@@ -441,13 +386,11 @@ def phase_match(
                 })
                 print(f"  ✓  {sjr_record['quartile']}  {remaining_dblp[dblp_key][0][:45]} (score: {fwd_score:.3f})")
             else:
-                # Conflict: DBLP thinks SJR is best, but SJR prefers different DBLP
                 conflict_count += 1
     
     print(f"\n  ✓  {len(fuzzy_matched)} journals matched by fuzzy matching")
     print(f"  ⚠  {conflict_count} conflicting matches excluded (not mutual best)\n")
     
-    # Combine results
     all_matched = issn_matched + fuzzy_matched
     
     total_dblp = len(dblp_index)
@@ -480,8 +423,6 @@ def phase_write(rows: list[dict], out_path: Path) -> None:
         if len(group) == 1:
             deduped.append(group[0])
         else:
-            # Multiple DBLP journals matched to same SJR journal
-            # Prefer: 1) ISSN match, 2) Higher fuzzy score, 3) Shorter key
             best = max(
                 group,
                 key=lambda r: (
@@ -493,7 +434,7 @@ def phase_write(rows: list[dict], out_path: Path) -> None:
             deduped.append(best)
             dupes_removed += len(group) - 1
             
-            if dupes_removed <= 20:  # Show first few conflicts
+            if dupes_removed <= 20:
                 print(f"  ⚠  Duplicate: '{title}' matched by multiple DBLP journals")
                 for r in group:
                     mark = "→" if r == best else " "
@@ -502,12 +443,11 @@ def phase_write(rows: list[dict], out_path: Path) -> None:
     if dupes_removed:
         print(f"\n  Deduplication: removed {dupes_removed} lower-scoring duplicate matches")
 
-    # Sort by quartile, then score descending, then title
     order = {"Q1": 0, "Q2": 1, "Q3": 2, "Q4": 3}
     deduped = sorted(deduped,
                      key=lambda r: (
                          order.get(r["quartile"], 9),
-                         -r["match_score"],  # Higher score first
+                         -r["match_score"],
                          r["title"].lower()
                      ))
 
@@ -526,7 +466,6 @@ def phase_write(rows: list[dict], out_path: Path) -> None:
     print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}")
     print(f"  Match methods: ISSN={methods['ISSN']}   Fuzzy={methods['Fuzzy']}\n")
     
-    # Quality metrics
     avg_score = sum(r["match_score"] for r in deduped) / len(deduped) if deduped else 0
     low_confidence = sum(1 for r in deduped if r["match_score"] < 0.90)
     
@@ -558,9 +497,9 @@ def main() -> None:
 
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Journal List Builder (Enhanced)             ║")
+    print("║         paperhunter  ·  Journal List Builder (Enhanced)              ║")
     print("║                                                                      ║")
-    print("║  Features: ISSN matching, bidirectional fuzzy matching,             ║")
+    print("║  Features: ISSN matching, bidirectional fuzzy matching,              ║")
     print("║            conflict resolution, quality scoring                      ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
