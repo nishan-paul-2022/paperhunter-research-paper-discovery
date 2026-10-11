@@ -225,7 +225,7 @@ Before finalizing:
 
 ```bash
 # Step 1: Run algorithm
-python3 hunter/c_match.py
+python3 journal-hunter/b_match.py
 # Output: 4-ai-matched.csv created with 932 HIGH, 920 NONE
 
 # Step 2: Review NO_MATCH entries
@@ -237,10 +237,10 @@ grep "NO_MATCH" journal-supplement/4-ai-matched.csv | head -5
 # Found: ISSN 1234-5678
 
 # Step 4: Check if in SJR pool
-grep "1234-5678" supplement/3-sjr-pool.csv
+grep "1234-5678" journal-supplement/3-sjr-pool.csv
 # Result: Obscure Journal,1234-5678,,Q3
 
-# Step 5: Update supplement/4-ai-matched.csv
+# Step 5: Update journal-supplement/4-ai-matched.csv
 # Change: journals/obscure1,Obscure J.,NO_MATCH,...
 # To: journals/obscure1,Obscure J.,Obscure Journal,1234-5678,,Q3,HIGH,ISSN verified online
 
