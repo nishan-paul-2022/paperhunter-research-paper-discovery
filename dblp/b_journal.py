@@ -34,7 +34,6 @@ Usage:
 
 import argparse
 import csv
-import json
 import os
 import re
 import sys
@@ -50,7 +49,6 @@ except ImportError:
 DBLP_DIR   = Path(__file__).resolve().parent
 SJR_SRC    = DBLP_DIR / "SJR-WoS-2025-CS.csv"
 XML_PATH   = DBLP_DIR / "dblp.xml"
-CACHE_PATH = DBLP_DIR / "journal_key_cache.json"
 OUT_CSV    = DBLP_DIR / "List-of-Journal.csv"
 
 # ── output columns ────────────────────────────────────────────────────────────
@@ -197,7 +195,7 @@ def phase_clean(sjr_path: Path) -> list[dict]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PHASE 2 – DBLP JOURNAL INDEX  (scan XML or load cache)
+# PHASE 2 – DBLP JOURNAL INDEX
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _scan_xml(xml_path: Path) -> dict[str, str]:
@@ -237,27 +235,14 @@ def _scan_xml(xml_path: Path) -> dict[str, str]:
 
 
 def phase_index(xml_path: Path) -> dict[str, str]:
-    """Load DBLP journal key→name mapping (from cache or full XML scan)."""
+    """Scan dblp.xml and return journal key → name mapping."""
     print("━" * 70)
     print("  Phase 2 – DBLP Journal Index")
     print("━" * 70)
-
-    if CACHE_PATH.exists():
-        print(f"  Cache found: {CACHE_PATH.name}  (delete to force re-scan)")
-        with open(CACHE_PATH, encoding="utf-8") as f:
-            idx = json.load(f)
-        # Keep only journals/ keys (clean legacy cache entries)
-        idx = {k: v for k, v in idx.items() if k.startswith("journals/")}
-        print(f"  ✓  {len(idx):,} journal keys loaded instantly from cache\n")
-        return idx
-
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB)")
-    print("  (This takes ~15–20 min. Cache will be saved for instant future runs.)\n")
+    print("  (This takes ~15–20 min.)\n")
     idx = _scan_xml(xml_path)
-
-    with open(CACHE_PATH, "w", encoding="utf-8") as f:
-        json.dump(idx, f, ensure_ascii=False, indent=2)
-    print(f"\n  ✓  Cache saved → {CACHE_PATH.name}\n")
+    print(f"\n  ✓  {len(idx):,} unique journal keys found\n")
     return idx
 
 
@@ -327,20 +312,48 @@ def phase_write(rows: list[dict], out_path: Path) -> None:
     print("  Phase 4 – Writing List-of-Journal.csv")
     print("━" * 70)
 
+    # ── dedup: if multiple DBLP keys matched the same SJR title, keep best ──
+    from collections import defaultdict
+    by_title: dict[str, list] = defaultdict(list)
+    for r in rows:
+        by_title[r["title"]].append(r)
+
+    deduped = []
+    dupes_removed = 0
+    for title, group in by_title.items():
+        if len(group) == 1:
+            deduped.append(group[0])
+        else:
+            # Keep highest score; tie-break on shortest dblp_key (more canonical)
+            best = max(
+                group,
+                key=lambda r: (
+                    match_score(normalize(r["dblp_name"]), normalize(r["title"])),
+                    -len(r["dblp_key"]),
+                ),
+            )
+            deduped.append(best)
+            dupes_removed += len(group) - 1
+
+    if dupes_removed:
+        print(f"  Deduplication: removed {dupes_removed} lower-scoring duplicate matches")
+
     order = {"Q1": 0, "Q2": 1, "Q3": 2, "Q4": 3}
-    rows  = sorted(rows, key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
+    deduped = sorted(deduped,
+                     key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
 
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=OUT_FIELDS, delimiter=",",
                                 quoting=csv.QUOTE_MINIMAL)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(deduped)
 
     from collections import Counter
-    qtrs = Counter(r["quartile"] for r in rows)
+    qtrs = Counter(r["quartile"] for r in deduped)
     print(f"  Output → {out_path}")
-    print(f"  Total  : {len(rows)} journals")
+    print(f"  Total  : {len(deduped)} journals")
     print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n")
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -368,7 +381,7 @@ def main() -> None:
 
     if not sjr_path.exists():
         sys.exit(f"SJR CSV not found: {sjr_path}")
-    if not xml_path.exists() and not CACHE_PATH.exists():
+    if not xml_path.exists():
         sys.exit(f"dblp.xml not found: {xml_path}\nRun the downloader first.")
 
     print()
