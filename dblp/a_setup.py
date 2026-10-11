@@ -1,21 +1,3 @@
-"""
-a_setup.py  -  Download and extract the DBLP dataset.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Downloads:
-    dblp.xml.gz   (~3 GB compressed)   → extracted to dblp.xml (~25 GB)
-    dblp.dtd                            required by XML parsers
-    dblp.xml.gz.md5                    checksum verified after download
-
-All files are saved into the same folder as this script (dblp/).
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Usage:
-    python3 dblp/a_setup.py            # download + extract
-    python3 dblp/a_setup.py --force    # re-download even if files exist
-    python3 dblp/a_setup.py --no-extract  # download gz only, skip extraction
-"""
-
 import argparse
 import gzip
 import hashlib
@@ -26,25 +8,21 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# ── paths ─────────────────────────────────────────────────────────────────────
 DBLP_DIR = Path(__file__).resolve().parent
 
-GZ_PATH  = DBLP_DIR / "dblp.xml.gz"
+GZ_PATH = DBLP_DIR / "dblp.xml.gz"
 XML_PATH = DBLP_DIR / "dblp.xml"
 DTD_PATH = DBLP_DIR / "dblp.dtd"
 MD5_PATH = DBLP_DIR / "dblp.xml.gz.md5"
 
-# ── URLs ──────────────────────────────────────────────────────────────────────
-BASE        = "https://dblp.org/xml"
-URL_GZ      = f"{BASE}/dblp.xml.gz"
-URL_DTD     = f"{BASE}/dblp.dtd"
-URL_MD5     = f"{BASE}/dblp.xml.gz.md5"
+BASE = "https://dblp.org/xml"
+URL_GZ = f"{BASE}/dblp.xml.gz"
+URL_DTD = f"{BASE}/dblp.dtd"
+URL_MD5 = f"{BASE}/dblp.xml.gz.md5"
 
-HEADERS     = {"User-Agent": "paperhunter/1.0 (research tool; non-commercial)"}
-CHUNK       = 1024 * 1024   # 1 MB read chunks
+HEADERS = {"User-Agent": "paperhunter/1.0 (research tool; non-commercial)"}
+CHUNK = 1024 * 1024
 
-
-# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _bar(done: int, total: int, width: int = 30) -> str:
     if total <= 0:
@@ -62,16 +40,15 @@ def _human(n_bytes: int) -> str:
 
 
 def _download(url: str, dest: Path, label: str) -> None:
-    """Stream-download url → dest with a live progress bar."""
     req = urllib.request.Request(url, headers=HEADERS)
     try:
         resp = urllib.request.urlopen(req, timeout=60)
     except urllib.error.URLError as e:
         sys.exit(f"\n  ✗  Could not reach {url}\n     {e}")
 
-    total     = int(resp.headers.get("Content-Length", 0))
-    done      = 0
-    t_start   = time.monotonic()
+    total = int(resp.headers.get("Content-Length", 0))
+    done = 0
+    t_start = time.monotonic()
 
     print(f"  Downloading  {label}")
     print(f"  URL          {url}")
@@ -87,11 +64,11 @@ def _download(url: str, dest: Path, label: str) -> None:
             f.write(chunk)
             done += len(chunk)
             elapsed = time.monotonic() - t_start or 0.001
-            speed   = done / elapsed
-            eta_s   = int((total - done) / speed) if total and speed else 0
-            eta     = f"ETA {eta_s // 60:02d}:{eta_s % 60:02d}" if total else ""
-            bar     = _bar(done, total)
-            pct     = f"{100 * done // total:3d}%" if total else ""
+            speed = done / elapsed
+            eta_s = int((total - done) / speed) if total and speed else 0
+            eta = f"ETA {eta_s // 60:02d}:{eta_s % 60:02d}" if total else ""
+            bar = _bar(done, total)
+            pct = f"{100 * done // total:3d}%" if total else ""
             print(
                 f"\r  {bar} {pct}  {_human(done):>10}"
                 f"  @ {_human(int(speed))}/s  {eta}   ",
@@ -103,7 +80,6 @@ def _download(url: str, dest: Path, label: str) -> None:
 
 
 def _verify_md5(gz_path: Path, md5_path: Path) -> None:
-    """Verify gz file against the downloaded .md5 file."""
     expected = md5_path.read_text().strip().split()[0].lower()
     print("  Verifying MD5 checksum …", end="\r", flush=True)
     h = hashlib.md5()
@@ -119,10 +95,9 @@ def _verify_md5(gz_path: Path, md5_path: Path) -> None:
 
 
 def _extract(gz_path: Path, xml_path: Path) -> None:
-    """Extract dblp.xml.gz → dblp.xml with live progress."""
-    gz_size  = gz_path.stat().st_size
-    done     = 0
-    t_start  = time.monotonic()
+    gz_size = gz_path.stat().st_size
+    done = 0
+    t_start = time.monotonic()
 
     print(f"  Extracting   {gz_path.name}  →  {xml_path.name}")
     print(f"  Compressed   {_human(gz_size)}")
@@ -135,9 +110,8 @@ def _extract(gz_path: Path, xml_path: Path) -> None:
                 break
             dst.write(chunk)
             done += len(chunk)
-            read_gz  = gz_path.stat().st_size   # constant; used for pct in gz
-            elapsed  = time.monotonic() - t_start or 0.001
-            speed    = done / elapsed
+            elapsed = time.monotonic() - t_start or 0.001
+            speed = done / elapsed
             print(
                 f"\r  {_bar(0, 0)}  written {_human(done):>10}"
                 f"  @ {_human(int(speed))}/s   ",
@@ -149,14 +123,9 @@ def _extract(gz_path: Path, xml_path: Path) -> None:
     print()
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
-
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    ap.add_argument("--force",      action="store_true",
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--force", action="store_true",
                     help="Re-download files even if they already exist")
     ap.add_argument("--no-extract", action="store_true",
                     help="Skip extraction; only download the .gz and .dtd")
@@ -168,7 +137,6 @@ def main() -> None:
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
 
-    # ── Step 1: DTD (small, always fast) ─────────────────────────────────────
     print("━" * 70)
     print("  Step 1 – dblp.dtd")
     print("━" * 70)
@@ -177,13 +145,11 @@ def main() -> None:
     else:
         _download(URL_DTD, DTD_PATH, "dblp.dtd")
 
-    # ── Step 2: MD5 checksum file ─────────────────────────────────────────────
     print("━" * 70)
     print("  Step 2 – MD5 checksum")
     print("━" * 70)
     _download(URL_MD5, MD5_PATH, "dblp.xml.gz.md5")
 
-    # ── Step 3: XML.GZ ────────────────────────────────────────────────────────
     print("━" * 70)
     print("  Step 3 – dblp.xml.gz  (~3 GB, may take 10–30 min)")
     print("━" * 70)
@@ -193,13 +159,11 @@ def main() -> None:
     else:
         _download(URL_GZ, GZ_PATH, "dblp.xml.gz")
 
-    # ── Step 4: verify ────────────────────────────────────────────────────────
     print("━" * 70)
     print("  Step 4 – Verify checksum")
     print("━" * 70)
     _verify_md5(GZ_PATH, MD5_PATH)
 
-    # ── Step 5: extract ───────────────────────────────────────────────────────
     if args.no_extract:
         print("  --no-extract set. Skipping extraction.")
     else:
