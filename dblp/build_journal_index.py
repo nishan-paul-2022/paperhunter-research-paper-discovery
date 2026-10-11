@@ -203,8 +203,8 @@ def scan_xml(xml_path: Path) -> dict[str, str]:
         seen += 1
         key = el.get("key", "")
         journal = el.findtext("journal") or ""
-        if key and journal:
-            prefix = "/".join(key.split("/")[:2])
+        if key.startswith("journals/") and journal:
+            prefix = "/".join(key.split("/")[:2])   # e.g. journals/tods
             if prefix not in index:
                 index[prefix] = journal.strip()
 

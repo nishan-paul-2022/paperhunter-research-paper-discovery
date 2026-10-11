@@ -82,7 +82,7 @@ journals/alr,Artif. Life Robotics,Artificial Life and Robotics,Q3
 journals/amai,Ann. Math. Artif. Intell.,,
 journals/amc,Appl. Math. Comput.,,
 journals/amco,Adv. Math. Commun.,,
-journals/amcs,Int. J. Appl. Math. Comput. Sci.,,
+journals/amcs,Int. J. Appl. Math. Comput. Sci.,International Journal of Applied Mathematics and Computer Science,Q2
 journals/ami,Arch. Mus. Informatics,,
 journals/aml,Arch. Math. Log.,,
 journals/amm,Adv. Multim.,,
@@ -157,7 +157,7 @@ journals/bspc,Biomed. Signal Process. Control.,,
 journals/bstj,Bell Syst. Tech. J.,,
 journals/bullica,Bull. ICA,,
 journals/caaitrit,CAAI Trans. Intell. Technol.,CAAI Transactions on Intelligence Technology,Q1
-journals/cacie,Comput. Aided Civ. Infrastructure Eng.,,
+journals/cacie,Comput. Aided Civ. Infrastructure Eng.,Computer-Aided Civil and Infrastructure Engineering,Q1
 journals/cacm,Commun. ACM,Communications of the ACM,Q1
 journals/cad,Comput. Aided Des.,,
 journals/caeai,Comput. Educ. Artif. Intell.,,
@@ -407,7 +407,7 @@ journals/ejgta,Electron. J. Graph Theory Appl.,,
 journals/ejis,Eur. J. Inf. Syst.,,
 journals/ejisdc,Electron. J. Inf. Syst. Dev. Ctries.,,
 journals/ejisec,EURASIP J. Inf. Secur.,Eurasip Journal on Information Security,Q2
-journals/ejivp,EURASIP J. Image Video Process.,,
+journals/ejivp,EURASIP J. Image Video Process.,Eurasip Journal on Image and Video Processing,Q2
 journals/ejlt,Eur. J. Law Technol.,,
 journals/ejtl,EURO J. Transp. Logist.,,
 journals/ejwcn,EURASIP J. Wirel. Commun. Netw.,,
@@ -484,7 +484,7 @@ journals/frvir,Frontiers Virtual Real.,,
 journals/fs,Finance Stochastics,,
 journals/fss,Fuzzy Sets Syst.,Fuzzy Sets and Systems,Q2
 journals/ftcgv,Found. Trends Comput. Graph. Vis.,,
-journals/ftcit,Found. Trends Commun. Inf. Theory,,
+journals/ftcit,Found. Trends Commun. Inf. Theory,Foundations and Trends in Communications and Information Theory,Q1
 journals/ftdb,Found. Trends Databases,,
 journals/fteda,Found. Trends Electron. Des. Autom.,,
 journals/fthci,Found. Trends Hum. Comput. Interact.,,
@@ -515,7 +515,7 @@ journals/geb,Games Econ. Behav.,,
 journals/geoinformatica,GeoInformatica,GeoInformatica,Q2
 journals/gidr,Datenbank Rundbr.,,
 journals/giq,Gov. Inf. Q.,,
-journals/gis,Int. J. Geogr. Inf. Sci.,,
+journals/gis,Int. J. Geogr. Inf. Sci.,International Journal of Geographical Information Science,Q1
 journals/glottometrics,Glottometrics,,
 journals/gpb,Genom. Proteom. Bioinform.,,
 journals/gpem,Genet. Program. Evolvable Mach.,,
@@ -543,7 +543,7 @@ journals/ia,Intelligenza Artificiale,Intelligenza Artificiale,Q3
 journals/iacr,IACR Cryptol. ePrint Arch.,,
 journals/iahe,Internet High. Educ.,,
 journals/iai,Ind. Artif. Intell.,,
-journals/iajet,Int. Arab. J. e Technol.,,
+journals/iajet,Int. Arab. J. e Technol.,International Arab Journal of Information Technology,Q3
 journals/iajit,Int. Arab J. Inf. Technol.,International Arab Journal of Information Technology,Q3
 journals/iam,Inf. Manag.,Information and Management,Q1
 journals/iandc,Inf. Comput.,,
@@ -565,7 +565,7 @@ journals/iee,Softw. Eng. J.,,
 journals/iee-sej,Softw. Microsystems,,
 journals/ieee-rita,Rev. Iberoam. de Tecnol. del Aprendiz.,,
 journals/ieeecc,IEEE Concurr.,,
-journals/ieeejas,IEEE CAA J. Autom. Sinica,,
+journals/ieeejas,IEEE CAA J. Autom. Sinica,IEEE/CAA Journal of Automatica Sinica,Q1
 journals/ieeemm,IEEE Multim.,,
 journals/ieeenl,IEEE Netw. Lett.,,
 journals/ieeesp,IEEE Secur. Priv.,,
@@ -601,28 +601,28 @@ journals/iiset,IISE Trans.,,
 journals/ij3dim,Int. J. 3 D Inf. Model.,,
 journals/ijaac,Int. J. Autom. Control.,,
 journals/ijaacs,Int. J. Auton. Adapt. Commun. Syst.,,
-journals/ijabim,Int. J. Asian Bus. Inf. Manag.,,
+journals/ijabim,Int. J. Asian Bus. Inf. Manag.,International Journal of Asian Business and Information Management,Q4
 journals/ijac,Int. J. Algebra Comput.,,
 journals/ijacdt,Int. J. Art Cult. Des. Technol.,,
-journals/ijaci,Int. J. Ambient Comput. Intell.,,
+journals/ijaci,Int. J. Ambient Comput. Intell.,International Journal of Ambient Computing and Intelligence,Q4
 journals/ijact,Int. J. Appl. Cryptogr.,,
 journals/ijact-aicit,Int. J. Adv. Comp. Techn.,,
 journals/ijads,Int. J. Appl. Decis. Sci.,,
 journals/ijaec,Int. J. Appl. Evol. Comput.,,
 journals/ijaeis,Int. J. Agric. Environ. Inf. Syst.,,
 journals/ijagr,Int. J. Appl. Geospat. Res.,,
-journals/ijahuc,Int. J. Ad Hoc Ubiquitous Comput.,,
+journals/ijahuc,Int. J. Ad Hoc Ubiquitous Comput.,International Journal of Ad Hoc and Ubiquitous Computing,Q3
 journals/ijai,Int. J. Learn. Anal. Artif. Intell. Educ.,,
 journals/ijaiml,Int. J. Artif. Intell. Mach. Learn.,,
 journals/ijaip,Int. J. Adv. Intell. Paradigms,,
 journals/ijairr,Int. J. Artif. Intell. Robotics Res.,,
-journals/ijais,Int. J. Account. Inf. Syst.,,
+journals/ijais,Int. J. Account. Inf. Syst.,International Journal of Web Information Systems,Q2
 journals/ijaisc,Int. J. Artif. Intell. Soft Comput.,,
 journals/ijait,Int. J. Artif. Intell. Tools,International Journal on Artificial Intelligence Tools,Q3
 journals/ijal,Int. J. Appl. Logist.,,
 journals/ijalr,Int. J. Artif. Life Res.,,
 journals/ijamc,Int. J. Adv. Media Commun.,,
-journals/ijamc-igi,Int. J. Appl. Metaheuristic Comput.,,
+journals/ijamc-igi,Int. J. Appl. Metaheuristic Comput.,International Journal of Applied Metaheuristic Computing,Q4
 journals/ijantti,InnovaInt. J. Actor Netw. Theory Technol. Innov.,,
 journals/ijaom,Int. J. Adv. Oper. Manag.,,
 journals/ijaose,Int. J. Agent Oriented Softw. Eng.,,
@@ -642,10 +642,10 @@ journals/ijbdcn,Int. J. Bus. Data Commun. Netw.,,
 journals/ijbdi,Int. J. Big Data Intell.,,
 journals/ijbdia,Int. J. Big Data Intell. Appl.,,
 journals/ijbi,Int. J. Biomed. Imaging,,
-journals/ijbic,Int. J. Bio Inspired Comput.,,
+journals/ijbic,Int. J. Bio Inspired Comput.,International Journal of Bio-Inspired Computation,Q2
 journals/ijbidm,Int. J. Bus. Intell. Data Min.,,
-journals/ijbir,Int. J. Bus. Intell. Res.,,
-journals/ijbis,Int. J. Bus. Inf. Syst.,,
+journals/ijbir,Int. J. Bus. Intell. Res.,International Journal of Swarm Intelligence Research,Q3
+journals/ijbis,Int. J. Bus. Inf. Syst.,International Journal of Web Information Systems,Q2
 journals/ijbm,Int. J. Biom.,,
 journals/ijbpim,Int. J. Bus. Process. Integr. Manag.,,
 journals/ijbpscm,Int. J. Bus. Perform. Supply Chain Model.,,
@@ -653,12 +653,12 @@ journals/ijbra,Int. J. Bioinform. Res. Appl.,,
 journals/ijcac,Int. J. Cloud Appl. Comput.,,
 journals/ijcaet,Int. J. Comput. Aided Eng. Technol.,,
 journals/ijcallt,Int. J. Comput. Assist. Lang. Learn. Teach.,,
-journals/ijcat,Int. J. Comput. Appl. Technol.,,
+journals/ijcat,Int. J. Comput. Appl. Technol.,International Journal of Computer Games Technology,Q2
 journals/ijcbdd,Int. J. Comput. Biol. Drug Des.,,
 journals/ijcbpl,Int. J. Cyber Behav. Psychol. Learn.,,
 journals/ijcc,Int. J. Cloud Comput.,,
 journals/ijccbs,Int. J. Crit. Comput. Based Syst.,,
-journals/ijccc,Int. J. Comput. Commun. Control,,
+journals/ijccc,Int. J. Comput. Commun. Control,"International Journal of Computers, Communications and Control",Q2
 journals/ijcce,Int. J. Chemoinformatics Chem. Eng.,,
 journals/ijcci,Int. J. Child Comput. Interact.,,
 journals/ijcee,Int. J. Cyber Ethics Educ.,,
@@ -669,17 +669,17 @@ journals/ijcia,Int. J. Comput. Intell. Appl.,,
 journals/ijcicg,Int. J. Creative Interfaces Comput. Graph.,,
 journals/ijcih,Int. J. Comput. Heal.,,
 journals/ijcim,Int. J. Comput. Integr. Manuf.,,
-journals/ijcini,Int. J. Cogn. Informatics Nat. Intell.,,
+journals/ijcini,Int. J. Cogn. Informatics Nat. Intell.,International Journal of Cognitive Informatics and Natural Intelligence,Q4
 journals/ijcip,Int. J. Crit. Infrastructure Prot.,,
 journals/ijcis,Int. J. Cooperative Inf. Syst.,International Journal of Cooperative Information Systems,Q4
 journals/ijcistudies,Int. J. Comput. Intell. Stud.,,
-journals/ijcisys,Int. J. Comput. Intell. Syst.,,
+journals/ijcisys,Int. J. Comput. Intell. Syst.,International Journal of Computational Intelligence Systems,Q1
 journals/ijcla,Int. J. Comput. Linguistics Appl.,,
 journals/ijclclp,Int. J. Comput. Linguistics Chin. Lang. Process.,,
 journals/ijcm,Int. J. Comput. Math.,,
 journals/ijcmam,Int. J. Comput. Model. Algorithms Medicine,,
 journals/ijcmcst,Int. J. Comput. Math. Comput. Syst. Theory,,
-journals/ijcnds,Int. J. Commun. Networks Distributed Syst.,,
+journals/ijcnds,Int. J. Commun. Networks Distributed Syst.,International Journal of Communication Networks and Distributed Systems,Q3
 journals/ijcnis,Int. J. Commun. Networks Inf. Secur.,,
 journals/ijcns,Int. J. Commun. Netw. Syst. Sci.,,
 journals/ijcomputing,Int. J. Comput.,,
@@ -693,46 +693,46 @@ journals/ijcritis,Int. J. Crit. Infrastructures,,
 journals/ijcrowdsci,Int. J. Crowd Sci.,,
 journals/ijcs,Int. J. Comput. Simul.,,
 journals/ijcsa,Int. J. Comput. Sci. Appl.,,
-journals/ijcse,Int. J. Comput. Sci. Eng.,,
+journals/ijcse,Int. J. Comput. Sci. Eng.,International Journal of Computational Science and Engineering,Q3
 journals/ijcses,Int. J. Comput. Sci. Educ. Sch.,,
-journals/ijcsm,Int. J. Comput. Sci. Math.,,
+journals/ijcsm,Int. J. Comput. Sci. Math.,International Journal of Mathematics and Computer Science,Q3
 journals/ijcss,Int. J. Comput. Syst. Signals,,
 journals/ijcssa,Int. J. Concept. Struct. Smart Appl.,,
-journals/ijcssport,Int. J. Comput. Sci. Sport,,
-journals/ijcta,Int. J. Circuit Theory Appl.,,
+journals/ijcssport,Int. J. Comput. Sci. Sport,International Journal of Mathematics and Computer Science,Q3
+journals/ijcta,Int. J. Circuit Theory Appl.,International Journal of Circuit Theory and Applications,Q3
 journals/ijcv,Int. J. Comput. Vis.,International Journal of Computer Vision,Q1
 journals/ijcvip,Int. J. Comput. Vis. Image Process.,,
-journals/ijcvr,Int. J. Comput. Vis. Robotics,,
+journals/ijcvr,Int. J. Comput. Vis. Robotics,International Journal of Computer Vision,Q1
 journals/ijcwt,Int. J. Cyber Warf. Terror.,,
 journals/ijcysa,Int. J. Cyber Situational Aware.,,
-journals/ijdar,Int. J. Document Anal. Recognit.,,
+journals/ijdar,Int. J. Document Anal. Recognit.,International Journal on Document Analysis and Recognition,Q2
 journals/ijdats,Int. J. Data Anal. Tech. Strateg.,,
 journals/ijdc,Int. J. Digit. Curation,,
-journals/ijdcf,Int. J. Digit. Crime Forensics,,
+journals/ijdcf,Int. J. Digit. Crime Forensics,International Journal of Digital Crime and Forensics,Q4
 journals/ijde,Int. J. Digit. EVid.,,
-journals/ijdet,Int. J. Distance Educ. Technol.,,
+journals/ijdet,Int. J. Distance Educ. Technol.,International Journal of Distance Education Technologies,Q3
 journals/ijdldc,Int. J. Digit. Lit. Digit. Competence,,
 journals/ijdls,Int. J. Digit. Libr. Syst.,,
-journals/ijdmb,Int. J. Data Min. Bioinform.,,
+journals/ijdmb,Int. J. Data Min. Bioinform.,International Journal of Data Mining and Bioinformatics,Q4
 journals/ijdmbc,Int. J. Digit. Multim. Broadcast.,,
 journals/ijdmmm,Int. J. Data Min. Model. Manag.,,
-journals/ijdsa,Int. J. Data Sci. Anal.,,
-journals/ijdsms,Int. J. Data Sci. Math. Sci.,,
-journals/ijdsn,Int. J. Distributed Sens. Networks,,
+journals/ijdsa,Int. J. Data Sci. Anal.,International Journal of Data Science and Analytics,Q1
+journals/ijdsms,Int. J. Data Sci. Math. Sci.,International Journal of Data Science and Analytics,Q1
+journals/ijdsn,Int. J. Distributed Sens. Networks,International Journal of Distributed Sensor Networks,Q2
 journals/ijdsst,Int. J. Decis. Support Syst. Technol.,,
-journals/ijdst,Int. J. Distributed Syst. Technol.,,
+journals/ijdst,Int. J. Distributed Syst. Technol.,International Journal of Imaging Systems and Technology,Q2
 journals/ijdtis,Int. J. Dependable Trust. Inf. Syst.,,
 journals/ijea,Int. J. E Adopt.,,
 journals/ijeb,Int. J. Electron. Bus.,,
 journals/ijebm,Int. J. Electron. Bus. Manag.,,
-journals/ijebr,Int. J. E Bus. Res.,,
+journals/ijebr,Int. J. E Bus. Res.,International Journal of e-Business Research,Q3
 journals/ijec,Int. J. e Collab.,,
 journals/ijecommerce,Int. J. Electron. Commer.,,
 journals/ijeei,Int. J. E Entrepreneurship Innov.,,
 journals/ijegr,Int. J. Electron. Gov. Res.,,
 journals/ijeh,Int. J. Electron. Heal.,,
 journals/ijehmc,Int. J. E Health Medical Commun.,International Journal of E-Health and Medical Communications,Q1
-journals/ijeis,Int. J. Enterp. Inf. Syst.,,
+journals/ijeis,Int. J. Enterp. Inf. Syst.,International Journal of Web Information Systems,Q2
 journals/ijeoe,Int. J. Energy Optim. Eng.,,
 journals/ijep,Int. J. E Politics,,
 journals/ijertcs,Int. J. Embed. Real Time Commun. Syst.,,
@@ -741,15 +741,15 @@ journals/ijesdf,Int. J. Electron. Secur. Digit. Forensics,,
 journals/ijesjp,Int. J. Eng. Soc. Justice Peace,,
 journals/ijesma,Int. J. E Serv. Mob. Appl.,,
 journals/ijet,Int. J. Emerg. Technol. Learn.,,
-journals/ijfcs,Int. J. Found. Comput. Sci.,,
+journals/ijfcs,Int. J. Found. Comput. Sci.,International Journal of Mathematics and Computer Science,Q3
 journals/ijfipm,Int. J. Funct. Informatics Pers. Medicine,,
 journals/ijflis,Int. J. Fuzzy Log. Intell. Syst.,,
 journals/ijfogcomp,Int. J. Fog Comput.,,
 journals/ijfs,Int. J. Fuzzy Syst.,International Journal of Fuzzy Systems,Q2
-journals/ijfsa,Int. J. Fuzzy Syst. Appl.,,
+journals/ijfsa,Int. J. Fuzzy Syst. Appl.,International Journal of Fuzzy Systems,Q2
 journals/ijgbl,Int. J. Game Based Learn.,,
 journals/ijgc,Int. J. Green Comput.,,
-journals/ijgcms,Int. J. Gaming Comput. Mediat. Simulations,,
+journals/ijgcms,Int. J. Gaming Comput. Mediat. Simulations,International Journal of Gaming and Computer-Mediated Simulations,Q3
 journals/ijgcrsis,Int. J. Granul. Comput. Rough Sets Intell. Syst.,,
 journals/ijghpc,Int. J. Grid High Perform. Comput.,,
 journals/ijgi,ISPRS Int. J. Geo Inf.,,
@@ -760,26 +760,26 @@ journals/ijhac,Int. J. Humanit. Arts Comput.,,
 journals/ijhci,Int. J. Hum. Comput. Interact.,,
 journals/ijhcitp,Int. J. Hum. Cap. Inf. Technol. Prof.,,
 journals/ijhcr,Int. J. Handheld Comput. Res.,,
-journals/ijhis,Int. J. Hybrid Intell. Syst.,,
-journals/ijhisi,Int. J. Heal. Inf. Syst. Informatics,,
+journals/ijhis,Int. J. Hybrid Intell. Syst.,International Journal of Computational Intelligence Systems,Q1
+journals/ijhisi,Int. J. Heal. Inf. Syst. Informatics,International Journal of Healthcare Information Systems and Informatics,Q4
 journals/ijhpca,Int. J. High Perform. Comput. Appl.,,
 journals/ijhpcn,Int. J. High Perform. Comput. Netw.,,
 journals/ijhpsa,Int. J. High Perform. Syst. Archit.,,
 journals/ijhr,Int. J. Humanoid Robotics,International Journal of Humanoid Robotics,Q3
 journals/ijhsc,Int. J. High Speed Comput.,,
 journals/ijia,Int. J. Inf. Acquis.,,
-journals/ijiatm,Int. J. Innov. Technol. Manag.,,
+journals/ijiatm,Int. J. Innov. Technol. Manag.,International Journal of Technology Management,Q3
 journals/ijicc,Int. J. Intell. Comput. Cybern.,,
 journals/ijicot,Int. J. Inf. Coding Theory,,
-journals/ijics,Int. J. Inf. Comput. Secur.,,
+journals/ijics,Int. J. Inf. Comput. Secur.,International Journal of Information Security,Q1
 journals/ijicst,Int. J. Interact. Commun. Syst. Technol.,,
-journals/ijict,Int. J. Inf. Commun. Technol.,,
-journals/ijicte,Int. J. Inf. Commun. Technol. Educ.,,
+journals/ijict,Int. J. Inf. Commun. Technol.,International Journal of Information and Learning Technology,Q1
+journals/ijicte,Int. J. Inf. Commun. Technol. Educ.,International Journal of Information and Communication Technology Education,Q3
 journals/ijicthd,Int. J. Inf. Commun. Technol. Hum. Dev.,,
 journals/ijictrame,Int. J. ICT Res. Afr. Middle East,,
 journals/ijictrda,Int. J. ICT Res. Dev. Afr.,,
 journals/ijide,Int. J. Innov. Digit. Econ.,,
-journals/ijids,Int. J. Inf. Decis. Sci.,,
+journals/ijids,Int. J. Inf. Decis. Sci.,International Journal of Geographical Information Science,Q1
 journals/ijidss,Int. J. Intell. Def. Support Syst.,,
 journals/ijiei,Int. J. Intell. Eng. Informatics,,
 journals/ijiem,Int. J. Internet Enterp. Manag.,,
@@ -787,26 +787,26 @@ journals/ijig,Int. J. Image Graph.,,
 journals/ijigs,Int. J. Intell. Games Simul.,,
 journals/ijiids,Int. J. Intell. Inf. Database Syst.,,
 journals/ijiip,Int. J. Intell. Inf. Process.,,
-journals/ijiit,Int. J. Intell. Inf. Technol.,,
+journals/ijiit,Int. J. Intell. Inf. Technol.,International Journal of Information and Learning Technology,Q1
 journals/ijim,Int. J. Interact. Mob. Technol.,,
 journals/ijimai,Int. J. Interact. Multim. Artif. Intell.,,
 journals/ijimr,Int. J. Intell. Mechatronics Robotics,,
 journals/ijin,Int. J. Intell. Networks,,
 journals/ijinfoman,Int. J. Inf. Manag.,International Journal of Information Management,Q1
 journals/ijinfomandi,Int. J. Inf. Manag. Data Insights,,
-journals/ijipm,Int. J. Inf. Process. Manag.,,
+journals/ijipm,Int. J. Inf. Process. Manag.,International Journal of Information Management,Q1
 journals/ijipsi,Int. J. Inf. Priv. Secur. Integr.,,
-journals/ijipt,Int. J. Internet Protoc. Technol.,,
+journals/ijipt,Int. J. Internet Protoc. Technol.,International Journal of Internet Protocol Technology,Q4
 journals/ijiq,Int. J. Inf. Qual.,,
 journals/ijira,Int. J. Intell. Robotics Appl.,,
 journals/ijirr,Int. J. Inf. Retr. Res.,,
-journals/ijis,Int. J. Intell. Syst.,,
+journals/ijis,Int. J. Intell. Syst.,International Journal of Computational Intelligence Systems,Q1
 journals/ijisc,Int. J. Intell. Sci.,,
 journals/ijiscm,Int. J. Inf. Syst. Chang. Manag.,,
 journals/ijiscram,Int. J. Inf. Syst. Crisis Response Manag.,,
 journals/ijisec,Int. J. Inf. Sec.,,
 journals/ijismd,Int. J. Inf. Syst. Model. Des.,,
-journals/ijisp,Int. J. Inf. Secur. Priv.,,
+journals/ijisp,Int. J. Inf. Secur. Priv.,International Journal of Information Security,Q1
 journals/ijissc,Int. J. Inf. Syst. Soc. Chang.,,
 journals/ijisscm,Int. J. Inf. Syst. Supply Chain Manag.,International Journal of Information Systems and Supply Chain Management,Q3
 journals/ijisss,Int. J. Inf. Syst. Serv. Sect.,,
@@ -814,7 +814,7 @@ journals/ijista,Int. J. Intell. Syst. Technol. Appl.,,
 journals/ijitbag,Int. J. IT Bus. Alignment Gov.,,
 journals/ijitcc,Int. J. Inf. Technol. Commun. Convergence,,
 journals/ijitdm,Int. J. Inf. Technol. Decis. Mak.,,
-journals/ijitm,Int. J. Inf. Technol. Manag.,,
+journals/ijitm,Int. J. Inf. Technol. Manag.,International Journal of Information Management,Q1
 journals/ijitn,Int. J. Interdiscip. Telecommun. Netw.,,
 journals/ijitpm,Int. J. Inf. Technol. Proj. Manag.,,
 journals/ijitsa,Int. J. Inf. Technol. Syst. Approach,,
@@ -826,9 +826,9 @@ journals/ijkesdp,Int. J. Knowl. Eng. Soft Data Paradigms,,
 journals/ijkl,Int. J. Knowl. Learn.,,
 journals/ijkm,Int. J. Knowl. Manag.,,
 journals/ijksr,Int. J. Knowl. Soc. Res.,,
-journals/ijkss,Int. J. Knowl. Syst. Sci.,,
+journals/ijkss,Int. J. Knowl. Syst. Sci.,International Journal of Systems Science,Q1
 journals/ijkwi,Int. J. Knowl. Web Intell.,,
-journals/ijlit,Int. J. Law Inf. Technol.,,
+journals/ijlit,Int. J. Law Inf. Technol.,International Journal of Information and Learning Technology,Q1
 journals/ijlt,Int. J. Learn. Technol.,,
 journals/ijma,Int. J. Mechatronics Autom.,,
 journals/ijmbl,Int. J. Mob. Blended Learn.,,
@@ -853,10 +853,10 @@ journals/ijmso,Int. J. Metadata Semant. Ontologies,,
 journals/ijmssc,Int. J. Model. Simul. Sci. Comput.,,
 journals/ijmstr,Int. J. Monit. Surveillance Technol. Res.,,
 journals/ijmtie,Int. J. Meas. Technol. Instrum. Eng.,,
-journals/ijmtm,Int. J. Manuf. Technol. Manag.,,
+journals/ijmtm,Int. J. Manuf. Technol. Manag.,International Journal of Technology Management,Q3
 journals/ijnc,Int. J. Netw. Comput.,,
 journals/ijncr,Int. J. Nat. Comput. Res.,,
-journals/ijndc,Int. J. Networked Distributed Comput.,,
+journals/ijndc,Int. J. Networked Distributed Comput.,International Journal of Networked and Distributed Computing,Q2
 journals/ijngc,Int. J. Next Gener. Comput.,,
 journals/ijnm,Int. J. Netw. Manag.,,
 journals/ijnmc,Int. J. Nanotechnol. Mol. Comput.,,
@@ -870,12 +870,12 @@ journals/ijon,Neurocomputing,Neurocomputing,Q1
 journals/ijopcd,Int. J. Online Pedagog. Course Des.,,
 journals/ijoris,Int. J. Oper. Res. Inf. Syst.,,
 journals/ijossp,Int. J. Open Source Softw. Process.,,
-journals/ijpcc,Int. J. Pervasive Comput. Commun.,,
+journals/ijpcc,Int. J. Pervasive Comput. Commun.,International Journal of Pervasive Computing and Communications,Q3
 journals/ijpe,Int. J. Perform. Eng.,,
 journals/ijpop,Int. J. People Oriented Program.,,
 journals/ijpp,Int. J. Parallel Program.,,
 journals/ijpr,Int. J. Prod. Res.,,
-journals/ijprai,Int. J. Pattern Recognit. Artif. Intell.,,
+journals/ijprai,Int. J. Pattern Recognit. Artif. Intell.,International Journal of Pattern Recognition and Artificial Intelligence,Q3
 journals/ijqaete,Int. J. Qual. Assur. Eng. Technol. Educ.,,
 journals/ijra,Int. J. Robotics Autom.,,
 journals/ijrat,Int. J. Robotics Appl. Technol.,,
@@ -892,7 +892,7 @@ journals/ijsda,Int. J. Syst. Dyn. Appl.,,
 journals/ijsdir,Int. J. Spatial Data Infrastructures Res.,,
 journals/ijsds,Int. J. Strateg. Decis. Sci.,,
 journals/ijse,Int. J. Synth. Emot.,,
-journals/ijseke,Int. J. Softw. Eng. Knowl. Eng.,,
+journals/ijseke,Int. J. Softw. Eng. Knowl. Eng.,International Journal of Software Engineering and Knowledge Engineering,Q3
 journals/ijsg,Int. J. Serious Games,,
 journals/ijshc,Int. J. Soc. Humanist. Comput.,,
 journals/ijsi,Int. J. Softw. Informatics,,
@@ -919,12 +919,12 @@ journals/ijssoe,Int. J. Syst. Serv. Oriented Eng.,,
 journals/ijsss,Int. J. Signs Semiot. Syst.,,
 journals/ijsssp,Int. J. Syst. Softw. Secur. Prot.,,
 journals/ijst,Int. J. Speech Technol.,International Journal of Speech Technology,Q2
-journals/ijstm,Int. J. Serv. Technol. Manag.,,
+journals/ijstm,Int. J. Serv. Technol. Manag.,International Journal of Technology Management,Q3
 journals/ijswis,Int. J. Semantic Web Inf. Syst.,International Journal on Semantic Web and Information Systems,Q2
 journals/ijsysc,Int. J. Syst. Sci.,International Journal of Systems Science,Q1
 journals/ijt,Int. J. Technoethics,,
 journals/ijtd,Int. J. Technol. Diffusion,,
-journals/ijtem,Int. J. Technol. Educ. Mark.,,
+journals/ijtem,Int. J. Technol. Educ. Mark.,International Journal for Technology in Mathematics Education,Q4
 journals/ijthi,Int. J. Technol. Hum. Interact.,,
 journals/ijtm,Int. J. Technol. Manag.,International Journal of Technology Management,Q3
 journals/ijtmcc,Int. J. Trust. Manag. Comput. Commun.,,
@@ -937,12 +937,12 @@ journals/ijvr,Int. J. Virtual Real.,,
 journals/ijwa,Int. J. Web Appl.,,
 journals/ijwbc,Int. J. Web Based Communities,,
 journals/ijwet,Int. J. Web Eng. Technol.,,
-journals/ijwgs,Int. J. Web Grid Serv.,,
-journals/ijwin,Int. J. Wirel. Inf. Networks,,
+journals/ijwgs,Int. J. Web Grid Serv.,International Journal of Web and Grid Services,Q3
+journals/ijwin,Int. J. Wirel. Inf. Networks,International Journal of Wireless Information Networks,Q2
 journals/ijwis,Int. J. Web Inf. Syst.,International Journal of Web Information Systems,Q2
 journals/ijwltt,Int. J. Web Based Learn. Teach. Technol.,,
 journals/ijwmc,Int. J. Wirel. Mob. Comput.,,
-journals/ijwmip,Int. J. Wavelets Multiresolution Inf. Process.,,
+journals/ijwmip,Int. J. Wavelets Multiresolution Inf. Process.,"International Journal of Wavelets, Multiresolution and Information Processing",Q3
 journals/ijwnbt,Int. J. Wirel. Networks Broadband Technol.,,
 journals/ijwoc,Int. J. Wirel. Opt. Commun.,,
 journals/ijwp,Int. J. Web Portals,,
@@ -1002,8 +1002,8 @@ journals/isafm,Intell. Syst. Account. Finance Manag.,,
 journals/isb,Silico Biol.,,
 journals/isca,Int. J. Comput. Their Appl.,,
 journals/isci,Inf. Sci.,,
-journals/isecure,ISC Int. J. Inf. Secur.,,
-journals/isem,Inf. Syst. E Bus. Manag.,,
+journals/isecure,ISC Int. J. Inf. Secur.,International Journal of Information Security,Q1
+journals/isem,Inf. Syst. E Bus. Manag.,Information Systems and e-Business Management,Q2
 journals/isf,Inf. Syst. Frontiers,Information Systems Frontiers,Q1
 journals/isi,Ingénierie des Systèmes d Inf.,,
 journals/isj,Inf. Syst. J.,Information Systems Journal,Q1
@@ -1047,8 +1047,8 @@ journals/jaif,J. Adv. Inf. Fusion,,
 journals/jaihc,J. Ambient Intell. Humaniz. Comput.,,
 journals/jair,J. Artif. Intell. Res.,Journal of Artificial Intelligence Research,Q1
 journals/jais,J. Assoc. Inf. Syst.,,
-journals/jaiscr,J. Artif. Intell. Soft Comput. Res.,,
-journals/jaise,J. Ambient Intell. Smart Environ.,,
+journals/jaiscr,J. Artif. Intell. Soft Comput. Res.,Journal of Artificial Intelligence and Soft Computing Research,Q2
+journals/jaise,J. Ambient Intell. Smart Environ.,Journal of Ambient Intelligence and Smart Environments,Q3
 journals/jal,J. Algorithms,,
 journals/jalc,J. Autom. Lang. Comb.,,
 journals/jam,J. Appl. Math.,,
@@ -1088,7 +1088,7 @@ journals/jci,J. Community Informatics,,
 journals/jcin,J. Commun. Inf. Networks,,
 journals/jcis,J. Comput. Inf. Syst.,Journal of Computer Information Systems,Q1
 journals/jcisd,J. Chem. Inf. Model.,,
-journals/jcise,J. Comput. Inf. Sci. Eng.,,
+journals/jcise,J. Comput. Inf. Sci. Eng.,Journal of Computing and Information Science in Engineering,Q2
 journals/jcit,J. Convergence Inf. Technol.,,
 journals/jcit-igi,J. Cases Inf. Technol.,Journal of Cases on Information Technology,Q3
 journals/jclc,J. Chin. Lang. Comput.,,
@@ -1194,9 +1194,9 @@ journals/jisys,J. Inf. Syst.,Journal of Information Systems,Q2
 journals/jite,J. Inf. Technol. Educ. Res.,Journal of Information Technology Education: Research,Q1
 journals/jitech,J. Inf. Technol.,Journal of Information Technology,Q1
 journals/jitedc,J. Inf. Technol. Educ. Discuss. Cases,,
-journals/jiteiip,J. Inf. Technol. Educ. Innov. Pract.,,
-journals/jitm,J. Inf. Technol. Manag.,,
-journals/jitr,J. Inf. Technol. Res.,,
+journals/jiteiip,J. Inf. Technol. Educ. Innov. Pract.,Journal of Information Technology Education: Innovations in Practice,Q2
+journals/jitm,J. Inf. Technol. Manag.,Journal of Global Information Technology Management,Q2
+journals/jitr,J. Inf. Technol. Res.,Journal of Information Technology Education: Research,Q1
 journals/jits,J. Intell. Transp. Syst.,,
 journals/jitsr,Int. J. IT Stand. Stand. Res.,,
 journals/jitt,J. Inf. Technol. Tour.,,
@@ -1234,7 +1234,7 @@ journals/jns,J. Nonlinear Sci.,,
 journals/jnsm,J. Netw. Syst. Manag.,,
 journals/jnw,J. Networks,,
 journals/joc,J. Cryptol.,,
-journals/jocch,ACM Journal on Computing and Cultural Heritage,,
+journals/jocch,ACM Journal on Computing and Cultural Heritage,Journal on Computing and Cultural Heritage,Q2
 journals/jocec,J. Organ. Comput. Electron. Commer.,,
 journals/jocg,J. Comput. Geom.,,
 journals/jocn,J. Cogn. Neurosci.,,
@@ -1279,12 +1279,12 @@ journals/jql,J. Quant. Linguistics,,
 journals/jr,J. Robotics,Journal of Robotics,Q2
 journals/jrie,J. Reliab. Intell. Environ.,,
 journals/jrm,J. Robotics Mechatronics,Journal of Robotics and Mechatronics,Q3
-journals/jrnal,J. Robotics Netw. Artif. Life,,
-journals/jrtip,J. Real Time Image Process.,,
+journals/jrnal,J. Robotics Netw. Artif. Life,"Journal of Robotics, Networking and Artificial Life",Q3
+journals/jrtip,J. Real Time Image Process.,Journal of Real-Time Image Processing,Q1
 journals/jrtpm,J. Rail Transp. Plan. Manag.,,
 journals/js,J. Sensors,,
 journals/jsa,Microprocess. Microprogramming,,
-journals/jsac,IEEE J. Sel. Areas Commun.,,
+journals/jsac,IEEE J. Sel. Areas Commun.,IEEE Journal on Selected Areas in Communications,Q1
 journals/jsait,IEEE J. Sel. Areas Inf. Theory,,
 journals/jsan,J. Sens. Actuator Networks,,
 journals/jsat,J. Satisf. Boolean Model. Comput.,,
@@ -1324,7 +1324,7 @@ journals/jvrb,J. Virtual Real. Broadcast.,,
 journals/jwe,J. Web Eng.,Journal of Web Engineering,Q3
 journals/jws,J. Web Sci.,,
 journals/jwscg,J. WSCG,,
-journals/jwsr,Int. J. Web Serv. Res.,,
+journals/jwsr,Int. J. Web Serv. Res.,International Journal of Web Services Research,Q3
 journals/jzusc,J. Zhejiang Univ. Sci. C,,
 journals/kais,Knowl. Inf. Syst.,,
 journals/kbs,Knowl. Based Syst.,,
@@ -1692,7 +1692,7 @@ journals/staeors,IEEE J. Sel. Top. Appl. Earth Obs. Remote. Sens.,,
 journals/standardview,ACM Stand.,,
 journals/stp,Softw. Concepts Tools,,
 journals/stt,Softwaretechnik-Trends,,
-journals/sttt,Int. J. Softw. Tools Technol. Transf.,,
+journals/sttt,Int. J. Softw. Tools Technol. Transf.,International Journal on Software Tools for Technology Transfer,Q2
 journals/stvr,Softw. Test. Verification Reliab.,,
 journals/superfri,Supercomput. Front. Innov.,,
 journals/suscom,Sustain. Comput. Informatics Syst.,,
@@ -1701,7 +1701,7 @@ journals/swevo,Swarm Evol. Comput.,,
 journals/symmetry,Symmetry,Symmetry,Q2
 journals/synthese,Synth.,,
 journals/systems,Syst.,Systems,Q2
-journals/taas,ACM Trans. Auton. Adapt. Syst.,,
+journals/taas,ACM Trans. Auton. Adapt. Syst.,ACM Transactions on Autonomous and Adaptive Systems,Q2
 journals/taasm,Technol. Anal. Strateg. Manag.,,
 journals/tac,IEEE Trans. Autom. Control.,,
 journals/taccess,ACM Trans. Access. Comput.,,
@@ -1713,12 +1713,12 @@ journals/tai,IEEE Trans. Artif. Intell.,,
 journals/tal,Trait. Autom. des Langues,,
 journals/talg,ACM Trans. Algorithms,,
 journals/talip,ACM Trans. Asian Low Resour. Lang. Inf. Process.,,
-journals/tamd,IEEE Trans. Cogn. Dev. Syst.,,
+journals/tamd,IEEE Trans. Cogn. Dev. Syst.,IEEE Transactions on Cognitive and Developmental Systems,Q1
 journals/tamm,Am. Math. Mon.,,
 journals/taosd,LNCS Trans. Aspect Oriented Softw. Dev.,,
 journals/tap,ACM Trans. Appl. Percept.,,
 journals/tapos,Theory Pract. Object Syst.,,
-journals/tase,IEEE Trans Autom. Sci. Eng.,,
+journals/tase,IEEE Trans Autom. Sci. Eng.,IEEE Transactions on Network Science and Engineering,Q1
 journals/taslp,IEEE Trans. Speech Audio Process.,,
 journals/tasm,IEEE Technol. Soc. Mag.,,
 journals/tbbis,IEEE Trans. Biom. Behav. Identity Sci.,,
@@ -1735,16 +1735,16 @@ journals/tcasai,IEEE Trans. Circuits Syst. Artif. Intell.,,
 journals/tcbb,IEEE ACM Trans. Comput. Biol. Bioinform.,,
 journals/tcc,IEEE Trans. Cloud Comput.,,
 journals/tcci,Trans. Comput. Collect. Intell.,,
-journals/tccn,IEEE Trans. Cogn. Commun. Netw.,,
+journals/tccn,IEEE Trans. Cogn. Commun. Netw.,IEEE Transactions on Cognitive Communications and Networking,Q1
 journals/tcdl,Bull. IEEE Tech. Comm. Digit. Libr.,,
 journals/tce,IEEE Trans. Consumer Electron.,,
 journals/tches,IACR Trans. Cryptogr. Hardw. Embed. Syst.,,
 journals/tci,IEEE Trans. Computational Imaging,IEEE Transactions on Computational Imaging,Q1
 journals/tciaig,IEEE Trans. Games,IEEE Transactions on Games,Q2
-journals/tcns,IEEE Trans. Control. Netw. Syst.,,
+journals/tcns,IEEE Trans. Control. Netw. Syst.,IEEE Transactions on Control of Network Systems,Q1
 journals/tcom,IEEE Trans. Commun.,,
 journals/tcos,Trans. Comput. Sci.,,
-journals/tcps,ACM Trans. Cyber Phys. Syst.,,
+journals/tcps,ACM Trans. Cyber Phys. Syst.,ACM Transactions on Cyber-Physical Systems,Q2
 journals/tcs,Theor. Comput. Sci.,,
 journals/tcsb,Trans. Comp. Sys. Biology,,
 journals/tcss,IEEE Trans. Comput. Soc. Syst.,,
@@ -1760,7 +1760,7 @@ journals/te,IEEE Trans. Educ.,,
 journals/tec,IEEE Trans. Evol. Comput.,,
 journals/technometrics,Technometrics,,
 journals/teco,ACM Trans. Economics and Comput.,,
-journals/tecs,ACM Trans. Embed. Comput. Syst.,,
+journals/tecs,ACM Trans. Embed. Comput. Syst.,ACM Transactions on Computer Systems,Q3
 journals/tedu,Trans. Edutainment,,
 journals/tele,Telematics Informatics,Telematics and Informatics,Q1
 journals/telo,ACM Trans. Evol. Learn. Optim.,,
@@ -1770,14 +1770,14 @@ journals/tetc,IEEE Trans. Emerg. Top. Comput.,,
 journals/tetci,IEEE Trans. Emerg. Top. Comput. Intell.,,
 journals/tfs,IEEE Trans. Fuzzy Syst.,IEEE Transactions on Fuzzy Systems,Q1
 journals/tfss,Trans. Fuzzy Sets Syst.,,
-journals/tgcn,IEEE Trans. Green Commun. Netw.,,
+journals/tgcn,IEEE Trans. Green Commun. Netw.,IEEE Transactions on Green Communications and Networking,Q1
 journals/tgdk,TGDK,,
 journals/tgis,Trans. GIS,,
 journals/tgrs,IEEE Trans. Geosci. Remote. Sens.,,
 journals/theatlantic,Atl. Mon.,,
 journals/theoretics,TheoretiCS,,
 journals/thipeac,Trans. High Perform. Embed. Archit. Compil.,,
-journals/thms,IEEE Trans. Hum. Mach. Syst.,,
+journals/thms,IEEE Trans. Hum. Mach. Syst.,IEEE Transactions on Human-Machine Systems,Q1
 journals/thri,ACM Trans. Hum. Robot Interact.,,
 journals/tib,Theory Biosci.,,
 journals/tie,IEEE Trans. Ind. Electron.,,
@@ -1791,15 +1791,15 @@ journals/tiot,ACM Trans. Internet Things,,
 journals/tip,IEEE Trans. Image Process.,,
 journals/tis,Inf. Soc.,,
 journals/tismir,Trans. Int. Soc. Music. Inf. Retr.,,
-journals/tissec,ACM Trans. Inf. Syst. Secur.,,
-journals/tist,ACM Trans. Intell. Syst. Technol.,,
+journals/tissec,ACM Trans. Inf. Syst. Secur.,ACM Transactions on Information Systems,Q1
+journals/tist,ACM Trans. Intell. Syst. Technol.,ACM Transactions on Intelligent Systems and Technology,Q1
 journals/tit,IEEE Trans. Inf. Theory,IEEE Transactions on Information Theory,Q1
-journals/titb,IEEE J. Biomed. Health Informatics,,
+journals/titb,IEEE J. Biomed. Health Informatics,IEEE Journal of Biomedical and Health Informatics,Q1
 journals/tits,IEEE Trans. Intell. Transp. Syst.,,
 journals/tiv,IEEE Trans. Intell. Veh.,,
 journals/tjs,J. Supercomput.,,
 journals/tkdd,ACM Trans. Knowl. Discov. Data,,
-journals/tkde,IEEE Trans. Knowl. Data Eng.,,
+journals/tkde,IEEE Trans. Knowl. Data Eng.,IEEE Transactions on Knowledge and Data Engineering,Q1
 journals/tkl,Technol. Knowl. Learn.,,
 journals/tlsdkcs,Trans. Large Scale Data Knowl. Centered Syst.,,
 journals/tlt,IEEE Trans. Learn. Technol.,,
@@ -1810,8 +1810,8 @@ journals/tmis,ACM Trans. Manag. Inf. Syst.,ACM Transactions on Management Inform
 journals/tmlr,Trans. Mach. Learn. Res.,,
 journals/tmm,IEEE Trans. Multim.,,
 journals/tmscs,IEEE Trans. Multi Scale Comput. Syst.,,
-journals/tnn,IEEE Trans. Neural Networks Learn. Syst.,,
-journals/tnse,IEEE Trans. Netw. Sci. Eng.,,
+journals/tnn,IEEE Trans. Neural Networks Learn. Syst.,IEEE Transactions on Neural Networks and Learning Systems,Q1
+journals/tnse,IEEE Trans. Netw. Sci. Eng.,IEEE Transactions on Network Science and Engineering,Q1
 journals/tnsm,IEEE Trans. Netw. Serv. Manag.,,
 journals/toc,Theory Comput.,,
 journals/toce,ACM Trans. Comput. Educ.,,
@@ -1826,7 +1826,7 @@ journals/tog,ACM Trans. Graph.,,
 journals/toh,IEEE Trans. Haptics,IEEE Transactions on Haptics,Q2
 journals/tois,ACM Trans. Inf. Syst.,ACM Transactions on Information Systems,Q1
 journals/toit,ACM Trans. Internet Techn.,,
-journals/tomacs,ACM Trans. Model. Comput. Simul.,,
+journals/tomacs,ACM Trans. Model. Comput. Simul.,ACM Transactions on Modeling and Computer Simulation,Q3
 journals/tomccap,ACM Trans. Multim. Comput. Commun. Appl.,,
 journals/tompecs,ACM Trans. Model. Perform. Evaluation Comput. Syst.,,
 journals/toms,ACM Trans. Math. Softw.,,
@@ -1838,7 +1838,7 @@ journals/topnoc,Trans. Petri Nets Other Model. Concurr.,,
 journals/tors,Trans. Recomm. Syst.,,
 journals/tos,ACM Trans. Storage,ACM Transactions on Storage,Q2
 journals/tosc,IACR Trans. Symmetric Cryptol.,,
-journals/tosem,ACM Trans. Softw. Eng. Methodol.,,
+journals/tosem,ACM Trans. Softw. Eng. Methodol.,ACM Transactions on Software Engineering and Methodology,Q1
 journals/tosn,ACM Trans. Sens. Networks,,
 journals/tpc,IEEE Trans. Prof. Commun.,,
 journals/tpds,IEEE Trans. Parallel Distributed Syst.,IEEE Transactions on Parallel and Distributed Systems,Q1
@@ -1857,7 +1857,7 @@ journals/tsg,IEEE Trans. Smart Grid,IEEE Transactions on Smart Grid,Q1
 journals/tsi,Tech. Sci. Informatiques,,
 journals/tsipn,IEEE Trans. Signal Inf. Process. over Networks,IEEE Transactions on Signal and Information Processing over Networks,Q1
 journals/tslp,ACM Trans. Speech Lang. Process.,,
-journals/tsmc,IEEE Trans. Syst. Man Cybern. Syst.,,
+journals/tsmc,IEEE Trans. Syst. Man Cybern. Syst.,"IEEE Transactions on Systems, Man, and Cybernetics: Systems",Q1
 journals/tsoco,ACM Trans. Soc. Comput.,,
 journals/tsp,IEEE Trans. Signal Process.,,
 journals/tssc,IEEE Trans. Syst. Sci. Cybern.,,
