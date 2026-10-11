@@ -1,6 +1,5 @@
 dblp_key,dblp_name,title,issn_1,issn_2,quartile,coverage
 journals/4or,4OR,4OR,1614-2411,1619-4500,Q1,2003-2026
-journals/tissec,ACM Trans. Inf. Syst. Secur.,ACM Transactions on Information Systems,1046-8188,1558-2868,Q1,1983-2026
 journals/tois,ACM Trans. Inf. Syst.,ACM Transactions on Information Systems,1046-8188,1558-2868,Q1,1983-2026
 journals/tist,ACM Trans. Intell. Syst. Technol.,ACM Transactions on Intelligent Systems and Technology,2157-6912,2157-6904,Q1,2010-2026
 journals/tmis,ACM Trans. Manag. Inf. Syst.,ACM Transactions on Management Information Systems,2158-6578,2158656X,Q1,2010-2025
@@ -26,7 +25,6 @@ journals/dase,Data Sci. Eng.,Data Science and Engineering,2364-1541,2364-1185,Q1
 journals/biodb,Database J. Biol. Databases Curation,Database : the journal of biological databases and curation,1758-0463,,Q1,2009-2026
 journals/ethicsit,Ethics Inf. Technol.,Ethics and Information Technology,1388-1957,1572-8439,Q1,1999-2026
 journals/ftcit,Found. Trends Commun. Inf. Theory,Foundations and Trends in Communications and Information Theory,1567-2190,1567-2328,Q1,2004-2025
-journals/fcomp,Frontiers Comput. Sci.,Frontiers of Computer Science,2095-2228,2095-2236,Q1,2013-2026
 journals/fcsc,Frontiers Comput. Sci.,Frontiers of Computer Science,2095-2228,2095-2236,Q1,2013-2026
 journals/fi,Future Internet,Future Internet,1999-5903,,Q1,2009-2026
 journals/ict-express,ICT Express,ICT Express,2405-9595,,Q1,2015-2026
@@ -50,7 +48,6 @@ journals/tit,IEEE Trans. Inf. Theory,IEEE Transactions on Information Theory,001
 journals/tkde,IEEE Trans. Knowl. Data Eng.,IEEE Transactions on Knowledge and Data Engineering,1041-4347,1558-2191,Q1,1989-2026
 journals/tmi,IEEE Trans. Medical Imaging,IEEE Transactions on Medical Imaging,0278-0062,1558254X,Q1,1982-2026
 journals/tase,IEEE Trans Autom. Sci. Eng.,IEEE Transactions on Network Science and Engineering,2327-4697,,Q1,2014-2026
-journals/tnse,IEEE Trans. Netw. Sci. Eng.,IEEE Transactions on Network Science and Engineering,2327-4697,,Q1,2014-2026
 journals/tnn,IEEE Trans. Neural Networks Learn. Syst.,IEEE Transactions on Neural Networks and Learning Systems,2162237X,2162-2388,Q1,2012-2026
 journals/tpds,IEEE Trans. Parallel Distributed Syst.,IEEE Transactions on Parallel and Distributed Systems,1558-2183,1045-9219,Q1,1990-2026
 journals/pami,IEEE Trans. Pattern Anal. Mach. Intell.,IEEE Transactions on Pattern Analysis and Machine Intelligence,0162-8828,1939-3539,Q1,1978-2026
@@ -70,28 +67,16 @@ journals/ism,Inf. Syst. Manag.,Information Systems Management,1058-0530,,Q1,1992
 journals/isr,Inf. Syst. Res.,Information Systems Research,1526-5536,1047-7047,Q1,1990-2025
 journals/itp,Inf. Technol. People,Information Technology and People,0959-3845,,Q1,"1990, 1992, 1994-2026"
 journals/aiedu,Int. J. Artif. Intell. Educ.,International Journal of Artificial Intelligence in Education,1560-4292,1560-4306,Q1,"2000, 2003-2025"
-journals/ijcisys,Int. J. Comput. Intell. Syst.,International Journal of Computational Intelligence Systems,1875-6891,1875-6883,Q1,2008-2026
-journals/ijhis,Int. J. Hybrid Intell. Syst.,International Journal of Computational Intelligence Systems,1875-6891,1875-6883,Q1,2008-2026
 journals/ijis,Int. J. Intell. Syst.,International Journal of Computational Intelligence Systems,1875-6891,1875-6883,Q1,2008-2026
 journals/ijcv,Int. J. Comput. Vis.,International Journal of Computer Vision,0920-5691,1573-1405,Q1,1987-2026
-journals/ijcvr,Int. J. Comput. Vis. Robotics,International Journal of Computer Vision,0920-5691,1573-1405,Q1,1987-2026
 journals/ijdsa,Int. J. Data Sci. Anal.,International Journal of Data Science and Analytics,2364415X,2364-4168,Q1,2016-2026
-journals/ijdsms,Int. J. Data Sci. Math. Sci.,International Journal of Data Science and Analytics,2364415X,2364-4168,Q1,2016-2026
 journals/ijehmc,Int. J. E Health Medical Commun.,International Journal of E-Health and Medical Communications,1947-3168,1947315X,Q1,2010-2025
 journals/gis,Int. J. Geogr. Inf. Sci.,International Journal of Geographical Information Science,1365-8816,1365-8824,Q1,1997-2026
-journals/ijids,Int. J. Inf. Decis. Sci.,International Journal of Geographical Information Science,1365-8816,1365-8824,Q1,1997-2026
 journals/ijict,Int. J. Inf. Commun. Technol.,International Journal of Information and Learning Technology,2056-4899,2056-4880,Q1,2015-2026
-journals/ijiit,Int. J. Intell. Inf. Technol.,International Journal of Information and Learning Technology,2056-4899,2056-4880,Q1,2015-2026
-journals/ijlit,Int. J. Law Inf. Technol.,International Journal of Information and Learning Technology,2056-4899,2056-4880,Q1,2015-2026
 journals/ijinfoman,Int. J. Inf. Manag.,International Journal of Information Management,0268-4012,,Q1,"1970, 1986-2026"
-journals/ijipm,Int. J. Inf. Process. Manag.,International Journal of Information Management,0268-4012,,Q1,"1970, 1986-2026"
-journals/ijitm,Int. J. Inf. Technol. Manag.,International Journal of Information Management,0268-4012,,Q1,"1970, 1986-2026"
 journals/ijics,Int. J. Inf. Comput. Secur.,International Journal of Information Security,1615-5270,1615-5262,Q1,2005-2026
-journals/ijisp,Int. J. Inf. Secur. Priv.,International Journal of Information Security,1615-5270,1615-5262,Q1,2005-2026
-journals/isecure,ISC Int. J. Inf. Secur.,International Journal of Information Security,1615-5270,1615-5262,Q1,2005-2026
 journals/ijns,Int. J. Neural Syst.,International Journal of Neural Systems,0129-0657,1793-6462,Q1,"1992-1997, 1999-2026"
 journals/ijrr,Int. J. Robotics Res.,International Journal of Robotics Research,0278-3649,1741-3176,Q1,1982-2026
-journals/ijkss,Int. J. Knowl. Syst. Sci.,International Journal of Systems Science,0020-7721,1464-5319,Q1,1970-2026
 journals/ijsysc,Int. J. Syst. Sci.,International Journal of Systems Science,0020-7721,1464-5319,Q1,1970-2026
 journals/jair,J. Artif. Intell. Res.,Journal of Artificial Intelligence Research,1076-9757,,Q1,"1993, 1996-2026"
 journals/jbd,J. Big Data,Journal of Big Data,2196-1115,,Q1,2014-2026
@@ -101,7 +86,6 @@ journals/jcis,J. Comput. Inf. Syst.,Journal of Computer Information Systems,2380
 journals/jfr,J. Field Robotics,Journal of Field Robotics,1556-4967,1556-4959,Q1,2006-2026
 journals/jitech,J. Inf. Technol.,Journal of Information Technology,1466-4437,0268-3962,Q1,1987-2026
 journals/jite,J. Inf. Technol. Educ. Res.,Journal of Information Technology Education: Research,1539-3585,1547-9714,Q1,2011-2026
-journals/jitr,J. Inf. Technol. Res.,Journal of Information Technology Education: Research,1539-3585,1547-9714,Q1,2011-2026
 journals/joi,J. Informetrics,Journal of Informetrics,1875-5879,1751-1577,Q1,2007-2026
 journals/jmis,J. Manag. Inf. Syst.,Journal of Management Information Systems,1557928X,0742-1222,Q1,1987-2025
 journals/jms,J. Medical Syst.,Journal of Medical Systems,0148-5598,1573689X,Q1,1977-2026
@@ -168,20 +152,14 @@ journals/isem,Inf. Syst. E Bus. Manag.,Information Systems and e-Business Manage
 journals/itm,Inf. Technol. Manag.,Information Technology and Management,1385951X,1573-7667,Q2,2004-2026
 journals/amcs,Int. J. Appl. Math. Comput. Sci.,International Journal of Applied Mathematics and Computer Science,1641876X,2083-8492,Q2,"2001-2002, 2006-2025"
 journals/ijbic,Int. J. Bio Inspired Comput.,International Journal of Bio-Inspired Computation,1758-0374,1758-0366,Q2,2009-2026
-journals/ijcat,Int. J. Comput. Appl. Technol.,International Journal of Computer Games Technology,1687-7047,1687-7055,Q2,2009-2025
 journals/ijcgt,Int. J. Comput. Games Technol.,International Journal of Computer Games Technology,1687-7047,1687-7055,Q2,2009-2025
 journals/ijccc,Int. J. Comput. Commun. Control,"International Journal of Computers, Communications and Control",1841-9836,1841-9844,Q2,2007-2026
 journals/ijcon,Int. J. Control,International Journal of Control,0020-7179,1366-5820,Q2,1965-2026
 journals/ijdsn,Int. J. Distributed Sens. Networks,International Journal of Distributed Sensor Networks,1550-1329,1550-1477,Q2,2005-2026
 journals/ijfs,Int. J. Fuzzy Syst.,International Journal of Fuzzy Systems,1562-2479,2199-3211,Q2,2004-2026
-journals/ijfsa,Int. J. Fuzzy Syst. Appl.,International Journal of Fuzzy Systems,1562-2479,2199-3211,Q2,2004-2026
-journals/ijdst,Int. J. Distributed Syst. Technol.,International Journal of Imaging Systems and Technology,1098-1098,0899-9457,Q2,"1989-1992, 1994-2000, 2002-2026"
 journals/imst,Int. J. Imaging Syst. Technol.,International Journal of Imaging Systems and Technology,1098-1098,0899-9457,Q2,"1989-1992, 1994-2000, 2002-2026"
 journals/ijndc,Int. J. Networked Distributed Comput.,International Journal of Networked and Distributed Computing,2211-7938,2211-7946,Q2,2013-2026
 journals/ijst,Int. J. Speech Technol.,International Journal of Speech Technology,1381-2416,1572-8110,Q2,"1995, 1997-2026"
-journals/ijais,Int. J. Account. Inf. Syst.,International Journal of Web Information Systems,1744-0084,1744-0092,Q2,2005-2026
-journals/ijbis,Int. J. Bus. Inf. Syst.,International Journal of Web Information Systems,1744-0084,1744-0092,Q2,2005-2026
-journals/ijeis,Int. J. Enterp. Inf. Syst.,International Journal of Web Information Systems,1744-0084,1744-0092,Q2,2005-2026
 journals/ijwis,Int. J. Web Inf. Syst.,International Journal of Web Information Systems,1744-0084,1744-0092,Q2,2005-2026
 journals/ijwin,Int. J. Wirel. Inf. Networks,International Journal of Wireless Information Networks,1068-9605,1572-8129,Q2,"1994-2024, 2026"
 journals/ijdar,Int. J. Document Anal. Recognit.,International Journal on Document Analysis and Recognition,1433-2825,1433-2833,Q2,1998-2026
@@ -189,7 +167,6 @@ journals/ijswis,Int. J. Semantic Web Inf. Syst.,International Journal on Semanti
 journals/sttt,Int. J. Softw. Tools Technol. Transf.,International Journal on Software Tools for Technology Transfer,1433-2779,1433-2787,Q2,1997-2026
 journals/jaiscr,J. Artif. Intell. Soft Comput. Res.,Journal of Artificial Intelligence and Soft Computing Research,2449-6499,2083-2567,Q2,2013-2026
 journals/jcnc,J. Comput. Networks Commun.,Journal of Computer Networks and Communications,2090-7141,2090715X,Q2,2011-2026
-journals/jcsandt,J. Comput. Sci. Technol.,Journal of Computer Science and Technology,1860-4749,1000-9000,Q2,1986-2026
 journals/jcst,J. Comput. Sci. Technol.,Journal of Computer Science and Technology,1860-4749,1000-9000,Q2,1986-2026
 journals/jcise,J. Comput. Inf. Sci. Eng.,Journal of Computing and Information Science in Engineering,1530-9827,,Q2,2001-2026
 journals/jd,J. Documentation,Journal of Documentation,0022-0418,,Q2,1945-2026
@@ -217,7 +194,6 @@ journals/swarm,Swarm Intell.,Swarm Intelligence,1935-3820,1935-3812,Q2,2008-2026
 journals/symmetry,Symmetry,Symmetry,2073-8994,,Q2,2009-2026
 journals/systems,Syst.,Systems,2079-8954,,Q2,2013-2026
 journals/se,Syst. Eng.,Systems Engineering,1520-6858,1098-1241,Q2,1998-2026
-journals/tecs,ACM Trans. Embed. Comput. Syst.,ACM Transactions on Computer Systems,0734-2071,1557-7333,Q3,1983-2025
 journals/tocs,ACM Trans. Comput. Syst.,ACM Transactions on Computer Systems,0734-2071,1557-7333,Q3,1983-2025
 journals/tomacs,ACM Trans. Model. Comput. Simul.,ACM Transactions on Modeling and Computer Simulation,1558-1195,1049-3301,Q3,1991-2026
 journals/acta,Acta Informatica,Acta Informatica,1432-0525,0001-5903,Q3,1971-2026
@@ -232,13 +208,11 @@ journals/efi,Educ. Inf.,Education for Information,1875-8649,0167-8329,Q3,1983-20
 journals/cga,IEEE Computer Graphics and Applications,IEEE Computer Graphics and Applications,1558-1756,0272-1716,Q3,1981-2026
 journals/ieicetb,IEICE Trans. Commun.,IEICE Transactions on Communications,0916-8516,1745-1345,Q3,1993-2026
 journals/ieicet,IEICE Trans. Inf. Syst.,IEICE Transactions on Information and Systems,1745-1361,0916-8532,Q3,1993-2026
-journals/ieicetd,IEICE Trans. Inf. Syst.,IEICE Transactions on Information and Systems,1745-1361,0916-8532,Q3,1993-2026
 journals/iet-com,IET Commun.,IET Communications,1751-8628,1751-8636,Q3,2007-2026
 journals/informaticaSI,Informatica (Slovenia),Informatica (Slovenia),1854-3871,0350-5596,Q3,1995-2025
 journals/itc,Inf. Technol. Control.,Information Technology and Control,2335884X,1392124X,Q3,2008-2025
 journals/aepia,Inteligencia Artif.,Inteligencia Artificial,1137-3601,1988-3064,Q3,"2004-2010, 2012-2026"
 journals/ia,Intelligenza Artificiale,Intelligenza Artificiale,1724-8035,2211-0097,Q3,2018-2025
-journals/iajet,Int. Arab. J. e Technol.,International Arab Journal of Information Technology,1683-3198,2309-4524,Q3,2008-2026
 journals/iajit,Int. Arab J. Inf. Technol.,International Arab Journal of Information Technology,1683-3198,2309-4524,Q3,2008-2026
 journals/ijahuc,Int. J. Ad Hoc Ubiquitous Comput.,International Journal of Ad Hoc and Ubiquitous Computing,1743-8225,1743-8233,Q3,2005-2026
 journals/ijcta,Int. J. Circuit Theory Appl.,International Journal of Circuit Theory and Applications,1097007X,0098-9886,Q3,1973-2026
@@ -252,16 +226,10 @@ journals/ijicte,Int. J. Inf. Commun. Technol. Educ.,International Journal of Inf
 journals/ijisscm,Int. J. Inf. Syst. Supply Chain Manag.,International Journal of Information Systems and Supply Chain Management,1935-5726,1935-5734,Q3,2008-2026
 journals/ijitwe,Int. J. Inf. Technol. Web Eng.,International Journal of Information Technology and Web Engineering,1554-1053,1554-1045,Q3,2006-2025
 journals/ijcsm,Int. J. Comput. Sci. Math.,International Journal of Mathematics and Computer Science,1814-0432,1814-0424,Q3,2017-2025
-journals/ijcssport,Int. J. Comput. Sci. Sport,International Journal of Mathematics and Computer Science,1814-0432,1814-0424,Q3,2017-2025
-journals/ijfcs,Int. J. Found. Comput. Sci.,International Journal of Mathematics and Computer Science,1814-0432,1814-0424,Q3,2017-2025
 journals/ijprai,Int. J. Pattern Recognit. Artif. Intell.,International Journal of Pattern Recognition and Artificial Intelligence,0218-0014,1793-6381,Q3,1995-2026
 journals/ijpcc,Int. J. Pervasive Comput. Commun.,International Journal of Pervasive Computing and Communications,1742738X,1742-7371,Q3,"2005, 2007-2026"
 journals/ijseke,Int. J. Softw. Eng. Knowl. Eng.,International Journal of Software Engineering and Knowledge Engineering,1793-6403,0218-1940,Q3,"1992, 1994, 1996-2026"
-journals/ijbir,Int. J. Bus. Intell. Res.,International Journal of Swarm Intelligence Research,1947-9263,1947-9271,Q3,"2010, 2016-2026"
 journals/ijsir,Int. J. Swarm Intell. Res.,International Journal of Swarm Intelligence Research,1947-9263,1947-9271,Q3,"2010, 2016-2026"
-journals/ijiatm,Int. J. Innov. Technol. Manag.,International Journal of Technology Management,1741-5276,0267-5730,Q3,"1986-1989, 1996-2025"
-journals/ijmtm,Int. J. Manuf. Technol. Manag.,International Journal of Technology Management,1741-5276,0267-5730,Q3,"1986-1989, 1996-2025"
-journals/ijstm,Int. J. Serv. Technol. Manag.,International Journal of Technology Management,1741-5276,0267-5730,Q3,"1986-1989, 1996-2025"
 journals/ijtm,Int. J. Technol. Manag.,International Journal of Technology Management,1741-5276,0267-5730,Q3,"1986-1989, 1996-2025"
 journals/ijwmip,Int. J. Wavelets Multiresolution Inf. Process.,"International Journal of Wavelets, Multiresolution and Information Processing",1793690X,0219-6913,Q3,2006-2026
 journals/ijwgs,Int. J. Web Grid Serv.,International Journal of Web and Grid Services,1741-1106,1741-1114,Q3,2005-2025
@@ -270,7 +238,6 @@ journals/ijait,Int. J. Artif. Intell. Tools,International Journal on Artificial 
 journals/jaise,J. Ambient Intell. Smart Environ.,Journal of Ambient Intelligence and Smart Environments,1876-1364,,Q3,2009-2025
 journals/jcit-igi,J. Cases Inf. Technol.,Journal of Cases on Information Technology,1548-7717,1548-7725,Q3,2005-2026
 journals/compnet,J. Complex Networks,Journal of Complex Networks,2051-1310,2051-1329,Q3,2013-2026
-journals/csec,J. Comput. Secur.,Journal of Computer Security,0926227X,1875-8924,Q3,"1992-1993, 1995-2024"
 journals/jcs,J. Comput. Secur.,Journal of Computer Security,0926227X,1875-8924,Q3,"1992-1993, 1995-2024"
 journals/jdm,J. Database Manag.,Journal of Database Management,1533-8010,1063-8016,Q3,"1990, 1995, 1998-1999, 2003-2026"
 journals/jei,J. Electronic Imaging,Journal of Electronic Imaging,1560229X,1017-9909,Q3,1993-2025
