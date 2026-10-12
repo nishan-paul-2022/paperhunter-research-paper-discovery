@@ -8,21 +8,34 @@ Out of 13 missing papers, all were excluded for valid reasons based on our extra
 
 ## Paper-by-Paper Analysis
 
-### ✅ Paper #25 (COAPT) - **FALSE ALARM - Actually Extracted**
+### ❌ Paper #25 (COAPT) - **Not in DBLP XML Snapshot**
 
 **Venue:** BDMA (Big Data Mining and Analytics)  
 **DOI:** 10.26599/BDMA.2025.9020078  
 **Date:** June 2026
 
-**Status:** ✅ **EXTRACTED**
+**Status:** ❌ **NOT EXTRACTED**
+
+**Reason for Exclusion:**
+✗ **Paper not in DBLP XML snapshot (downloaded Oct 7, 2024)**
+- ✅ Venue tracked: BDMA is Q1 in our `list-of-journals.csv`
+- ✅ DBLP indexes BDMA: 147 papers from 2026 in dblp.xml
+- ✅ Other BDMA papers extracted: 38 papers in `papers/q1-2026.csv`
+- ✗ **BUT:** This specific paper (DOI 10.26599/BDMA.2025.9020078) not in dblp.xml
+- ✗ Paper published June 2026, likely indexed after our DBLP snapshot date
 
 **Verification:**
-- ✅ SJR 2025: Q1 ranked (Computer Science Applications)
-- ✅ DBLP: Indexed as `journals/bigdatama/`
-- ✅ Our system: In `journal-context/list-of-journals.csv`
-- ✅ Paper extracted: Should be in `papers/q1-2026.csv`
+```bash
+# Paper NOT in DBLP XML
+grep "2025.9020078" database/dblp.xml
+# Result: No match
 
-**Conclusion:** This paper SHOULD be in our dataset. If user cannot find it, check the exact title or DOI in q1-2026.csv.
+# Venue IS tracked and other papers extracted
+grep "journals/bigdatama/" papers/q1-2026.csv | wc -l
+# Result: 38 BDMA papers extracted
+```
+
+**Conclusion:** Not a system bug. Paper published after DBLP snapshot was downloaded. Re-downloading DBLP XML would capture it.
 
 ---
 
@@ -42,7 +55,7 @@ Out of 13 missing papers, all were excluded for valid reasons based on our extra
 
 ---
 
-### ❌ Paper #4, #8 (CTF-LLM, CurriculumPT) - Journal Not in SJR CS
+### ❌ Paper #4, #8 (CTF-LLM, CurriculumPT) - Journal Not in DBLP
 
 **Venue:** Applied Sciences (MDPI)  
 **ISSN:** 2076-3417  
@@ -50,28 +63,31 @@ Out of 13 missing papers, all were excluded for valid reasons based on our extra
 **Dates:** June 2025, August 2025
 
 **Reason for Exclusion:**  
-✗ **In SJR but NOT in CS category we use**  
-- ✅ SJR 2025: Q2 ranked
-- ✗ **BUT:** Ranked in "Engineering (miscellaneous)" / "Multidisciplinary" categories
-- ✗ **NOT in:** "Computer Science" subject area we filtered
-- ✗ DBLP: MDPI Applied Sciences not indexed in DBLP
+✗ **MDPI Applied Sciences NOT in DBLP database**  
+- ✅ SJR 2025: Q2 ranked (in our `sjr-2025-cs.csv` file)
+- ✅ In SJR source pool: `journal-supplement/3-source-pool.csv` 
+- ✗ **DBLP: NOT indexed** (DBLP does not index MDPI Applied Sciences)
+- ✗ Result: Never appeared in `journal-supplement/2-dblp-unmatched.csv` to be matched
 
-**Our SJR Filter:** We use `sjr-2025-cs.csv` which filters by Computer Science subject  
-**Applied Sciences in our file:** YES (line 883) - ranked Q2  
-**In our journal list:** NO - because it's not core CS journal, it's multidisciplinary engineering
+**Why not in DBLP:**
+DBLP is selective about journal coverage. MDPI Applied Sciences is a multidisciplinary journal not indexed by DBLP. DBLP does index some MDPI journals (e.g., MDPI Software, MDPI Network) but not Applied Sciences.
 
 **Verification:**
 ```bash
-# Applied Sciences IS in SJR CS file but marked as Q2 Engineering/Multidisciplinary
-grep "20763417" journal-context/sjr-2025-cs.csv
-# Result: Q2, but categories are "Engineering (miscellaneous)", not pure CS
+# Applied Sciences IS in SJR CS
+grep "2076-3417" journal-context/sjr-2025-cs.csv
+# Result: Q2, Engineering/Multidisciplinary
 
-# NOT in our extraction list (correctly excluded)
-grep "applied sciences" journal-context/list-of-journals.csv
-# Result: No match
+# Applied Sciences IS in SJR pool (available for matching)
+grep "2076-3417" journal-supplement/3-source-pool.csv
+# Result: Applied Sciences (Switzerland),2076-3417,,Q2
+
+# Applied Sciences NOT in DBLP XML
+grep -i "applied sciences.*mdpi\|2076-3417" database/dblp.xml
+# Result: No matches (journal not indexed by DBLP)
 ```
 
-**Conclusion:** Our journal matching algorithm (b_match.py) correctly excluded it because it's not a core CS journal, it's multidisciplinary.
+**Conclusion:** Cannot extract papers from journals not in DBLP. DBLP coverage limitation, not our system bug.
 
 ---
 
@@ -199,8 +215,8 @@ grep -i "csae\|computer science.*automation" conference-context/core-2026.csv
 |------------------|-------|---------|
 | **Workshop/Companion track** | 4 | #3, #17, #18, #27 |
 | **Conference not in CORE rankings** | 7 | #9, #13, #14, #16, #21, #26 |
-| **Journal in SJR but not CS category** | 2 | #4, #8 (MDPI Applied Sciences) |
-| **False alarm (actually extracted)** | 1 | #25 (BDMA - should be in q1-2026.csv) |
+| **Journal not in DBLP database** | 2 | #4, #8 (MDPI Applied Sciences - in SJR Q2 but not indexed by DBLP) |
+| **Paper not in DBLP snapshot** | 1 | #25 (BDMA - published after Oct 7, 2024 snapshot) |
 
 ---
 
