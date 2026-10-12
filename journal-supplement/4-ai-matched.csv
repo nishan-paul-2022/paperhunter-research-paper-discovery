@@ -132,7 +132,7 @@ journals/bioinformatics,Bioinform.,Bioinformatics,1367-4811,1367-4803,Q1,HIGH,St
 journals/biomedsem,J. Biomed. Semant.,Journal of Biomedical Semantics,2041-1480,,Q2,HIGH,Standard ISO abbreviation match to 'Journal of Biomedical Semantics'
 journals/biosystems,Biosyst.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/bise,Bus. Inf. Syst. Eng.,Business and Information Systems Engineering,1867-0202,2363-7005,Q1,HIGH,Standard ISO abbreviation match to 'Business and Information Systems Engineering'
-journals/bit,BIT,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
+journals/bit,BIT,BIT Numerical Mathematics,1572-9125,0006-3835,Q1,HIGH,"Standard abbreviation for BIT, ISSN 0006-3835 verified"
 journals/bjet,Br. J. Educ. Technol.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/bjmc,Balt. J. Mod. Comput.,Baltic Journal of Modern Computing,2255-8950,2255-8942,Q4,HIGH,Standard ISO abbreviation match to 'Baltic Journal of Modern Computing'
 journals/bmcgenomics,BMC Genom.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
@@ -1433,7 +1433,7 @@ journals/pacmcgit,Proc. ACM Comput. Graph. Interact. Tech.,Proceedings of the AC
 journals/pacmhci,Proc. ACM Hum. Comput. Interact.,Proceedings of the ACM on Human-Computer Interaction,2573-0142,,Q2,HIGH,Standard ISO abbreviation match to 'Proceedings of the ACM on Human-Computer Interaction'
 journals/pacmmod,Proc. ACM Manag. Data,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/pacmnet,Proc. ACM Netw.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
-journals/pacmpl,Proc. ACM Program. Lang.,Proceedings of the ACM on Programming Languages,2475-1421,,Q1,HIGH,Standard ISO abbreviation match to 'Proceedings of the ACM on Programming Languages'
+journals/pacmpl,Proc. ACM Program. Lang.,Proceedings of the ACM on Programming Languages,2475-1421,,Q1,HIGH,PACMPL includes POPL/PLDI conference papers published as journal articles
 journals/pacmse,Proc. ACM Softw. Eng.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/pai,Prog. Artif. Intell.,Progress in Artificial Intelligence,2192-6360,2192-6352,Q2,HIGH,Standard ISO abbreviation match to 'Progress in Artificial Intelligence'
 journals/pajais,Pac. Asia J. Assoc. Inf. Syst.,Pacific Asia Journal of the Association for Information Systems,1943-7536,1943-7544,Q2,HIGH,Standard ISO abbreviation match to 'Pacific Asia Journal of the Association for Information Systems'
@@ -1464,7 +1464,7 @@ journals/pnc,Photonic Netw. Commun.,Photonic Network Communications,1387974X,157
 journals/poit,Probl. Inf. Transm.,Problems of Information Transmission,0032-9460,1608-3253,Q3,HIGH,Standard ISO abbreviation match to 'Problems of Information Transmission'
 journals/polibits,POLIBITS,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/polity,Inf. Polity,Information Polity,1875-8754,1570-1255,Q2,HIGH,Standard ISO abbreviation match to 'Information Polity'
-journals/pomacs,Proc. ACM Meas. Anal. Comput. Syst.,Proceedings of the ACM on Measurement and Analysis of Computing Systems,2476-1249,,Q1,HIGH,Standard ISO abbreviation match to 'Proceedings of the ACM on Measurement and Analysis of Computing 
+journals/pomacs,Proc. ACM Meas. Anal. Comput. Syst.,Proceedings of the ACM on Measurement and Analysis of Computing Systems,2476-1249,,Q1,HIGH,POMACS includes SIGMETRICS conference papers published as journal articles
 journals/popets,Proc. Priv. Enhancing Technol.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/ppl,Parallel Process. Lett.,Parallel Processing Letters,1793642X,0129-6264,Q4,HIGH,Standard ISO abbreviation match to 'Parallel Processing Letters'
 journals/ppna,Peer-to-Peer Netw. Appl.,Peer-to-Peer Networking and Applications,1936-6450,1936-6442,Q2,HIGH,Standard ISO abbreviation match to 'Peer-to-Peer Networking and Applications'
@@ -1488,7 +1488,7 @@ journals/quanbio,Quant. Biol.,Quantitative Biology,2095-4697,2095-4689,Q2,HIGH,S
 journals/quantum,Quantum,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/que,Qual. User Exp.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/questa,Queueing Syst. Theory Appl.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
-journals/queue,ACM Queue,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
+journals/queue,ACM Queue,Queue,1542-7730,1542-7749,Q3,HIGH,"ACM Queue official title in SJR, ISSN 1542-7730 verified"
 journals/rairo,RAIRO Oper. Res.,RAIRO - Operations Research,1290-3868,0399-0559,Q3,HIGH,Standard ISO abbreviation match to 'RAIRO - Operations Research'
 journals/ral,IEEE Robotics Autom. Lett.,IEEE Robotics and Automation Letters,2377-3766,,Q1,HIGH,Standard ISO abbreviation match to 'IEEE Robotics and Automation Letters'
 journals/ram,IEEE Robotics Autom. Mag.,IEEE Robotics and Automation Magazine,1070-9932,1558223X,Q1,HIGH,Standard ISO abbreviation match to 'IEEE Robotics and Automation Magazine'
@@ -1823,7 +1823,7 @@ journals/virtualworlds,Virtual Worlds,Virtual Worlds,2813-2084,,Q1,HIGH,Exact no
 journals/visintelligence,Vis. Intell.,Visual Intelligence,2731-9008,2097-3330,Q1,HIGH,Standard ISO abbreviation match to 'Visual Intelligence'
 journals/vjcs,Vietnam. J. Comput. Sci.,Vietnam Journal of Computer Science,2196-8896,,Q3,HIGH,Standard ISO abbreviation match to 'Vietnam Journal of Computer Science'
 journals/vlc,J. Vis. Lang. Comput.,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
-journals/vldb,VLDB J.,VLDB Journal,1066-8888,0949877X,Q1,HIGH,Standard ISO abbreviation match to 'VLDB Journal'
+journals/vldb,VLDB J.,VLDB Journal,1066-8888,0949877X,Q1,HIGH,Official VLDB journal match
 journals/vlsi,VLSI Design,NO_MATCH,,,,NONE,"Not indexed in SJR CS pool (regional, defunct, or non-CS category)"
 journals/vlsisp,J. Signal Process. Syst.,Journal of Signal Processing Systems,1939-8115,1939-8018,Q2,HIGH,Standard ISO abbreviation match to 'Journal of Signal Processing Systems'
 journals/vr,Virtual Real.,Virtual Reality,1434-9957,1359-4338,Q1,HIGH,Standard ISO abbreviation match to 'Virtual Reality'
