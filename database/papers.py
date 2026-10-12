@@ -135,7 +135,7 @@ def scan_xml(xml_path, journal_index, conf_index):
     
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║             paperhunter  ·  Paper Extractor                         ║")
+    print("║             paperhunter  ·  Paper Extractor                          ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
     print(f"Processing DBLP XML ({size / 1_000_000_000:.1f} GB)...")
