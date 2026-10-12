@@ -21,9 +21,9 @@ SJR_SRC = CONTEXT_DIR / "sjr-2025-cs.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
 
 # Output files with indexed names
-OUT_1_ISSN = SUPPLEMENT_DIR / "1-issn-matched.csv"
-OUT_2_DBLP_TODO = SUPPLEMENT_DIR / "2-dblp-todo.csv"
-OUT_3_SJR_POOL = SUPPLEMENT_DIR / "3-sjr-pool.csv"
+OUT_1_ISSN = SUPPLEMENT_DIR / "1-exact-matched.csv"
+OUT_2_DBLP_TODO = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
+OUT_3_SJR_POOL = SUPPLEMENT_DIR / "3-source-pool.csv"
 OUT_FINAL = CONTEXT_DIR / "list-of-journals.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
@@ -249,7 +249,7 @@ def phase_write(
         writer.writerows(issn_sorted)
     
     qtrs = Counter(r["quartile"] for r in issn_matched)
-    print(f"\n  File 1: 1-issn-matched.csv (AUTO-APPROVED)")
+    print(f"\n  File 1: 1-exact-matched.csv (AUTO-APPROVED)")
     print(f"  → {out_issn}")
     print(f"  Total: {len(issn_matched)} journals")
     print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n")
@@ -263,7 +263,7 @@ def phase_write(
         writer.writeheader()
         writer.writerows(dblp_sorted)
     
-    print(f"  File 2: 2-dblp-todo.csv (Need Matching)")
+    print(f"  File 2: 2-dblp-unmatched.csv (Need Matching)")
     print(f"  → {out_dblp}")
     print(f"  Total: {len(dblp_unmatched)} journals\n")
     
@@ -278,7 +278,7 @@ def phase_write(
         writer.writerows(sjr_sorted)
     
     qtrs_sjr = Counter(r["quartile"] for r in sjr_available)
-    print(f"  File 3: 3-sjr-pool.csv (Available for Matching)")
+    print(f"  File 3: 3-source-pool.csv (Available for Matching)")
     print(f"  → {out_sjr}")
     print(f"  Total: {len(sjr_available)} journals")
     print(f"  Q1: {qtrs_sjr['Q1']}   Q2: {qtrs_sjr['Q2']}   Q3: {qtrs_sjr['Q3']}   Q4: {qtrs_sjr['Q4']}\n")
@@ -288,9 +288,9 @@ def phase_write(
     print(f"  → Or use AI prompt with files 2 & 3\n")
     
     print(f"  Overall Statistics:")
-    print(f"  ├─ 1-issn-matched.csv: {len(issn_matched):,} journals (AUTO-APPROVED)")
-    print(f"  ├─ 2-dblp-todo.csv: {len(dblp_unmatched):,} journals (NEED MATCHING)")
-    print(f"  ├─ 3-sjr-pool.csv: {len(sjr_available):,} journals (AVAILABLE)")
+    print(f"  ├─ 1-exact-matched.csv: {len(issn_matched):,} journals (AUTO-APPROVED)")
+    print(f"  ├─ 2-dblp-unmatched.csv: {len(dblp_unmatched):,} journals (NEED MATCHING)")
+    print(f"  ├─ 3-source-pool.csv: {len(sjr_available):,} journals (AVAILABLE)")
     print(f"  └─ Expected final output: ~{len(issn_matched) + int(len(dblp_unmatched)*0.5):,} matched journals\n")
 
 
@@ -332,8 +332,8 @@ def main() -> None:
 
     print("━" * 70)
     print("  Done.")
-    print("  → 1-issn-matched.csv ready to use")
-    print("  → Run c_match.py to process 2-dblp-todo.csv + 3-sjr-pool.csv")
+    print("  → 1-exact-matched.csv ready to use")
+    print("  → Run c_match.py to process 2-dblp-unmatched.csv + 3-source-pool.csv")
     print("━" * 70)
     print()
 

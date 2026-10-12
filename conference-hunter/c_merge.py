@@ -3,8 +3,8 @@
 Merge exact-matched and fuzzy-matched conferences into final list.
 
 Reads:
-  - supplement/1-conf-exact-matched.csv (exact acronym matches)
-  - supplement/4-conf-matched.csv (fuzzy matches, HIGH confidence only)
+  - supplement/1-exact-matched.csv (exact acronym matches)
+  - supplement/4-fuzzy-matched.csv (fuzzy matches, HIGH confidence only)
 
 Writes:
   - context/list-of-conferences.csv (final combined list)
@@ -18,8 +18,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTEXT_DIR = REPO_ROOT / "conference-context"
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 
-IN_EXACT = SUPPLEMENT_DIR / "1-conf-exact-matched.csv"
-IN_FUZZY = SUPPLEMENT_DIR / "4-conf-matched.csv"
+IN_EXACT = SUPPLEMENT_DIR / "1-exact-matched.csv"
+IN_FUZZY = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
 OUT_FINAL = CONTEXT_DIR / "list-of-conferences.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_acronym", "title", "ranking"]
@@ -33,7 +33,7 @@ def main():
     print()
     
     # Read exact matches
-    print("  Reading 1-conf-exact-matched.csv...")
+    print("  Reading 1-exact-matched.csv...")
     exact_rows = []
     with open(IN_EXACT, encoding='utf-8') as f:
         for row in csv.DictReader(f):
@@ -46,7 +46,7 @@ def main():
     print(f"  ✓ {len(exact_rows)} exact-matched conferences loaded\n")
     
     # Read fuzzy matches (only HIGH confidence)
-    print("  Reading 4-conf-matched.csv (HIGH confidence only)...")
+    print("  Reading 4-fuzzy-matched.csv (HIGH confidence only)...")
     fuzzy_rows = []
     skipped = 0
     with open(IN_FUZZY, encoding='utf-8') as f:

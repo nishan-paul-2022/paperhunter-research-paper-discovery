@@ -17,12 +17,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 
-DBLP_CSV = SUPPLEMENT_DIR / "2-conf-todo.csv"
-CORE_CSV = SUPPLEMENT_DIR / "3-core-pool.csv"
+DBLP_CSV = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
+CORE_CSV = SUPPLEMENT_DIR / "3-source-pool.csv"
 CORE_MASTER_CSV = REPO_ROOT / "conference-context" / "core-2026.csv"
-OUT_CSV = SUPPLEMENT_DIR / "4-conf-matched.csv"
+OUT_CSV = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
 
-# Curated, verified mappings for conferences in 2-conf-todo.csv to 3-core-pool.csv
+# Curated, verified mappings for conferences in 2-dblp-unmatched.csv to 3-source-pool.csv
 EXPLICIT_MAP = {
     # ─── A* Conferences ───
     'conf/mm': ('ACM Multimedia', 'HIGH', 'Official DBLP key for ACM Multimedia (ACMMM)'),

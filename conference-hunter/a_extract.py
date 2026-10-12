@@ -32,9 +32,9 @@ CORE_SRC = CONTEXT_DIR / "core-2026.csv"
 XML_PATH = DATA_DIR / "dblp.xml"
 
 # Output files
-OUT_1_EXACT = SUPPLEMENT_DIR / "1-conf-exact-matched.csv"
-OUT_2_TODO = SUPPLEMENT_DIR / "2-conf-todo.csv"
-OUT_3_CORE_POOL = SUPPLEMENT_DIR / "3-core-pool.csv"
+OUT_1_EXACT = SUPPLEMENT_DIR / "1-exact-matched.csv"
+OUT_2_TODO = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
+OUT_3_CORE_POOL = SUPPLEMENT_DIR / "3-source-pool.csv"
 OUT_FINAL = CONTEXT_DIR / "list-of-conferences.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_acronym", "title", "ranking"]
@@ -245,7 +245,7 @@ def phase_write(
         writer.writerows(exact_sorted)
     
     ranks = Counter(r["ranking"] for r in exact_matched)
-    print(f"\n  File 1: 1-conf-exact-matched.csv (AUTO-APPROVED)")
+    print(f"\n  File 1: 1-exact-matched.csv (AUTO-APPROVED)")
     print(f"  → {out_exact}")
     print(f"  Total: {len(exact_matched)} conferences")
     print(f"  A*: {ranks['A*']}   A: {ranks['A']}   B: {ranks['B']}   C: {ranks['C']}\n")
@@ -259,7 +259,7 @@ def phase_write(
         writer.writeheader()
         writer.writerows(dblp_sorted)
     
-    print(f"  File 2: 2-conf-todo.csv (Need Matching)")
+    print(f"  File 2: 2-dblp-unmatched.csv (Need Matching)")
     print(f"  → {out_dblp}")
     print(f"  Total: {len(dblp_unmatched)} conferences\n")
     
@@ -274,14 +274,14 @@ def phase_write(
         writer.writerows(core_sorted)
     
     ranks_core = Counter(r["ranking"] for r in core_available)
-    print(f"  File 3: 3-core-pool.csv (Available for Matching)")
+    print(f"  File 3: 3-source-pool.csv (Available for Matching)")
     print(f"  → {out_core}")
     print(f"  Total: {len(core_available)} conferences")
     print(f"  A*: {ranks_core['A*']}   A: {ranks_core['A']}   B: {ranks_core['B']}   C: {ranks_core['C']}\n")
     
     print(f"  NEXT STEP:")
-    print(f"  → Use 1-conf-exact-matched.csv directly")
-    print(f"  → Run c_conf_match.py to match remaining\n")
+    print(f"  → Use 1-exact-matched.csv directly")
+    print(f"  → Run b_match.py to match remaining\n")
     
     # Calculate expected final output
     # Maximum is limited by CORE list size (we can't exceed total CORE conferences)
@@ -291,9 +291,9 @@ def phase_write(
     estimated = len(exact_matched) + int(len(core_available) * 0.3)  # ~30% more matches
     
     print(f"  Overall Statistics:")
-    print(f"  ├─ 1-conf-exact-matched.csv: {len(exact_matched):,} conferences (AUTO-APPROVED)")
-    print(f"  ├─ 2-conf-todo.csv: {len(dblp_unmatched):,} conferences (NEED MATCHING)")
-    print(f"  ├─ 3-core-pool.csv: {len(core_available):,} conferences (AVAILABLE)")
+    print(f"  ├─ 1-exact-matched.csv: {len(exact_matched):,} conferences (AUTO-APPROVED)")
+    print(f"  ├─ 2-dblp-unmatched.csv: {len(dblp_unmatched):,} conferences (NEED MATCHING)")
+    print(f"  ├─ 3-source-pool.csv: {len(core_available):,} conferences (AVAILABLE)")
     print(f"  ├─ Expected: ~{estimated:,} conferences (realistic)")
     print(f"  └─ Maximum possible: {max_possible:,} conferences (all CORE matched)\n")
 
@@ -334,8 +334,8 @@ def main() -> None:
 
     print("━" * 70)
     print("  Done.")
-    print("  → Use 1-conf-exact-matched.csv directly")
-    print("  → Run c_conf_match.py for remaining matches")
+    print("  → Use 1-exact-matched.csv directly")
+    print("  → Run b_match.py for remaining matches")
     print("━" * 70)
     print()
 

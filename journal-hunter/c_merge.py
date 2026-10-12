@@ -3,8 +3,8 @@
 Merge ISSN-matched and AI-matched journals into final list.
 
 Reads:
-  - context/1-issn-matched.csv (ISSN auto-matches)
-  - context/4-ai-matched.csv (AI/algorithm matches, HIGH confidence only)
+  - context/1-exact-matched.csv (ISSN auto-matches)
+  - context/4-fuzzy-matched.csv (AI/algorithm matches, HIGH confidence only)
 
 Writes:
   - context/list-of-journals.csv (final combined list)
@@ -18,8 +18,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTEXT_DIR = REPO_ROOT / "journal-context"
 SUPPLEMENT_DIR = REPO_ROOT / "journal-supplement"
 
-IN_ISSN = SUPPLEMENT_DIR / "1-issn-matched.csv"
-IN_AI = SUPPLEMENT_DIR / "4-ai-matched.csv"
+IN_ISSN = SUPPLEMENT_DIR / "1-exact-matched.csv"
+IN_AI = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
 OUT_FINAL = CONTEXT_DIR / "list-of-journals.csv"
 
 OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
@@ -33,7 +33,7 @@ def main():
     print()
     
     # Read ISSN matches (all are valid)
-    print("  Reading 1-issn-matched.csv...")
+    print("  Reading 1-exact-matched.csv...")
     issn_rows = []
     with open(IN_ISSN, encoding='utf-8') as f:
         for row in csv.DictReader(f):
@@ -48,7 +48,7 @@ def main():
     print(f"  ✓ {len(issn_rows)} ISSN-matched journals loaded\n")
     
     # Read AI matches (only HIGH confidence)
-    print("  Reading 4-ai-matched.csv (HIGH confidence only)...")
+    print("  Reading 4-fuzzy-matched.csv (HIGH confidence only)...")
     ai_rows = []
     skipped = 0
     with open(IN_AI, encoding='utf-8') as f:

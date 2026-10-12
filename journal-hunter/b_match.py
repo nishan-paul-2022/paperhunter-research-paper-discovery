@@ -7,9 +7,9 @@ from collections import defaultdict
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTEXT_DIR = REPO_ROOT / "journal-context"
 SUPPLEMENT_DIR = REPO_ROOT / "journal-supplement"
-DBLP_CSV = SUPPLEMENT_DIR / "2-dblp-todo.csv"
-SJR_CSV = SUPPLEMENT_DIR / "3-sjr-pool.csv"
-OUT_CSV = SUPPLEMENT_DIR / "4-ai-matched.csv"
+DBLP_CSV = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
+SJR_CSV = SUPPLEMENT_DIR / "3-source-pool.csv"
+OUT_CSV = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
 
 STOPWORDS = {
     'of', 'the', 'and', 'in', 'on', 'for', 'to', 'a', 'an', '&', 'at', 'by', 'with', 'part',

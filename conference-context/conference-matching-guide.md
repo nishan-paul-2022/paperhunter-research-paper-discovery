@@ -32,20 +32,20 @@ python3 conference-hunter/a_extract.py
 **This extracts conferences from DBLP XML and performs Phase 1 acronym matching.**
 
 Generates:
-- `conference-supplement/1-conf-exact-matched.csv` - Exact acronym matches (auto-approved)
-- `conference-supplement/2-conf-todo.csv` - DBLP conferences needing matching
-- `conference-supplement/3-core-pool.csv` - CORE conferences available for matching
+- `conference-supplement/1-exact-matched.csv` - Exact acronym matches (auto-approved)
+- `conference-supplement/2-dblp-unmatched.csv` - DBLP conferences needing matching
+- `conference-supplement/3-source-pool.csv` - CORE conferences available for matching
 
 ### Step 2: Run b_match.py (Fuzzy Matching)
 ```bash
 python3 conference-hunter/b_match.py
 ```
 
-Generates `conference-supplement/4-conf-matched.csv` with HIGH and NONE confidence entries.
+Generates `conference-supplement/4-fuzzy-matched.csv` with HIGH and NONE confidence entries.
 
 ### Step 3: Review Algorithm Output
 
-Check `conference-supplement/4-conf-matched.csv`:
+Check `conference-supplement/4-fuzzy-matched.csv`:
 - **HIGH confidence** → Likely correct, spot-check
 - **NONE (NO_MATCH)** → Need your review
 
@@ -63,7 +63,7 @@ Focus on **NO_MATCH entries**:
 
 3. **Check if in CORE pool:**
    ```bash
-   grep -i "[acronym]" conference-supplement/3-core-pool.csv
+   grep -i "[acronym]" conference-supplement/3-source-pool.csv
    ```
 
 4. **Common issues:**
@@ -76,17 +76,17 @@ Focus on **NO_MATCH entries**:
 
 ## Input Files
 
-### 1. `conference-supplement/2-conf-todo.csv`
+### 1. `conference-supplement/2-dblp-unmatched.csv`
 Columns: `dblp_key`, `dblp_acronym`
 
 DBLP conferences not matched by exact acronym.
 
-### 2. `conference-supplement/3-core-pool.csv`
+### 2. `conference-supplement/3-source-pool.csv`
 Columns: `title`, `acronym`, `ranking`
 
 CORE conferences available (A*, A, B, C).
 
-### 3. `conference-supplement/4-conf-matched.csv`
+### 3. `conference-supplement/4-fuzzy-matched.csv`
 Columns: `dblp_key`, `dblp_acronym`, `core_title`, `acronym`, `ranking`, `confidence`, `reasoning`
 
 Algorithm's matching results.
@@ -149,12 +149,12 @@ Example: "AAAI" (main) vs "AAAI-Asia" (regional)
 ```bash
 python conference-hunter/b_match.py
 ```
-Output: `conference-supplement/4-conf-matched.csv`
+Output: `conference-supplement/4-fuzzy-matched.csv`
 
 ### Phase 2: AI Review
 1. **Count NO_MATCH:**
    ```bash
-   grep "NO_MATCH" conference-supplement/4-conf-matched.csv | wc -l
+   grep "NO_MATCH" conference-supplement/4-fuzzy-matched.csv | wc -l
    ```
 
 2. **For each NO_MATCH:**
@@ -174,8 +174,8 @@ python conference-hunter/c_merge.py
 ```
 
 Merges:
-- `conference-supplement/1-conf-exact-matched.csv`
-- `conference-supplement/4-conf-matched.csv` (HIGH only)
+- `conference-supplement/1-exact-matched.csv`
+- `conference-supplement/4-fuzzy-matched.csv` (HIGH only)
 
 Output: `conference-context/list-of-conferences.csv`
 
@@ -183,7 +183,7 @@ Output: `conference-context/list-of-conferences.csv`
 
 ## Output Format
 
-Update `conference-supplement/4-conf-matched.csv` for NO_MATCH entries:
+Update `conference-supplement/4-fuzzy-matched.csv` for NO_MATCH entries:
 
 ```csv
 dblp_key,dblp_acronym,core_title,acronym,ranking,confidence,reasoning
@@ -233,7 +233,7 @@ python conference-hunter/b_match.py
 # Output: 123 HIGH, 456 NONE
 
 # Step 2: Review NO_MATCH
-grep "NO_MATCH" conference-supplement/4-conf-matched.csv | head -5
+grep "NO_MATCH" conference-supplement/4-fuzzy-matched.csv | head -5
 
 # Step 3: Search one
 # conf/neurips,NEURIPS,NO_MATCH,...
@@ -241,10 +241,10 @@ grep "NO_MATCH" conference-supplement/4-conf-matched.csv | head -5
 # Found: "Advances in Neural Information Processing Systems (was NIPS)" - A*
 
 # Step 4: Check CORE pool
-grep -i "neurips\|nips" conference-supplement/3-core-pool.csv
+grep -i "neurips\|nips" conference-supplement/3-source-pool.csv
 # Result: Advances in Neural Information Processing Systems (was NIPS),NeurIPS,A*
 
-# Step 5: Update conference-supplement/4-conf-matched.csv
+# Step 5: Update conference-supplement/4-fuzzy-matched.csv
 # Change: conf/nips,NIPS,NO_MATCH,...
 # To: conf/nips,NIPS,Advances in Neural Information Processing Systems (was NIPS),NeurIPS,A*,HIGH,Conference renamed
 ```
