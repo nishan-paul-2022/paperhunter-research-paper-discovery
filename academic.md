@@ -4,7 +4,7 @@ A simple reference. Every metric has: **what it measures → formula → example
 
 ---
 
-## 0. Quick Map (Who Does What)
+## 1. Quick Map (Who Does What)
 
 | Role | Who | What they do |
 |---|---|---|
@@ -24,7 +24,7 @@ A simple reference. Every metric has: **what it measures → formula → example
 
 ---
 
-## 1. Basic Terms
+## 2. Basic Terms
 
 | Term | Meaning |
 |---|---|
@@ -45,11 +45,11 @@ A simple reference. Every metric has: **what it measures → formula → example
 
 ---
 
-## 2. Journal Metrics
+## 3. Journal Metrics
 
 Notation: **Y** = the year the metric is reported for.
 
-### 2.1 Clarivate (Web of Science / Journal Citation Reports)
+### 3.1 Clarivate (Web of Science / Journal Citation Reports)
 
 #### A. JIF: Journal Impact Factor
 - **Measures:** Average citations per paper for a journal's recent papers.
@@ -101,7 +101,7 @@ Immediacy = Citations in Y to items published in Y
 
 ---
 
-### 2.2 Elsevier (Scopus)
+### 3.2 Elsevier (Scopus)
 
 #### D. CiteScore
 - **Measures:** Average citations per document.
@@ -203,7 +203,7 @@ FWCI = Actual citations of the paper
 
 ---
 
-### 2.3 Journal Metrics Comparison
+### 3.3 Journal Metrics Comparison
 
 | Metric | Owner | Database | Window | Field-normalized? | Measures |
 |---|---|---|---|---|---|
@@ -219,9 +219,9 @@ FWCI = Actual citations of the paper
 
 ---
 
-## 3. Author-Level Metrics
+## 4. Author-Level Metrics
 
-### 3.1 h-index
+### 4.1 h-index
 - **Measures:** Balance of productivity (number of papers) and impact (citations).
 - **Window:** Lifetime. It never goes down.
 - **Rule:** h = the largest number such that **h papers each have at least h citations**.
@@ -248,17 +248,17 @@ FWCI = Actual citations of the paper
 - **Comparison:** Two authors both have h = 3. Author X has h-median = 4 (papers barely qualify), Author Y has h-median = 95 (papers far exceed the threshold). Y has the stronger core.
 - **Applies to:** Authors, journals, conferences (same as the h-index).
 
-### 3.2 i10-index
+### 4.2 i10-index
 - **Measures:** Number of papers with **at least 10 citations**.
 - **Available in:** Google Scholar only. Shows "All" and "Since last 5 years".
 - **Example:** Citations: **120, 50, 14, 11, 10, 9, 2**
   Papers with ≥ 10 citations: 120, 50, 14, 11, 10 → **i10-index = 5**
 - **Weakness:** A paper with 10 citations counts the same as one with 10,000. A paper with 9 counts zero.
 
-### 3.3 Total citations
+### 4.3 Total citations
 Simple count of all citations to all of an author's papers. Example: 50 + 22 + 4 + 3 + 1 = **80**.
 
-### 3.4 h-index vs i10 on the same author
+### 4.4 h-index vs i10 on the same author
 
 | Citations (sorted) | 50, 22, 4, 3, 1 |
 |---|---|
@@ -268,20 +268,20 @@ Simple count of all citations to all of an author's papers. Example: 50 + 22 + 4
 
 ---
 
-## 4. Paper-Level Metrics
+## 5. Paper-Level Metrics
 
 | Metric | What it is | Example |
 |---|---|---|
 | **Citation count** | Times the paper was cited | "Cited 45 times" |
-| **FWCI** (Scopus) | Citations vs. world average (see 2.2 G) | 8 citations ÷ 4 expected = **2.0** |
+| **FWCI** (Scopus) | Citations vs. world average (see 3.2 G) | 8 citations ÷ 4 expected = **2.0** |
 | **CNCI** (WoS) | Same idea in Clarivate's database | 6 ÷ 2 = **3.0** |
 | **PlumX / Altmetrics** | Online attention in 5 groups: Usage (views, downloads), Captures (bookmarks), Mentions (blogs, Wikipedia), Social media, Citations | Paper has 500 downloads, 20 tweets, 3 Wikipedia mentions |
 
 ---
 
-## 5. Conference Evaluation
+## 6. Conference Evaluation
 
-### 5.1 Do journal metrics apply to conferences?
+### 6.1 Do journal metrics apply to conferences?
 
 | Metric | Applies to conferences? |
 |---|---|
@@ -293,7 +293,7 @@ Simple count of all citations to all of an author's papers. Example: 50 + 22 + 4
 | **Tier ranking (CORE)** | **Yes**, the dedicated system. |
 | **Acceptance rate** | **Yes**, the main selectivity signal. |
 
-### 5.2 CORE Ranking (Computer Science)
+### 6.2 CORE Ranking (Computer Science)
 Expert panels assign a tier (no formula):
 
 | Tier | Meaning | Examples |
@@ -303,21 +303,21 @@ Expert panels assign a tier (no formula):
 | **B** | Good, solid venue | |
 | **C** | Meets baseline standards, local or narrow scope | |
 
-### 5.3 Acceptance Rate
+### 6.3 Acceptance Rate
 ```
 Acceptance Rate = (Accepted papers / Submitted papers) x 100
 ```
 - **Example:** 800 submissions, 120 accepted → 120 / 800 = **15%**
 - Rule of thumb: below ~20% is very competitive.
 
-### 5.4 Other prestige signals
+### 6.4 Other prestige signals
 - Who sits on the program committee
 - Keynote / plenary speakers
 - Review process (double-blind is preferred)
 - Where proceedings are indexed (IEEE Xplore, ACM DL, Springer LNCS, Scopus, WoS)
 - h-index / h-median of the conference
 
-### 5.5 Journal acceptance rate
+### 6.5 Journal acceptance rate
 Journals also have acceptance rates, but they are **optional to publish**, and are a **secondary** signal.
 
 | | Journal | Conference |
@@ -330,9 +330,9 @@ Journals also have acceptance rates, but they are **optional to publish**, and a
 
 ---
 
-## 6. Publishers and Venues
+## 7. Publishers and Venues
 
-### 6.1 Big Five commercial publishers
+### 7.1 Big Five commercial publishers
 
 | Publisher | Strength | Sample journals | Conference vehicle |
 |---|---|---|---|
@@ -344,7 +344,7 @@ Journals also have acceptance rates, but they are **optional to publish**, and a
 
 *Nature* is a journal owned by **Springer Nature** (Nature Portfolio).
 
-### 6.2 Top publishers and venues in Computer Science
+### 7.2 Top publishers and venues in Computer Science
 In CS, **conferences are often more prestigious than journals.**
 
 | Organization | Type | Examples |
@@ -355,14 +355,14 @@ In CS, **conferences are often more prestigious than journals.**
 | **Springer** | Commercial | IJCV, Nature Machine Intelligence, LNCS (ECCV) |
 | **Independent / OA** | | NeurIPS, ICLR, ICML (PMLR, OpenReview), JMLR |
 
-### 6.3 Is there a metric for the publisher itself?
+### 7.3 Is there a metric for the publisher itself?
 No single score exists, because publishers print hundreds of journals in unrelated fields. People judge **each journal** (JIF, CiteScore, SJR, quartile) and check whether the publisher is reputable (member of COPE, indexed in Scopus / WoS, not on predatory lists).
 
 ---
 
-## 7. How to Read a SCImago (SJR) Table
+## 8. How to Read a SCImago (SJR) Table
 
-### 7.1 Filter panel
+### 8.1 Filter panel
 
 | Filter | Meaning |
 |---|---|
@@ -378,7 +378,7 @@ No single score exists, because publishers print hundreds of journals in unrelat
 | Min. Total Citations (3 yrs) | Hide journals with fewer citations than this number (removes inactive journals) |
 | Min. Citable Docs (3 yrs) | Hide journals that published fewer papers than this number (removes tiny journals) |
 
-### 7.2 Table columns
+### 8.2 Table columns
 
 | Column | Meaning |
 |---|---|
@@ -402,7 +402,7 @@ No single score exists, because publishers print hundreds of journals in unrelat
 
 ---
 
-## 8. Time Windows at a Glance
+## 9. Time Windows at a Glance
 
 | Metric | Window | Can it go down? |
 |---|---|---|
@@ -417,7 +417,7 @@ No single score exists, because publishers print hundreds of journals in unrelat
 
 ---
 
-## 9. Master Cheat Sheet
+## 10. Master Cheat Sheet
 
 | Metric | Applies to | Provider | One-line meaning | Formula |
 |---|---|---|---|---|
@@ -438,7 +438,7 @@ No single score exists, because publishers print hundreds of journals in unrelat
 
 ---
 
-## 10. Quartile: Worked Example
+## 11. Quartile: Worked Example
 
 A category has **100 journals**, ranked by impact (JIF or SJR):
 
@@ -453,7 +453,7 @@ A journal ranked **#18** is **Q1**. A journal can be Q1 in one category and Q2 i
 
 ---
 
-## 11. Practical Checklist: Is a Venue Good?
+## 12. Practical Checklist: Is a Venue Good?
 
 **Journal**
 1. Indexed in Scopus and/or Web of Science?
