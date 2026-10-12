@@ -2,18 +2,42 @@
 
 ## Objective
 
-You are an AI agent tasked with matching DBLP journals to SJR journals. You have access to:
-1. **b_match.py** - An intelligent matching algorithm with curated mappings
-2. **Web search** - To verify ISSNs and journal details
-3. **Your reasoning** - To make final decisions on ambiguous cases
+Build a comprehensive list of SJR-ranked journals by matching DBLP database entries to SJR rankings.
+
+## Workflow Overview
+
+**Automated Steps (Python):**
+1. `a_extract.py` - Scan DBLP XML, extract journals, match by ISSN → Generates exact matches
+2. `b_match.py` - Fuzzy match remaining journals → Generates HIGH/NONE confidence matches
+3. `c_merge.py` - Combine ISSN + HIGH confidence matches → Final journal list
+
+**Your Role (AI):**  
+Between steps 2 and 3, review `b_match.py` output and improve matching quality using:
+- Algorithm results as starting point
+- Web search to verify ISSNs and publisher details
+- Your reasoning to resolve ambiguous cases (renamed journals, publisher changes)
+
+**Goal:** Maximize correct matches, minimize false positives.
 
 ---
 
 ## Strategy: Hybrid AI + Algorithm Approach
 
-### Step 1: Run b_match.py First
+### Step 1: Run a_extract.py (Initial Extraction)
 ```bash
 cd /home/nishan/Documents/paperhunter-research-paper-discovery
+python3 journal-hunter/a_extract.py
+```
+
+**This extracts journals from DBLP XML and performs Phase 1 ISSN matching.**
+
+Generates:
+- `journal-supplement/1-issn-matched.csv` - ISSN exact matches (auto-approved)
+- `journal-supplement/2-dblp-todo.csv` - DBLP journals needing matching
+- `journal-supplement/3-sjr-pool.csv` - SJR journals available for matching
+
+### Step 2: Run b_match.py (Fuzzy Matching)
+```bash
 python3 journal-hunter/b_match.py
 ```
 
@@ -21,13 +45,13 @@ This generates `journal-supplement/4-ai-matched.csv` with:
 - **HIGH confidence matches** - Algorithm found strong matches
 - **NONE matches** - No algorithmic match found
 
-### Step 2: Review Algorithm Results
+### Step 3: Review Algorithm Results
 
 Examine `4-ai-matched.csv`:
 - **HIGH confidence with score reasoning** → Likely correct, spot-check a few
 - **NONE (NO_MATCH)** → These need your intelligence
 
-### Step 3: AI Manual Review (Your Job)
+### Step 4: AI Manual Review (Your Job)
 
 Focus on **NO_MATCH entries only**. For each:
 

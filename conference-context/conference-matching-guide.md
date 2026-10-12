@@ -2,30 +2,54 @@
 
 ## Objective
 
-Match DBLP conferences to CORE rankings using:
-1. **b_match.py** - Intelligent matching algorithm
-2. **Web search** - Verify conference names and acronyms
-3. **Your intelligence** - Handle edge cases
+Build a comprehensive list of CORE-ranked conferences by matching DBLP database entries to CORE rankings.
+
+## Workflow Overview
+
+**Automated Steps (Python):**
+1. `a_extract.py` - Scan DBLP XML, extract conferences, match by acronym → Generates exact matches
+2. `b_match.py` - Fuzzy match remaining conferences → Generates HIGH/NONE confidence matches
+3. `c_merge.py` - Combine exact + HIGH confidence matches → Final conference list
+
+**Your Role (AI):**  
+Between steps 2 and 3, review `b_match.py` output and improve matching quality using:
+- Algorithm results as starting point
+- Web search to verify conference details
+- Your intelligence to resolve edge cases (renamed conferences, aliases, ambiguous matches)
+
+**Goal:** Maximize correct matches, minimize false positives.
 
 ---
 
 ## Strategy: Hybrid Algorithm + AI Review
 
-### Step 1: Run b_match.py
+### Step 1: Run a_extract.py (Initial Extraction)
 ```bash
 cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python conference-hunter/b_match.py
+python3 conference-hunter/a_extract.py
+```
+
+**This extracts conferences from DBLP XML and performs Phase 1 acronym matching.**
+
+Generates:
+- `conference-supplement/1-conf-exact-matched.csv` - Exact acronym matches (auto-approved)
+- `conference-supplement/2-conf-todo.csv` - DBLP conferences needing matching
+- `conference-supplement/3-core-pool.csv` - CORE conferences available for matching
+
+### Step 2: Run b_match.py (Fuzzy Matching)
+```bash
+python3 conference-hunter/b_match.py
 ```
 
 Generates `conference-supplement/4-conf-matched.csv` with HIGH and NONE confidence entries.
 
-### Step 2: Review Algorithm Output
+### Step 3: Review Algorithm Output
 
 Check `conference-supplement/4-conf-matched.csv`:
 - **HIGH confidence** → Likely correct, spot-check
 - **NONE (NO_MATCH)** → Need your review
 
-### Step 3: AI Manual Review
+### Step 4: AI Manual Review
 
 Focus on **NO_MATCH entries**:
 
@@ -195,9 +219,9 @@ conf/unknown,UNKNOWN,NO_MATCH,,,NONE,Not in CORE rankings (regional workshop)
 
 ## Expected Results
 
-- **HIGH confidence**: ~400-500 conferences
-- **NO_MATCH**: ~300-400 (workshops, regional, not ranked)
-- **Total matched**: ~400-500 conferences
+- **HIGH confidence**: Majority of remaining conferences after exact matching
+- **NO_MATCH**: Workshops, regional conferences, unranked venues
+- **Total matched**: High coverage of CORE-ranked conferences
 
 ---
 

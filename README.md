@@ -27,18 +27,22 @@ python3 download.py
 cd ..
 ```
 
-### 4. Extract Journal List
-```bash
-python3 journal-hunter/a_extract.py
-```
+### 4. Build Journal List
+
 Provide `journal-context/journal-matching-guide.md` to AI.
 
-Output: `journal-context/list-of-journals.csv`
+**Output:** `journal-context/list-of-journals.csv`
 
-### 5. Extract Conference List
-```bash
-python3 conference-hunter/a_extract.py
-```
+### 5. Build Conference List
+
 Provide `conference-context/conference-matching-guide.md` to AI.
 
-Output: `conference-context/list-of-conferences.csv`
+**Output:** `conference-context/list-of-conferences.csv`
+
+### 6. Extract Papers
+
+```bash
+python3 database/paper.py
+```
+
+**Output:** `papers/*.csv` (32 files organized by ranking and year)
