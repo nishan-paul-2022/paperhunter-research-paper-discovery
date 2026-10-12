@@ -29,6 +29,7 @@ EXPLICIT_MAP = {
     'conf/kbse': ('Automated Software Engineering Conference', 'HIGH', 'DBLP key for ASE (formerly Knowledge-Based Software Engineering KBSE)'),
     'conf/compgeom': ('International Symposium on Computational Geometry', 'HIGH', 'Official DBLP key for Symposium on Computational Geometry (SoCG)'),
     'conf/uss': ('Usenix Security Symposium', 'HIGH', 'Official DBLP key for USENIX Security Symposium'),
+    'conf/sigsoft': ('ACM International Conference on the Foundations of Software Engineering (was ESEC/FSE, changed 2024; duplicate previously listed as ESEC, removed from DB)', 'HIGH', 'SIGSOFT is DBLP key for modern FSE papers (2018+), conf/fse is for older papers'),
 
     # ─── A Conferences ───
     'conf/gis': ('ACM International Conference on Advances in Geographic Information Systems', 'HIGH', 'Official DBLP key for ACM SIGSPATIAL (GIS)'),
