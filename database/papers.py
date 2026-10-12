@@ -28,23 +28,15 @@ CONF_LIST = REPO_ROOT / "conference-context" / "list-of-conferences.csv"
 # Year range
 YEARS = [2023, 2024, 2025, 2026]
 
-# CSV output fields (all available DBLP info)
+# CSV output fields
 FIELDS = [
     "dblp_key",
     "title",
     "authors",
     "year",
     "venue",
-    "volume",
-    "number",
-    "pages",
-    "doi",
     "ee",
-    "url",
-    "booktitle",
-    "publisher",
-    "isbn",
-    "type"
+    "url"
 ]
 
 
@@ -101,16 +93,8 @@ def parse_paper(element, paper_type):
         "authors": extract_authors(element),
         "year": year,
         "venue": extract_text(element, "journal") or extract_text(element, "booktitle"),
-        "volume": extract_text(element, "volume"),
-        "number": extract_text(element, "number"),
-        "pages": extract_text(element, "pages"),
-        "doi": extract_text(element, "doi"),
         "ee": extract_text(element, "ee"),
         "url": extract_text(element, "url"),
-        "booktitle": extract_text(element, "booktitle"),
-        "publisher": extract_text(element, "publisher"),
-        "isbn": extract_text(element, "isbn"),
-        "type": paper_type,
     }
 
 
