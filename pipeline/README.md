@@ -20,21 +20,18 @@ This pipeline filters 30,000+ papers from DBLP (across 32 CSV files) down to ~50
          │
          ▼
 ┌─────────────────┐
-│  STAGE 1        │  Fast fuzzy/keyword matching
-│  Fuzzy Filter   │  → Filters by AI + Security keywords
-└────────┬────────┘  → Excludes defensive papers
-         │            → ~90% reduction
-         ▼
-    ~50-100 papers
+│  STAGE 1        │  AI-powered semantic screening (ALL papers)
+│  AI Screening   │  → Fetches abstracts via DOI when missing
+└────────┬────────┘  → Applies 4 criteria (llm_agent, offensive_security, etc.)
+         │            → Classifies: baseline/survey/benchmark/evaluation
+         ▼            → Optional: fuzzy keywords for prioritization only
+    ~50-200 papers
          │
          ▼
 ┌─────────────────┐
-│  STAGE 2        │  AI-powered semantic screening
-│  AI Screening   │  → Fetches abstracts via DOI
-└────────┬────────┘  → Applies 4 criteria (llm_agent, offensive_security, etc.)
-         │            → Classifies: baseline/survey/benchmark/evaluation
-         ▼            → screen1 + optional independent screen2
-    ~20-50 papers
+│  STAGE 2        │  Independent screen2 (optional, for high confidence)
+│  AI Screening   │  → Fresh session, no looking at screen1 results
+└────────┬────────┘  → Same criteria, different screener perspective
          │
          ▼
 ┌─────────────────┐
@@ -48,6 +45,8 @@ This pipeline filters 30,000+ papers from DBLP (across 32 CSV files) down to ~50
     - related papers
     - needs_manual review
 ```
+
+**Key change**: Fuzzy filtering is **OPTIONAL** for prioritization only - ALL papers go to AI screening.
 
 ---
 
@@ -79,55 +78,55 @@ chmod +x run_pipeline.sh stage2_ai_screen.sh
 ### Option 1: Process a Single CSV
 
 ```bash
-# Run complete pipeline on one CSV file
+# Run complete pipeline on one CSV file (ALL papers processed)
 ./run_pipeline.sh full ../papers/q4-2026.csv
 ```
 
 ### Option 2: Process All CSVs (32 files)
 
 ```bash
-# Step 1: Run stage 1 on all CSVs
+# Step 1: Prepare all CSVs (NO filtering)
 ./run_pipeline.sh batch-all
 
-# Step 2: Pick a fuzzy-filtered file and run stage 2
-./run_pipeline.sh stage2 work/q4-2026_fuzzy.json
+# Step 2: Pick a prepared file and run screening
+./run_pipeline.sh screen work/q4-2026_prepared.json
 
 # Step 3: Aggregate results
-./run_pipeline.sh stage3 work/q4-2026_fuzzy
+./run_pipeline.sh aggregate work/q4-2026_prepared
 ```
 
 ---
 
 ## Detailed Usage
 
-### Stage 1: Fuzzy/Keyword Filtering
+### Prepare: Load ALL Papers (NO Filtering)
 
-**Fast first pass using keyword matching.**
+**Loads all papers with optional prioritization scores.**
 
 ```bash
-python stage1_fuzzy_filter.py ../papers/q4-2026.csv
+python prepare_for_screening.py ../papers/q4-2026.csv
 ```
 
 **What it does:**
-- Matches papers containing AI/LLM keywords + Security keywords
-- Excludes defensive papers (IDS, firewall, etc.)
-- Filters by date range (2023-2026)
-- ~90% reduction: 1000 papers → 50-100 candidates
+- Loads ALL papers from CSV (only filters by date range 2023-2026)
+- Assigns unique IDs
+- Optionally computes fuzzy scores for prioritization (NOT filtering)
+- High-score papers processed first for efficiency
 
 **Output:**
-- `work/q4-2026_fuzzy.json` - Filtered papers with fuzzy metadata
+- `work/q4-2026_prepared.json` - ALL papers ready for AI screening
 
 **Configuration:**
-- Edit `config.py` to customize keywords and exclusions
+- Edit `config.py` to customize prioritization keywords
 
 ---
 
-### Stage 2: AI-Powered Semantic Screening
+### Screen: AI-Powered Semantic Screening
 
-**AI agent classifies papers using semantic understanding.**
+**AI agent classifies ALL papers using semantic understanding.**
 
 ```bash
-./stage2_ai_screen.sh work/q4-2026_fuzzy.json screen1
+./stage1_ai_screen.sh work/q4-2026_prepared.json screen1
 ```
 
 **What it does:**
@@ -159,8 +158,8 @@ python stage1_fuzzy_filter.py ../papers/q4-2026.csv
 - **needs_manual** - Ambiguous, requires human review
 
 **Output:**
-- `work/q4-2026_fuzzy_screen1_decisions.jsonl` - Decisions in JSONL format
-- `work/q4-2026_fuzzy_screen1_state.json` - Progress tracking
+- `work/q4-2026_prepared_screen1_decisions.jsonl` - Decisions in JSONL format
+- `work/q4-2026_prepared_screen1_state.json` - Progress tracking
 
 **AI Agent Integration:**
 
@@ -171,7 +170,7 @@ Currently manual - you need to:
 
 **To automate with your AI agent:**
 
-Edit `stage2_ai_screen.sh` line ~62 and replace the manual pause with:
+Edit `stage1_ai_screen.sh` line ~62 and replace the manual pause with:
 
 ```bash
 # Example for antigravity or similar CLI agent
@@ -180,13 +179,13 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 
 ---
 
-### Stage 2 (Optional): Independent Screen2
+### Screen (Optional): Independent Screen2
 
 **Run a second independent screening pass for higher confidence.**
 
 ```bash
 # IMPORTANT: Run in a FRESH SESSION - don't open screen1 files!
-./stage2_ai_screen.sh work/q4-2026_fuzzy.json screen2
+./stage1_ai_screen.sh work/q4-2026_prepared.json screen2
 ```
 
 **Why screen2?**
@@ -196,12 +195,12 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 
 ---
 
-### Stage 3: Aggregate & Report
+### Aggregate: Reconcile & Report
 
 **Reconcile screens and generate final filtered CSVs.**
 
 ```bash
-python stage3_aggregate.py work/q4-2026_fuzzy
+python stage2_aggregate.py work/q4-2026_prepared
 ```
 
 **What it does:**
@@ -212,10 +211,10 @@ python stage3_aggregate.py work/q4-2026_fuzzy
 - Creates statistics report
 
 **Output:**
-- `output/q4-2026_fuzzy_all.csv` - All decisions
-- `output/q4-2026_fuzzy_core.csv` - Core papers only
-- `output/q4-2026_fuzzy_related.csv` - Related papers
-- `output/q4-2026_fuzzy_stats.json` - Statistics
+- `output/q4-2026_prepared_all.csv` - All decisions
+- `output/q4-2026_prepared_core.csv` - Core papers only
+- `output/q4-2026_prepared_related.csv` - Related papers
+- `output/q4-2026_prepared_stats.json` - Statistics
 
 **CSV Fields:**
 ```
@@ -232,7 +231,7 @@ evidence, reason, confidence, reconciliation
 ### Check processing status
 
 ```bash
-./run_pipeline.sh status work/q4-2026_fuzzy.json
+./run_pipeline.sh status work/q4-2026_prepared.json
 ```
 
 Shows:
@@ -249,22 +248,22 @@ Shows:
 **Recommended workflow:**
 
 ```bash
-# 1. Run stage 1 on all CSVs (fast, ~5 minutes)
+# 1. Prepare all CSVs (fast, ~3 minutes, NO filtering)
 ./run_pipeline.sh batch-all
 
-# 2. Review fuzzy results - check which CSVs have relevant papers
-ls -lh work/*_fuzzy.json
+# 2. Review prepared results - check which CSVs have papers
+ls -lh work/*_prepared.json
 
-# 3. For each CSV with relevant papers, run stage 2
-for fuzzy in work/*_fuzzy.json; do
-    echo "Processing $fuzzy..."
-    ./run_pipeline.sh stage2 "$fuzzy" screen1
+# 3. For each CSV, run screening
+for prepared in work/*_prepared.json; do
+    echo "Processing $prepared..."
+    ./run_pipeline.sh screen "$prepared" screen1
 done
 
 # 4. Aggregate each one
-for fuzzy in work/*_fuzzy.json; do
-    stem="${fuzzy%.json}"
-    ./run_pipeline.sh stage3 "$stem"
+for prepared in work/*_prepared.json; do
+    stem="${prepared%.json}"
+    ./run_pipeline.sh aggregate "$stem"
 done
 
 # 5. Merge all core papers into master list
@@ -277,7 +276,7 @@ cat output/*_core.csv > output/master_core_papers.csv
 
 ### Customize Keywords (config.py)
 
-Edit `config.py` to tune fuzzy matching:
+Edit `config.py` to tune prioritization:
 
 ```python
 KEYWORDS = {
@@ -286,6 +285,7 @@ KEYWORDS = {
     # Add more categories
 }
 
+# Used for lowering priority, not excluding
 EXCLUSION_KEYWORDS = [
     "intrusion detection", "firewall", ...  # Defensive terms
 ]
@@ -308,14 +308,15 @@ pipeline/
 ├── config.py                      # Configuration
 ├── run_pipeline.sh               # Master runner
 │
-├── stage1_fuzzy_filter.py        # Stage 1: Keyword filter
-├── stage2_batch_manager.py       # Stage 2: Batch manager
-├── stage2_ai_screen.sh          # Stage 2: AI screening orchestrator
+├── prepare_for_screening.py      # Prepare: Load ALL papers
+├── stage1_ai_screen.sh          # Screen: AI screening orchestrator
+├── stage2_batch_manager.py       # Screen: Batch manager
+├── stage2_aggregate.py           # Aggregate: Aggregation
 ├── ai_screening_prompt.md        # AI agent prompt template
-├── stage3_aggregate.py           # Stage 3: Aggregation
+├── summarize_all.py              # Utility: Cross-CSV summary
 │
 ├── work/                          # Working directory (gitignored)
-│   ├── *_fuzzy.json              # Fuzzy filter results
+│   ├── *_prepared.json           # Prepared papers
 │   ├── *_screen1_decisions.jsonl # Screen1 decisions
 │   ├── *_screen2_decisions.jsonl # Screen2 decisions (optional)
 │   ├── *_state.json              # Processing state
@@ -371,25 +372,25 @@ pipeline/
 
 | Stage | Input | Output | Time (per CSV) |
 |-------|-------|--------|----------------|
-| Stage 1 | 1000 papers | 50-100 papers | ~5 seconds |
-| Stage 2 | 50-100 papers | 20-50 papers | ~30-60 min (AI-dependent) |
-| Stage 3 | 20-50 decisions | CSV + stats | ~1 second |
+| Prepare | 1000 papers | 1000 papers | ~5 seconds |
+| Screen | 1000 papers | 20-50 papers | ~8-16 hours (AI-dependent) |
+| Aggregate | 20-50 decisions | CSV + stats | ~1 second |
 
 **For 32 CSVs:**
-- Stage 1: ~3 minutes total
-- Stage 2: ~16-32 hours (AI screening, parallelizable)
-- Stage 3: ~30 seconds total
+- Prepare: ~3 minutes total
+- Screen: ~256-512 hours total (parallelizable across CSVs)
+- Aggregate: ~30 seconds total
 
 ---
 
 ## Tips & Best Practices
 
-### 1. Optimize Fuzzy Filtering
+### 1. Optimize Prioritization
 - Start with conservative keywords (high recall)
-- Review fuzzy results before stage 2
-- Adjust `config.py` keywords based on what you see
+- Review prepared results before screening
+- Adjust `config.py` keywords based on patterns
 
-### 2. Parallelize Stage 2
+### 2. Parallelize Screening
 - Run multiple CSVs in parallel (different terminals)
 - Each CSV has independent state
 - Merge outputs at the end
@@ -401,7 +402,7 @@ pipeline/
 
 ### 4. Batch Processing
 - Process top-tier conferences first (a-star-*.csv)
-- Check if patterns emerge to refine keywords
+- Check if patterns emerge to refine prioritization
 - Use statistics to validate approach
 
 ### 5. Human Review
@@ -426,21 +427,21 @@ Once you have filtered papers:
 
 Need to customize the pipeline? Edit these files:
 
-- **Keywords/exclusions**: `config.py`
+- **Prioritization keywords**: `config.py`
 - **Screening criteria**: `ai_screening_prompt.md`
 - **Batch size/timeouts**: `config.py` (BATCH_SIZE)
-- **AI agent integration**: `stage2_ai_screen.sh` (line ~62)
+- **AI agent integration**: `stage1_ai_screen.sh` (line ~62)
 
 ---
 
 ## Summary
 
-This pipeline transforms 30,000+ papers into ~100 highly relevant papers through:
+This pipeline transforms 32,000+ papers into ~100-300 highly relevant papers through:
 
-1. **Fast keyword filtering** (Stage 1)
-2. **AI-powered semantic screening** (Stage 2)
-3. **Automated reconciliation & reporting** (Stage 3)
+1. **Prepare ALL papers** with optional prioritization scores
+2. **AI-powered semantic screening** on EVERY paper
+3. **Automated reconciliation & reporting**
 
-**Key advantage:** Reproducible, resumable, and scalable to handle all 32 CSV files efficiently.
+**Key advantage:** No papers discarded before AI review. Reproducible, resumable, and scalable.
 
 Good luck with your literature review! 🚀

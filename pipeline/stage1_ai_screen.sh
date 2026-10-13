@@ -1,26 +1,29 @@
 #!/bin/bash
 #
-# Stage 2: AI-Powered Semantic Screening
+# Stage 1: AI-Powered Semantic Screening
 # 
 # This script orchestrates the AI agent to process batches of papers.
 # It loops until all papers are processed.
 #
-# Usage: ./stage2_ai_screen.sh <fuzzy_json> <pass_name>
+# ⚠️  IMPORTANT: ALL papers are processed (no filtering)
+#    Fuzzy scores only determine processing order
+#
+# Usage: ./stage1_ai_screen.sh <prepared_json> <pass_name>
 #
 
 set -e
 
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <fuzzy_json> <pass_name>"
+    echo "Usage: $0 <prepared_json> <pass_name>"
     echo ""
     echo "Example:"
-    echo "  ./stage2_ai_screen.sh work/q4-2026_fuzzy.json screen1"
+    echo "  ./stage1_ai_screen.sh work/q4-2026_prepared.json screen1"
     echo ""
     echo "Pass names: screen1, screen2, verify"
     exit 1
 fi
 
-FUZZY_JSON="$1"
+PREPARED_JSON="$1"
 PASS_NAME="$2"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,23 +31,26 @@ BATCH_MGR="$SCRIPT_DIR/stage2_batch_manager.py"
 PROMPT_FILE="$SCRIPT_DIR/ai_screening_prompt.md"
 WORK_DIR="$SCRIPT_DIR/work"
 
-# Ensure fuzzy JSON exists
-if [ ! -f "$FUZZY_JSON" ]; then
-    echo "ERROR: Fuzzy JSON file not found: $FUZZY_JSON"
+# Ensure prepared JSON exists
+if [ ! -f "$PREPARED_JSON" ]; then
+    echo "ERROR: Prepared JSON file not found: $PREPARED_JSON"
     exit 1
 fi
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════════════╗"
-echo "║          Stage 2: AI-Powered Semantic Screening                      ║"
+echo "║          Stage 1: AI-Powered Semantic Screening                      ║"
 echo "╚══════════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Fuzzy JSON: $FUZZY_JSON"
-echo "Pass name:  $PASS_NAME"
+echo "Prepared JSON: $PREPARED_JSON"
+echo "Pass name:     $PASS_NAME"
+echo ""
+echo "⚠️  NOTE: ALL papers will be processed (no filtering)"
+echo "         Papers are ordered by relevance score for efficiency"
 echo ""
 
 # Show initial status
-python3 "$BATCH_MGR" status "$FUZZY_JSON" --pass "$PASS_NAME"
+python3 "$BATCH_MGR" status "$PREPARED_JSON" --pass "$PASS_NAME"
 
 # Main loop
 BATCH_NUM=1
@@ -55,14 +61,14 @@ while true; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Get next batch
-    BATCH_JSON=$(python3 "$BATCH_MGR" next "$FUZZY_JSON" --pass "$PASS_NAME" --n 10)
+    BATCH_JSON=$(python3 "$BATCH_MGR" next "$PREPARED_JSON" --pass "$PASS_NAME" --n 10)
     
     # Check if empty (all done)
     if [ "$BATCH_JSON" = "[]" ]; then
         echo ""
         echo "✓ All papers processed!"
         echo ""
-        python3 "$BATCH_MGR" status "$FUZZY_JSON" --pass "$PASS_NAME"
+        python3 "$BATCH_MGR" status "$PREPARED_JSON" --pass "$PASS_NAME"
         break
     fi
     
@@ -118,19 +124,19 @@ while true; do
     echo "Submitting decisions..."
     
     # Submit decisions
-    if python3 "$BATCH_MGR" submit "$FUZZY_JSON" "$BATCH_OUTPUT" --pass "$PASS_NAME"; then
+    if python3 "$BATCH_MGR" submit "$PREPARED_JSON" "$BATCH_OUTPUT" --pass "$PASS_NAME"; then
         echo "✓ Batch $BATCH_NUM completed"
         BATCH_NUM=$((BATCH_NUM + 1))
     else
         echo ""
         echo "ERROR: Batch rejected. Please fix the issues in $BATCH_OUTPUT and re-run:"
-        echo "  python3 $BATCH_MGR submit $FUZZY_JSON $BATCH_OUTPUT --pass $PASS_NAME"
+        echo "  python3 $BATCH_MGR submit $PREPARED_JSON $BATCH_OUTPUT --pass $PASS_NAME"
         exit 1
     fi
 done
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✓ Stage 2 ($PASS_NAME) Complete!"
+echo "✓ Stage 1 ($PASS_NAME) Complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

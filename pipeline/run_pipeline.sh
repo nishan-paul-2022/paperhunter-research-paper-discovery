@@ -14,28 +14,28 @@ usage() {
 Usage: $0 <command> [options]
 
 Commands:
-  full <csv_file>           Run complete pipeline (stage1 + stage2 + stage3)
-  stage1 <csv_file>         Run stage 1 only (fuzzy filtering)
-  stage2 <fuzzy_json>       Run stage 2 only (AI screening)
-  stage3 <fuzzy_stem>       Run stage 3 only (aggregation)
-  status <fuzzy_json>       Show processing status
-  batch-all                 Run stage1 on all CSV files in papers/
+  full <csv_file>           Run complete pipeline (prepare + screen1 + aggregate)
+  prepare <csv_file>        Prepare papers for screening (NO filtering)
+  screen <prepared_json>    Run AI screening on prepared papers
+  aggregate <prepared_stem> Aggregate screening results
+  status <prepared_json>    Show processing status
+  batch-all                 Prepare all CSV files in papers/
 
 Examples:
   # Run complete pipeline on one CSV
   $0 full ../papers/q4-2026.csv
 
-  # Run stage 1 on all CSVs
+  # Prepare all CSVs
   $0 batch-all
 
-  # Continue stage 2 after manual work
-  $0 stage2 work/q4-2026_fuzzy.json
+  # Continue screening after manual work
+  $0 screen work/q4-2026_prepared.json
 
   # Aggregate results
-  $0 stage3 work/q4-2026_fuzzy
+  $0 aggregate work/q4-2026_prepared
 
   # Check status
-  $0 status work/q4-2026_fuzzy.json
+  $0 status work/q4-2026_prepared.json
 
 EOF
 }
@@ -61,31 +61,34 @@ cmd_full() {
     echo ""
     echo "Input CSV: $csv_file"
     echo ""
+    echo "⚠️  NOTE: ALL papers will be processed (no filtering)"
+    echo "         Fuzzy scores only determine processing order"
+    echo ""
     
-    # Stage 1: Fuzzy filtering
-    echo "Running Stage 1: Fuzzy Filtering..."
-    python3 "$SCRIPT_DIR/stage1_fuzzy_filter.py" "$csv_file"
+    # Stage 1: Prepare papers (with prioritization)
+    echo "Running Prepare: Prepare Papers for Screening..."
+    python3 "$SCRIPT_DIR/prepare_for_screening.py" "$csv_file"
     
     local csv_stem=$(basename "$csv_file" .csv)
-    local fuzzy_json="$SCRIPT_DIR/work/${csv_stem}_fuzzy.json"
+    local prepared_json="$SCRIPT_DIR/work/${csv_stem}_prepared.json"
     
     # Stage 2: AI screening (screen1)
     echo ""
-    echo "Running Stage 2: AI Screening (screen1)..."
-    "$SCRIPT_DIR/stage2_ai_screen.sh" "$fuzzy_json" screen1
+    echo "Running Screen: AI Screening (screen1)..."
+    "$SCRIPT_DIR/stage1_ai_screen.sh" "$prepared_json" screen1
     
-    # Optional: Stage 2 screen2 (independent second opinion)
+    # Optional: Independent screen2
     echo ""
     read -p "Run independent screen2 pass? (y/n) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        "$SCRIPT_DIR/stage2_ai_screen.sh" "$fuzzy_json" screen2
+        "$SCRIPT_DIR/stage1_ai_screen.sh" "$prepared_json" screen2
     fi
     
     # Stage 3: Aggregation
     echo ""
-    echo "Running Stage 3: Aggregation..."
-    python3 "$SCRIPT_DIR/stage3_aggregate.py" "$fuzzy_json"
+    echo "Running Aggregate: Aggregation..."
+    python3 "$SCRIPT_DIR/stage2_aggregate.py" "$prepared_json"
     
     echo ""
     echo "╔══════════════════════════════════════════════════════════════════════╗"
@@ -105,45 +108,45 @@ cmd_stage1() {
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/stage1_fuzzy_filter.py" "$csv_file"
+    python3 "$SCRIPT_DIR/prepare_for_screening.py" "$csv_file"
 }
 
 cmd_stage2() {
-    local fuzzy_json="$1"
+    local prepared_json="$1"
     local pass_name="${2:-screen1}"
     
-    if [ -z "$fuzzy_json" ]; then
-        echo "ERROR: Fuzzy JSON file required"
+    if [ -z "$prepared_json" ]; then
+        echo "ERROR: Prepared JSON file required"
         usage
         exit 1
     fi
     
-    "$SCRIPT_DIR/stage2_ai_screen.sh" "$fuzzy_json" "$pass_name"
+    "$SCRIPT_DIR/stage1_ai_screen.sh" "$prepared_json" "$pass_name"
 }
 
 cmd_stage3() {
-    local fuzzy_stem="$1"
+    local prepared_stem="$1"
     
-    if [ -z "$fuzzy_stem" ]; then
-        echo "ERROR: Fuzzy JSON stem required"
+    if [ -z "$prepared_stem" ]; then
+        echo "ERROR: Prepared JSON stem required"
         usage
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/stage3_aggregate.py" "$fuzzy_stem"
+    python3 "$SCRIPT_DIR/stage2_aggregate.py" "$prepared_stem"
 }
 
 cmd_status() {
-    local fuzzy_json="$1"
+    local prepared_json="$1"
     local pass_name="${2:-screen1}"
     
-    if [ -z "$fuzzy_json" ]; then
-        echo "ERROR: Fuzzy JSON file required"
+    if [ -z "$prepared_json" ]; then
+        echo "ERROR: Prepared JSON file required"
         usage
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/stage2_batch_manager.py" status "$fuzzy_json" --pass "$pass_name"
+    python3 "$SCRIPT_DIR/stage2_batch_manager.py" status "$prepared_json" --pass "$pass_name"
 }
 
 cmd_batch_all() {
@@ -166,6 +169,8 @@ cmd_batch_all() {
     
     echo "Found $total CSV files to process"
     echo ""
+    echo "⚠️  NOTE: ALL papers will be prepared for screening (no filtering)"
+    echo ""
     
     for csv_file in "${csv_files[@]}"; do
         current=$((current + 1))
@@ -175,7 +180,7 @@ cmd_batch_all() {
         echo "Processing [$current/$total]: $(basename "$csv_file")"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
-        python3 "$SCRIPT_DIR/stage1_fuzzy_filter.py" "$csv_file"
+        python3 "$SCRIPT_DIR/prepare_for_screening.py" "$csv_file"
     done
     
     echo ""
@@ -183,12 +188,12 @@ cmd_batch_all() {
     echo "║          ✓ Batch Stage 1 Complete!                                   ║"
     echo "╚══════════════════════════════════════════════════════════════════════╝"
     echo ""
-    echo "Fuzzy-filtered JSON files in: $SCRIPT_DIR/work/"
+    echo "Prepared JSON files in: $SCRIPT_DIR/work/"
     echo ""
     echo "Next steps:"
-    echo "  1. Review fuzzy results"
-    echo "  2. Run stage 2 on selected files:"
-    echo "     $0 stage2 work/<file>_fuzzy.json"
+    echo "  1. Review prepared files"
+    echo "  2. Run screening on selected files:"
+    echo "     $0 screen work/<file>_prepared.json"
     echo ""
 }
 
@@ -200,15 +205,15 @@ case "$CMD" in
         shift
         cmd_full "$@"
         ;;
-    stage1)
+    prepare)
         shift
         cmd_stage1 "$@"
         ;;
-    stage2)
+    screen)
         shift
         cmd_stage2 "$@"
         ;;
-    stage3)
+    aggregate)
         shift
         cmd_stage3 "$@"
         ;;

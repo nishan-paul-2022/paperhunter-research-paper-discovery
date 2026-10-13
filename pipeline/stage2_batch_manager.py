@@ -22,19 +22,19 @@ from config import *
 
 
 class BatchManager:
-    def __init__(self, fuzzy_json_path, pass_name="screen1"):
-        self.fuzzy_json_path = Path(fuzzy_json_path)
+    def __init__(self, prepared_json_path, pass_name="screen1"):
+        self.prepared_json_path = Path(prepared_json_path)
         self.pass_name = pass_name  # screen1 | screen2 | verify
         
-        # Load fuzzy results
-        with open(self.fuzzy_json_path, 'r', encoding='utf-8') as f:
+        # Load prepared papers (all papers, possibly prioritized)
+        with open(self.prepared_json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             self.papers = data['papers']
             self.source_csv = data.get('source_csv', '')
         
         # State files
-        self.state_file = WORK_DIR / f"{self.fuzzy_json_path.stem}_{pass_name}_state.json"
-        self.decisions_file = WORK_DIR / f"{self.fuzzy_json_path.stem}_{pass_name}_decisions.jsonl"
+        self.state_file = WORK_DIR / f"{self.prepared_json_path.stem}_{pass_name}_state.json"
+        self.decisions_file = WORK_DIR / f"{self.prepared_json_path.stem}_{pass_name}_decisions.jsonl"
         
         # Load or initialize state
         self.load_state()
@@ -180,7 +180,7 @@ class BatchManager:
 
 def cmd_next_batch(args):
     """Get next batch of papers to process."""
-    manager = BatchManager(args.fuzzy_json, args.pass_name)
+    manager = BatchManager(args.prepared_json, args.pass_name)
     
     batch = manager.get_next_batch(args.n)
     remaining = manager.get_remaining_count()
@@ -194,7 +194,7 @@ def cmd_next_batch(args):
 
 def cmd_submit(args):
     """Submit decisions from batch processing."""
-    manager = BatchManager(args.fuzzy_json, args.pass_name)
+    manager = BatchManager(args.prepared_json, args.pass_name)
     
     # Load decisions from file
     with open(args.batch_output, 'r', encoding='utf-8') as f:
@@ -223,7 +223,7 @@ def cmd_submit(args):
 
 def cmd_status(args):
     """Show current processing status."""
-    manager = BatchManager(args.fuzzy_json, args.pass_name)
+    manager = BatchManager(args.prepared_json, args.pass_name)
     status = manager.get_status()
     
     print()
@@ -251,21 +251,21 @@ def main():
     
     # next_batch command
     next_parser = subparsers.add_parser('next', help='Get next batch of papers')
-    next_parser.add_argument('fuzzy_json', type=str, help='Path to fuzzy filter output JSON')
+    next_parser.add_argument('prepared_json', type=str, help='Path to prepared papers JSON')
     next_parser.add_argument('--pass', dest='pass_name', default='screen1', 
                              choices=['screen1', 'screen2', 'verify'], help='Pass name')
     next_parser.add_argument('--n', type=int, default=BATCH_SIZE, help='Batch size')
     
     # submit command
     submit_parser = subparsers.add_parser('submit', help='Submit batch decisions')
-    submit_parser.add_argument('fuzzy_json', type=str, help='Path to fuzzy filter output JSON')
+    submit_parser.add_argument('prepared_json', type=str, help='Path to prepared papers JSON')
     submit_parser.add_argument('batch_output', type=str, help='Path to batch output JSON')
     submit_parser.add_argument('--pass', dest='pass_name', default='screen1',
                                choices=['screen1', 'screen2', 'verify'], help='Pass name')
     
     # status command
     status_parser = subparsers.add_parser('status', help='Show processing status')
-    status_parser.add_argument('fuzzy_json', type=str, help='Path to fuzzy filter output JSON')
+    status_parser.add_argument('prepared_json', type=str, help='Path to prepared papers JSON')
     status_parser.add_argument('--pass', dest='pass_name', default='screen1',
                                choices=['screen1', 'screen2', 'verify'], help='Pass name')
     
