@@ -67,7 +67,7 @@ cmd_full() {
     
     # Stage 1: Prepare papers (with prioritization)
     echo "Running Prepare: Prepare Papers for Screening..."
-    python3 "$SCRIPT_DIR/c_prepare_for_screening.py" "$csv_file"
+    python3 "$SCRIPT_DIR/d_prepare_for_screening.py" "$csv_file"
     
     local csv_stem=$(basename "$csv_file" .csv)
     local prepared_json="$SCRIPT_DIR/work/${csv_stem}_prepared.json"
@@ -75,20 +75,20 @@ cmd_full() {
     # Stage 2: AI screening (screen1)
     echo ""
     echo "Running Screen: AI Screening (screen1)..."
-    "$SCRIPT_DIR/g_ai_screen.sh" "$prepared_json" screen1
+    "$SCRIPT_DIR/h_ai_screen.sh" "$prepared_json" screen1
     
     # Optional: Independent screen2
     echo ""
     read -p "Run independent screen2 pass? (y/n) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        "$SCRIPT_DIR/g_ai_screen.sh" "$prepared_json" screen2
+        "$SCRIPT_DIR/h_ai_screen.sh" "$prepared_json" screen2
     fi
     
     # Stage 3: Aggregation
     echo ""
     echo "Running Aggregate: Aggregation..."
-    python3 "$SCRIPT_DIR/e_aggregate.py" "$prepared_json"
+    python3 "$SCRIPT_DIR/f_aggregate.py" "$prepared_json"
     
     echo ""
     echo "╔══════════════════════════════════════════════════════════════════════╗"
@@ -108,7 +108,7 @@ cmd_stage1() {
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/c_prepare_for_screening.py" "$csv_file"
+    python3 "$SCRIPT_DIR/d_prepare_for_screening.py" "$csv_file"
 }
 
 cmd_stage2() {
@@ -121,7 +121,7 @@ cmd_stage2() {
         exit 1
     fi
     
-    "$SCRIPT_DIR/g_ai_screen.sh" "$prepared_json" "$pass_name"
+    "$SCRIPT_DIR/h_ai_screen.sh" "$prepared_json" "$pass_name"
 }
 
 cmd_stage3() {
@@ -133,7 +133,7 @@ cmd_stage3() {
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/e_aggregate.py" "$prepared_stem"
+    python3 "$SCRIPT_DIR/f_aggregate.py" "$prepared_stem"
 }
 
 cmd_status() {
@@ -146,10 +146,10 @@ cmd_status() {
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/d_batch_manager.py" status "$prepared_json" --pass "$pass_name"
+    python3 "$SCRIPT_DIR/e_batch_manager.py" status "$prepared_json" --pass "$pass_name"
 }
 
-cmd_batch_all() {
+cme_batch_all() {
     local papers_dir="$(dirname "$SCRIPT_DIR")/paper-list"
     
     if [ ! -d "$papers_dir" ]; then
@@ -180,7 +180,7 @@ cmd_batch_all() {
         echo "Processing [$current/$total]: $(basename "$csv_file")"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
-        python3 "$SCRIPT_DIR/c_prepare_for_screening.py" "$csv_file"
+        python3 "$SCRIPT_DIR/d_prepare_for_screening.py" "$csv_file"
     done
     
     echo ""
@@ -222,7 +222,7 @@ case "$CMD" in
         cmd_status "$@"
         ;;
     batch-all)
-        cmd_batch_all
+        cme_batch_all
         ;;
     "")
         usage

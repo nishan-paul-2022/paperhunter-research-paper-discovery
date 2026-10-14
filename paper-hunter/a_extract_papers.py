@@ -10,7 +10,7 @@ except ImportError:
     sys.exit("Missing lxml. Run: pip install lxml")
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-XML_PATH = SCRIPT_DIR / "dblp.xml"
+XML_PATH = REPO_ROOT / "paper-database" / "dblp.xml"
 OUTPUT_DIR = REPO_ROOT / "paper-list"
 JOURNAL_LIST = REPO_ROOT / "journal-context" / "list-of-journals.csv"
 CONF_LIST = REPO_ROOT / "conference-context" / "list-of-conferences.csv"

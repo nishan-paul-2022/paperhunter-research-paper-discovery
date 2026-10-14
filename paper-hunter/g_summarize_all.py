@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from collections import defaultdict, Counter
 sys.path.insert(0, str(Path(__file__).parent))
-from b_config import *
+from c_config import *
 def load_stats(stats_file):
     with open(stats_file, 'r', encoding='utf-8') as f:
         return json.load(f)

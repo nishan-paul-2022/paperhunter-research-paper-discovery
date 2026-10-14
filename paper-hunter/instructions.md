@@ -59,7 +59,7 @@ This pipeline filters 30,000+ papers from DBLP (across 32 CSV files) down to ~50
 python3 --version
 
 # Required packages
-pip install lxml  # For XML parsing (if running papers.py)
+pip install lxml
 ```
 
 ### Setup
@@ -104,7 +104,7 @@ chmod +x run_pipeline.sh stage2_ai_screen.sh
 **Loads all papers with optional prioritization scores.**
 
 ```bash
-python c_prepare_for_screening.py ../paper-list/q4-2026.csv
+python d_prepare_for_screening.py ../paper-list/q4-2026.csv
 ```
 
 **What it does:**
@@ -126,7 +126,7 @@ python c_prepare_for_screening.py ../paper-list/q4-2026.csv
 **AI agent classifies ALL papers using semantic understanding.**
 
 ```bash
-./g_ai_screen.sh work/q4-2026_prepared.json screen1
+./h_ai_screen.sh work/q4-2026_prepared.json screen1
 ```
 
 **What it does:**
@@ -170,7 +170,7 @@ Currently manual - you need to:
 
 **To automate with your AI agent:**
 
-Edit `g_ai_screen.sh` line ~62 and replace the manual pause with:
+Edit `h_ai_screen.sh` line ~62 and replace the manual pause with:
 
 ```bash
 # Example for antigravity or similar CLI agent
@@ -185,7 +185,7 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 
 ```bash
 # IMPORTANT: Run in a FRESH SESSION - don't open screen1 files!
-./g_ai_screen.sh work/q4-2026_prepared.json screen2
+./h_ai_screen.sh work/q4-2026_prepared.json screen2
 ```
 
 **Why screen2?**
@@ -231,7 +231,7 @@ evidence, reason, confidence, reconciliation
 ### Check processing status
 
 ```bash
-./a_run_pipeline.sh status work/q4-2026_prepared.json
+./b_run_pipeline.sh status work/q4-2026_prepared.json
 ```
 
 Shows:
@@ -249,7 +249,7 @@ Shows:
 
 ```bash
 # 1. Prepare all CSVs (fast, ~3 minutes, NO filtering)
-./a_run_pipeline.sh batch-all
+./b_run_pipeline.sh batch-all
 
 # 2. Review prepared results - check which CSVs have papers
 ls -lh work/*_prepared.json
@@ -257,13 +257,13 @@ ls -lh work/*_prepared.json
 # 3. For each CSV, run screening
 for prepared in work/*_prepared.json; do
     echo "Processing $prepared..."
-    ./a_run_pipeline.sh screen "$prepared" screen1
+    ./b_run_pipeline.sh screen "$prepared" screen1
 done
 
 # 4. Aggregate each one
 for prepared in work/*_prepared.json; do
     stem="${prepared%.json}"
-    ./a_run_pipeline.sh aggregate "$stem"
+    ./b_run_pipeline.sh aggregate "$stem"
 done
 
 # 5. Merge all core papers into master list
@@ -274,9 +274,9 @@ cat output/*_core.csv > output/master_core_papers.csv
 
 ## Configuration
 
-### Customize Keywords (a_config.py)
+### Customize Keywords (c_config.py)
 
-Edit `a_config.py` to tune prioritization:
+Edit `c_config.py` to tune prioritization:
 
 ```python
 KEYWORDS = {
@@ -310,7 +310,7 @@ pipeline/
 ├── z_run_pipeline.sh             # Master runner
 │
 ├── b_prepare_for_screening.py    # Prepare: Load ALL papers
-├── g_ai_screen.sh                # Screen: AI screening orchestrator
+├── h_ai_screen.sh                # Screen: AI screening orchestrator
 ├── c_batch_manager.py            # Screen: Batch manager
 ├── d_aggregate.py                # Aggregate: Aggregation
 ├── e_summarize_all.py            # Utility: Cross-CSV summary
@@ -430,7 +430,7 @@ Need to customize the pipeline? Edit these files:
 - **Prioritization keywords**: `a_config.py`
 - **Screening criteria**: `prompt.md`
 - **Batch size/timeouts**: `a_config.py` (BATCH_SIZE)
-- **AI agent integration**: `g_ai_screen.sh` (line ~62)
+- **AI agent integration**: `h_ai_screen.sh` (line ~62)
 
 ---
 

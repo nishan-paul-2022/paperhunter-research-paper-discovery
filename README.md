@@ -42,7 +42,8 @@ Provide `conference-context/conference-matching-guide.md` to AI.
 ### 6. Extract Papers
 
 ```bash
-python3 database/papers.py
+cd paper-hunter
+python a_extract_papers.py
 ```
 
 **Output:** `paper-list/*.csv` (32 files organized by ranking and year)

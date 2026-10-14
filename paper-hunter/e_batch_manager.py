@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent))
-from b_config import *
+from c_config import *
 class BatchManager:
     def __init__(self, prepared_json_path, pass_name="screen1"):
         self.prepared_json_path = Path(prepared_json_path)

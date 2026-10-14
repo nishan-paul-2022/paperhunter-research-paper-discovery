@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 sys.path.insert(0, str(Path(__file__).parent))
-from b_config import *
+from c_config import *
 def normalize_text(text):
     if not text:
         return ""

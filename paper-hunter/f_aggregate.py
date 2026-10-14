@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from collections import defaultdict, Counter
 sys.path.insert(0, str(Path(__file__).parent))
-from b_config import *
+from c_config import *
 def load_decisions(decisions_jsonl):
     decisions = []
     with open(decisions_jsonl, 'r', encoding='utf-8') as f:
