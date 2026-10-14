@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import *
+from a_config import *
 
 
 class BatchManager:

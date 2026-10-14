@@ -117,7 +117,7 @@ python prepare_for_screening.py ../papers/q4-2026.csv
 - `work/q4-2026_prepared.json` - ALL papers ready for AI screening
 
 **Configuration:**
-- Edit `config.py` to customize prioritization keywords
+- Edit `a_config.py` to customize prioritization keywords
 
 ---
 
@@ -274,9 +274,9 @@ cat output/*_core.csv > output/master_core_papers.csv
 
 ## Configuration
 
-### Customize Keywords (config.py)
+### Customize Keywords (a_config.py)
 
-Edit `config.py` to tune prioritization:
+Edit `a_config.py` to tune prioritization:
 
 ```python
 KEYWORDS = {
@@ -306,14 +306,14 @@ Edit `ai_screening_prompt.md` to:
 pipeline/
 ├── instructions.md                # Pipeline usage guide
 ├── prompt.md                      # AI agent prompt template
-├── config.py                      # Configuration
+├── a_config.py                    # Configuration
 ├── run_pipeline.sh               # Master runner
 │
-├── prepare_for_screening.py      # Prepare: Load ALL papers
+├── b_prepare_for_screening.py    # Prepare: Load ALL papers
 ├── stage1_ai_screen.sh          # Screen: AI screening orchestrator
-├── stage2_batch_manager.py       # Screen: Batch manager
-├── stage2_aggregate.py           # Aggregate: Aggregation
-├── summarize_all.py              # Utility: Cross-CSV summary
+├── c_batch_manager.py            # Screen: Batch manager
+├── d_aggregate.py                # Aggregate: Aggregation
+├── e_summarize_all.py            # Utility: Cross-CSV summary
 │
 ├── work/                          # Working directory (gitignored)
 │   ├── *_prepared.json           # Prepared papers
@@ -427,9 +427,9 @@ Once you have filtered papers:
 
 Need to customize the pipeline? Edit these files:
 
-- **Prioritization keywords**: `config.py`
+- **Prioritization keywords**: `a_config.py`
 - **Screening criteria**: `prompt.md`
-- **Batch size/timeouts**: `config.py` (BATCH_SIZE)
+- **Batch size/timeouts**: `a_config.py` (BATCH_SIZE)
 - **AI agent integration**: `stage1_ai_screen.sh` (line ~62)
 
 ---
