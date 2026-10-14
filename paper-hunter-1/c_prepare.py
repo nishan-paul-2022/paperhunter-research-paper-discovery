@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 sys.path.insert(0, str(Path(__file__).parent))
-from c_config import *
+from b_config import *
 def normalize_text(text):
     if not text:
         return ""
@@ -85,10 +85,10 @@ def process_csv(input_csv_path, prioritize=True):
     return all_papers, stats
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python d_prepare.py <input_csv> [--no-prioritize]")
+        print("Usage: python3 c_prepare.py <input_csv> [--no-prioritize]")
         print("\nExample:")
-        print("  python d_prepare.py ../paper-list/q4-2026.csv")
-        print("  python d_prepare.py ../paper-list/q4-2026.csv --no-prioritize")
+        print("  python3 c_prepare.py ../paper-list/q4-2026.csv")
+        print("  python3 c_prepare.py ../paper-list/q4-2026.csv --no-prioritize")
         print("\nNote: NO papers are filtered out (except date range).")
         print("      Fuzzy scores only help with processing order.")
         sys.exit(1)
@@ -151,11 +151,8 @@ def main():
     print(f"✓ Saved to: {output_json}")
     print("━" * 70)
     print()
-    print("Next step:")
-    print(f"  python e_batch.py next {output_json} --pass screen1")
-    print()
-    print("Or use the master runner:")
-    print(f"  ./b_pipeline.sh prepare {input_csv}")
+    print("Next step — run the pipeline:")
+    print(f"  python3 run.py {input_csv}")
     print()
 if __name__ == '__main__':
     main()

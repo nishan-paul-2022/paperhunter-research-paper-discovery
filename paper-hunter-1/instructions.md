@@ -104,7 +104,7 @@ chmod +x b_pipeline.sh h_screen.sh
 **Loads all papers with optional prioritization scores.**
 
 ```bash
-python d_prepare.py ../paper-list/q4-2026.csv
+python c_prepare.py ../paper-list/q4-2026.csv
 ```
 
 **What it does:**
@@ -274,9 +274,9 @@ cat output/*_core.csv > output/master_core_papers.csv
 
 ## Configuration
 
-### Customize Keywords (c_config.py)
+### Customize Keywords (b_config.py)
 
-Edit `c_config.py` to tune prioritization:
+Edit `b_config.py` to tune prioritization:
 
 ```python
 KEYWORDS = {
@@ -344,7 +344,7 @@ pipeline/
 2. Fix the `batch_output_N.json` file
 3. Resubmit manually:
    ```bash
-   python e_batch.py submit work/q4-2026-prepared.json work/batch_output_N.json --pass screen1
+   python d_batch.py submit work/q4-2026-prepared.json work/batch_output_N.json --pass screen1
    ```
 
 ### Issue: AI agent produces invalid JSON
@@ -429,7 +429,7 @@ Need to customize the pipeline? Edit these files:
 
 - **Prioritization keywords**: `a_config.py`
 - **Screening criteria**: `prompt.md`
-- **Batch size/timeouts**: `c_config.py` (BATCH_SIZE)
+- **Batch size/timeouts**: `b_config.py` (BATCH_SIZE)
 - **AI agent integration**: `h_screen.sh` (line ~62)
 
 ---

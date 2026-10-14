@@ -82,5 +82,4 @@ DECISION_FIELDS = [
     "confidence",
     "stage"
 ]
-BATCH_SIZE = 10
-AI_AGENT_COMMAND = "your-ai-agent-command-here"
+BATCH_SIZE = 20

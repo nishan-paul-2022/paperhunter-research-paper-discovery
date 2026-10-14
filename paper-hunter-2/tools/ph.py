@@ -1,0 +1,1687 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ph.py - paper-hunter toolkit.  Python 3.8+, standard library only.
+
+The AI agent driving the pipeline (see ../prompt.md) calls this tool; humans never need to.
+Every sub-command is resumable: all state lives in runs/<csv-stem>/ as plain files.
+
+  init       load + normalise the CSV, assign stable ids, flag duplicates / out-of-range
+  doctor     check network access to the metadata providers and optional helpers
+  enrich     fetch abstracts + metadata for EVERY paper (Crossref, OpenAlex, Semantic Scholar,
+             publisher landing page, arXiv) and compute fuzzy / TF-IDF / term signals
+  signals    recompute signals only (after manual abstracts were filled in)
+  fill       store an abstract/metadata the agent found by hand for one paper
+  show       print one full dossier
+  search     local fuzzy + TF-IDF "semantic" search over the dossiers
+  status     progress of every pass
+  batch      print the next batch of papers to review for a pass (A, B, C, F)
+  record     validate + store decisions (JSON on stdin or --file)
+  fulltext   download + extract the open-access full text of one paper, print key parts
+  expand-audit / sweep   widen the blind audit pass (recall safety nets)
+  reconcile  merge passes, find disagreements, build the adjudication queue
+  validate   consistency checks on the final verdicts
+  export     write the filtered CSV (+ borderline CSV, audit CSV, short report)
+"""
+import argparse, csv, difflib, hashlib, html, io, json, math, os, random, re, shutil
+import subprocess, sys, tempfile, threading, time, unicodedata
+import urllib.error, urllib.parse, urllib.request
+import xml.etree.ElementTree as ET
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from html.parser import HTMLParser
+from pathlib import Path
+
+TOOLS_DIR = Path(__file__).resolve().parent
+ROOT = TOOLS_DIR.parent
+RUNS_DIR = ROOT / "runs"
+DEFAULT_OUTPUT = ROOT / "output"
+
+# --------------------------------------------------------------------------- constants
+ROLES = ["baseline", "benchmark", "evaluation", "survey"]
+ROLE_TO_CONTRIB = {"baseline": "agent_system", "benchmark": "benchmark_dataset",
+                   "evaluation": "evaluation_study", "survey": "survey"}
+CONTRIBS = ["agent_system", "benchmark_dataset", "evaluation_study", "survey", "other"]
+VERDICTS = ["accept", "borderline", "reject"]
+YNU = ["yes", "no", "unclear"]
+SCOPES = ["core", "broad", "adjacent", "none"]
+PUB_STATUS = ["published", "workshop_archival_toplevel", "workshop_other",
+              "preprint_only", "thesis_or_report", "unknown"]
+PUB_OK_STRICT = {"published", "workshop_archival_toplevel"}
+REJECT_CLASSES = ["off_domain", "security_other", "defensive_only", "vuln_detection_or_code_scan",
+                  "generic_llm_security", "static_qa_benchmark", "llm_no_offense",
+                  "out_of_range", "duplicate", "retracted", "other"]
+BORDER_REASONS = ["adjacent_non_llm", "adjacent_single_shot", "adjacent_advisory_only",
+                  "adjacent_defensive", "scope_broad", "not_peer_reviewed", "workshop_unverified",
+                  "evidence_insufficient", "criteria_unclear", "role_unclear", "other"]
+ABSTRACT_SOURCES = ["crossref", "openalex", "semanticscholar", "landing_page", "arxiv",
+                    "manual_web", "fulltext", "none"]
+EVIDENCE_SOURCES = ["abstract", "title", "fulltext", "web"]
+MIN_ABSTRACT = 120
+SEED = 20261014
+
+UA = "paper-hunter/1.0 (literature screening; mailto:%s)" % os.environ.get("PH_MAILTO", "unknown@example.org")
+BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/124.0 Safari/537.36")
+URL_CROSSREF = os.environ.get("PH_CROSSREF", "https://api.crossref.org").rstrip("/")
+URL_OPENALEX = os.environ.get("PH_OPENALEX", "https://api.openalex.org").rstrip("/")
+URL_S2 = os.environ.get("PH_S2", "https://api.semanticscholar.org").rstrip("/")
+URL_ARXIV = os.environ.get("PH_ARXIV", "http://export.arxiv.org/api/query")
+MAILTO = os.environ.get("PH_MAILTO", "")
+
+
+def die(msg, code=2):
+    print("ERROR: " + msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+# --------------------------------------------------------------------------- file helpers
+def read_jsonl(path):
+    path = Path(path)
+    if not path.exists():
+        return []
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln:
+                try:
+                    out.append(json.loads(ln))
+                except json.JSONDecodeError:
+                    pass
+    return out
+
+
+def write_jsonl(path, rows):
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
+
+
+def append_jsonl(path, row):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def write_json(path, obj):
+    path = Path(path)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def read_json(path, default=None):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+def norm(s):
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+
+
+def clean_title(t):
+    t = re.sub(r"\s+", " ", (t or "").strip())
+    return t[:-1] if t.endswith(".") and not t.endswith("..") else t
+
+
+def strip_tags(s):
+    s = re.sub(r"<[^>]+>", " ", s or "")
+    s = html.unescape(s)
+    s = re.sub(r"^\s*abstract[:.\s-]*", "", s, flags=re.I)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def wrap(text, width=110, indent=""):
+    import textwrap
+    return textwrap.fill(text or "", width=width, initial_indent=indent, subsequent_indent=indent)
+
+
+# --------------------------------------------------------------------------- run context
+class Run:
+    def __init__(self, name=None):
+        if not name:
+            cur = RUNS_DIR / ".current"
+            if not cur.exists():
+                die("no active run. Start with: python3 tools/ph.py init --csv <path>")
+            name = cur.read_text().strip()
+        self.name = name
+        self.dir = RUNS_DIR / name
+        if not self.dir.exists():
+            die("run directory %s does not exist" % self.dir)
+        self.papers_path = self.dir / "papers.jsonl"
+        self.dossier_path = self.dir / "dossiers.jsonl"
+        self.cache_dir = self.dir / "cache"
+        self.manual_dir = self.dir / "manual"
+        self.fulltext_dir = self.dir / "fulltext"
+        self.plans_path = self.dir / "plans.json"
+        self.meta = read_json(self.dir / "meta.json", {})
+        self._dos = None
+
+    def dec_path(self, p):
+        return self.dir / ("decisions_%s.jsonl" % p)
+
+    def papers(self):
+        return read_jsonl(self.papers_path)
+
+    def dossiers(self):
+        if self._dos is None:
+            rows = read_jsonl(self.dossier_path)
+            self._dos = {r["id"]: r for r in rows} if rows else {r["id"]: r for r in self.papers()}
+        return self._dos
+
+    def decisions(self, p):
+        d = {}
+        for r in read_jsonl(self.dec_path(p)):
+            d[r["id"]] = r
+        return d
+
+    def plans(self):
+        return read_json(self.plans_path, {})
+
+    def save_plans(self, pl):
+        write_json(self.plans_path, pl)
+
+    def eligible(self):
+        return [p["id"] for p in self.papers() if p.get("in_range") and not p.get("dup_of")]
+
+
+# --------------------------------------------------------------------------- init
+DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>]+", re.I)
+
+
+def pub_hint_from_key(dblp_key, venue, title):
+    k = (dblp_key or "")
+    text = " ".join([venue or "", title or ""]).lower()
+    if k.startswith("journals/corr/"):
+        return "preprint_only"
+    if re.search(r"\bworkshops?\b|\bwksp\b|\bws\b", text):
+        return "workshop"
+    if k.startswith("conf/"):
+        return "conference"
+    if k.startswith("journals/"):
+        return "journal"
+    if k.startswith("phd/") or "thesis" in k:
+        return "thesis"
+    return "unknown"
+
+
+def cmd_init(a):
+    src = Path(a.csv).expanduser()
+    if not src.exists():
+        die("CSV not found: %s" % src)
+    raw = src.read_bytes()
+    text = raw.decode("utf-8-sig", errors="replace")
+    rdr = csv.DictReader(io.StringIO(text))
+    if not rdr.fieldnames:
+        die("CSV has no header row")
+    cols = {c.strip().lower(): c for c in rdr.fieldnames}
+    if "title" not in cols:
+        die("CSV needs a 'title' column; found %s" % list(cols))
+    g = lambda row, k: (row.get(cols[k], "") or "").strip() if k in cols else ""
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", src.stem)
+    run_dir = RUNS_DIR / name
+    if run_dir.exists() and not a.fresh:
+        print("run %s already exists - resuming it (use --fresh to wipe)" % name)
+        (RUNS_DIR / ".current").write_text(name)
+        return cmd_status(argparse.Namespace(run=name))
+    if run_dir.exists() and a.fresh:
+        shutil.rmtree(run_dir)
+    for sub in ("cache", "manual", "fulltext"):
+        (run_dir / sub).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, run_dir / "input.csv")
+    papers, seen_doi, seen_title = [], {}, {}
+    for i, row in enumerate(rdr, 1):
+        title = clean_title(g(row, "title"))
+        if not title:
+            continue
+        ee, url = g(row, "ee"), g(row, "url")
+        m = DOI_RE.search(ee) or DOI_RE.search(url) or (DOI_RE.search(g(row, "doi")) if "doi" in cols else None)
+        doi = m.group(0).rstrip(".,;)") .lower() if m else ""
+        try:
+            year = int(re.search(r"\d{4}", g(row, "year")).group(0))
+        except Exception:
+            year = 0
+        pid = "p%04d" % (len(papers) + 1)
+        p = {"id": pid, "row": i, "dblp_key": g(row, "dblp_key"), "title": title,
+             "authors": g(row, "authors"), "year": year, "venue": g(row, "venue"),
+             "ee": ee, "url": url, "doi": doi,
+             "in_range": (a.min_year <= year <= a.max_year) if year else True,
+             "pub_hint": pub_hint_from_key(g(row, "dblp_key"), g(row, "venue"), title)}
+        extra = {c: (row.get(cols[c], "") or "") for c in cols
+                 if c not in ("dblp_key", "title", "authors", "year", "venue", "ee", "url", "doi")}
+        if extra:
+            p["extra_columns"] = extra
+        nt = norm(title)
+        if doi and doi in seen_doi:
+            p["dup_of"] = seen_doi[doi]
+        elif nt in seen_title:
+            p["dup_of"] = seen_title[nt]
+        else:
+            if doi:
+                seen_doi[doi] = pid
+            seen_title[nt] = pid
+        papers.append(p)
+    write_jsonl(run_dir / "papers.jsonl", papers)
+    meta = {"csv": str(src.resolve()), "sha1": hashlib.sha1(raw).hexdigest(), "created": now(),
+            "n_rows": len(papers), "min_year": a.min_year, "max_year": a.max_year,
+            "output_dir": str(Path(a.output_dir).expanduser().resolve()) if a.output_dir else str(DEFAULT_OUTPUT),
+            "publication_policy": a.publication_policy}
+    write_json(run_dir / "meta.json", meta)
+    (RUNS_DIR / ".current").write_text(name)
+    n_dup = sum(1 for p in papers if p.get("dup_of"))
+    n_oor = sum(1 for p in papers if not p["in_range"])
+    n_doi = sum(1 for p in papers if p["doi"])
+    print("run '%s' created: %d papers | %d with DOI | %d duplicates | %d out of %d-%d range"
+          % (name, len(papers), n_doi, n_dup, n_oor, a.min_year, a.max_year))
+
+
+# --------------------------------------------------------------------------- network layer
+class Throttle:
+    def __init__(self, interval):
+        self.interval, self.last, self.lock = interval, 0.0, threading.Lock()
+
+    def wait(self):
+        with self.lock:
+            t = time.time()
+            wait = self.last + self.interval - t
+            if wait > 0:
+                time.sleep(wait)
+            self.last = time.time()
+
+
+THROTTLES = {"crossref": Throttle(0.05), "openalex": Throttle(0.11), "arxiv": Throttle(3.1),
+             "s2": Throttle(1.1)}
+_host_throttles, _host_lock = {}, threading.Lock()
+
+
+def throttle_for(key):
+    if key in THROTTLES:
+        return THROTTLES[key]
+    with _host_lock:
+        return _host_throttles.setdefault(key, Throttle(0.6))
+
+
+_fail_count, _fail_lock = defaultdict(int), threading.Lock()
+DEAD_AFTER = 6   # consecutive network-level failures before a host is skipped for the rest of the run
+
+
+def http(url, key, method="GET", data=None, headers=None, timeout=30, retries=4,
+         browser=False, max_bytes=40_000_000):
+    host = urllib.parse.urlparse(url).netloc
+    if _fail_count[host] >= DEAD_AFTER:
+        return 0, b"", url, {"error": "host skipped after repeated network failures: " + host}
+    hdrs = {"User-Agent": BROWSER_UA if browser else UA, "Accept": "*/*"}
+    if headers:
+        hdrs.update(headers)
+    last = ""
+    for attempt in range(retries):
+        throttle_for(key).wait()
+        try:
+            req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                _fail_count[host] = 0
+                return r.status, r.read(max_bytes), r.geturl(), dict(r.headers)
+        except urllib.error.HTTPError as e:
+            _fail_count[host] = 0
+            if e.code in (429, 500, 502, 503, 504):
+                ra = e.headers.get("Retry-After") if e.headers else None
+                delay = float(ra) if ra and ra.replace(".", "").isdigit() else 2 ** attempt * 3
+                last = "HTTP %d" % e.code
+                time.sleep(min(delay, 45))
+                continue
+            try:
+                body = e.read()
+            except Exception:
+                body = b""
+            return e.code, body, url, {}
+        except Exception as e:  # network error, timeout, DNS...
+            last = "%s: %s" % (type(e).__name__, e)
+            with _fail_lock:
+                _fail_count[host] += 1
+            if _fail_count[host] >= DEAD_AFTER:
+                break
+            time.sleep(min(2 ** attempt, 4))
+    return 0, b"", url, {"error": last}
+
+
+def jget(url, key, **kw):
+    st, body, _, _ = http(url, key, **kw)
+    if st != 200:
+        return None
+    try:
+        return json.loads(body.decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
+
+def qdoi(doi):
+    return urllib.parse.quote(doi, safe="/()")
+
+
+def title_sim(a, b):
+    a, b = norm(a), norm(b)
+    if not a or not b:
+        return 0.0
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+# --------------------------------------------------------------------------- providers
+def p_crossref(doi=None, title=None, year=None):
+    m = "&mailto=" + urllib.parse.quote(MAILTO) if MAILTO else ""
+    msg = None
+    if doi:
+        j = jget("%s/works/%s%s" % (URL_CROSSREF, qdoi(doi), "?" + m[1:] if m else ""), "crossref")
+        msg = j.get("message") if j else None
+    elif title:
+        j = jget("%s/works?query.bibliographic=%s&rows=3%s" % (URL_CROSSREF, urllib.parse.quote(title), m), "crossref")
+        for it in ((j or {}).get("message", {}).get("items") or []):
+            if title_sim((it.get("title") or [""])[0], title) >= 0.93:
+                msg = it
+                break
+    if not msg:
+        return None
+    dp = (msg.get("issued") or msg.get("published-online") or msg.get("published-print") or {}).get("date-parts", [[None]])[0]
+    rel = msg.get("relation") or {}
+    pre = [x.get("id") for x in (rel.get("has-preprint") or rel.get("is-preprint-of") or []) if x.get("id")]
+    retracted = any((u.get("type") or "").lower() in ("retraction", "withdrawal", "removal")
+                    for u in (msg.get("update-to") or []))
+    return {"abstract": strip_tags(msg.get("abstract", "")),
+            "title": (msg.get("title") or [""])[0],
+            "container": (msg.get("container-title") or [""])[0],
+            "type": msg.get("type"), "date": "-".join(str(x) for x in dp if x) if dp and dp[0] else "",
+            "subjects": msg.get("subject") or [], "publisher": msg.get("publisher"),
+            "ref_count": msg.get("reference-count"), "cited_by": msg.get("is-referenced-by-count"),
+            "preprint_ids": pre, "retracted": retracted, "doi": (msg.get("DOI") or "").lower(),
+            "pdf_links": [l.get("URL") for l in (msg.get("link") or [])
+                          if "pdf" in (l.get("content-type") or "") and l.get("URL")]}
+
+
+OA_SELECT = ("id,doi,title,publication_year,type,abstract_inverted_index,primary_location,best_oa_location,"
+             "locations,topics,keywords,cited_by_count,referenced_works_count,is_retracted,ids")
+
+
+def oa_abstract(inv):
+    if not inv:
+        return ""
+    pos = []
+    for w, idxs in inv.items():
+        for i in idxs:
+            pos.append((i, w))
+    return " ".join(w for _, w in sorted(pos))
+
+
+def p_openalex(doi=None, title=None, year=None):
+    m = "&mailto=" + urllib.parse.quote(MAILTO) if MAILTO else ""
+    w = None
+    if doi:
+        w = jget("%s/works/doi:%s?select=%s%s" % (URL_OPENALEX, qdoi(doi), OA_SELECT, m), "openalex")
+    elif title:
+        j = jget("%s/works?filter=title.search:%s&per-page=3&select=%s%s"
+                 % (URL_OPENALEX, urllib.parse.quote(re.sub(r"[,:;|]", " ", title)), OA_SELECT, m), "openalex")
+        for it in ((j or {}).get("results") or []):
+            if title_sim(it.get("title"), title) >= 0.93 and (not year or abs((it.get("publication_year") or year) - year) <= 1):
+                w = it
+                break
+    if not w:
+        return None
+    pl = w.get("primary_location") or {}
+    pdfs = []
+    for loc in [w.get("best_oa_location") or {}] + (w.get("locations") or []):
+        if loc.get("pdf_url") and loc["pdf_url"] not in pdfs:
+            pdfs.append(loc["pdf_url"])
+    arx = ""
+    for loc in (w.get("locations") or []):
+        lu = loc.get("landing_page_url") or ""
+        mm = re.search(r"arxiv\.org/(?:abs|pdf)/([^\s?#]+?)(?:\.pdf)?$", lu)
+        if mm:
+            arx = mm.group(1)
+            break
+    return {"abstract": oa_abstract(w.get("abstract_inverted_index")), "title": w.get("title"),
+            "container": ((pl.get("source") or {}).get("display_name")) or "", "type": w.get("type"),
+            "topics": [t.get("display_name") for t in (w.get("topics") or [])][:6],
+            "keywords": [k.get("display_name") for k in (w.get("keywords") or [])][:12],
+            "cited_by": w.get("cited_by_count"), "ref_count": w.get("referenced_works_count"),
+            "retracted": bool(w.get("is_retracted")), "pdf_links": pdfs, "arxiv_id": arx,
+            "openalex_id": w.get("id"), "doi": (w.get("doi") or "").replace("https://doi.org/", "").lower()}
+
+
+S2_FIELDS = "title,abstract,venue,year,externalIds,openAccessPdf,tldr,citationCount,publicationTypes,publicationVenue"
+
+
+def s2_batch(dois):
+    """one cheap pre-pass: DOI -> record, 100 per request"""
+    out = {}
+    hdr = {"Content-Type": "application/json"}
+    if os.environ.get("S2_API_KEY"):
+        hdr["x-api-key"] = os.environ["S2_API_KEY"]
+    for i in range(0, len(dois), 100):
+        chunk = dois[i:i + 100]
+        body = json.dumps({"ids": ["DOI:" + d for d in chunk]}).encode()
+        st, resp, _, _ = http("%s/graph/v1/paper/batch?fields=%s" % (URL_S2, S2_FIELDS), "s2", method="POST",
+                              data=body, headers=hdr, retries=6)
+        if st != 200:
+            continue
+        try:
+            arr = json.loads(resp.decode("utf-8", errors="replace"))
+        except Exception:
+            continue
+        for d, rec in zip(chunk, arr):
+            if rec:
+                ext = rec.get("externalIds") or {}
+                out[d] = {"abstract": rec.get("abstract") or "", "tldr": ((rec.get("tldr") or {}).get("text")) or "",
+                          "arxiv_id": ext.get("ArXiv") or "", "venue": rec.get("venue") or "",
+                          "pub_types": rec.get("publicationTypes") or [],
+                          "pdf": ((rec.get("openAccessPdf") or {}).get("url")) or "",
+                          "cited_by": rec.get("citationCount"), "s2_id": rec.get("paperId")}
+    return out
+
+
+class MetaParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.meta, self.ld, self._in_ld, self._buf = defaultdict(list), [], False, []
+
+    def handle_starttag(self, tag, attrs):
+        d = dict(attrs)
+        if tag == "meta" and (d.get("name") or d.get("property")) and d.get("content"):
+            self.meta[(d.get("name") or d.get("property")).lower()].append(d["content"])
+        if tag == "script" and (d.get("type") or "").lower() == "application/ld+json":
+            self._in_ld, self._buf = True, []
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._in_ld:
+            self._in_ld = False
+            try:
+                self.ld.append(json.loads("".join(self._buf)))
+            except Exception:
+                pass
+
+    def handle_data(self, data):
+        if self._in_ld:
+            self._buf.append(data)
+
+
+def p_landing(url):
+    if not url:
+        return None
+    st, body, final, _ = http(url, urllib.parse.urlparse(url).netloc or "landing", browser=True, retries=2, timeout=25)
+    if st != 200 or not body:
+        return None
+    ctype_pdf = body[:5] == b"%PDF-"
+    if ctype_pdf:
+        return {"pdf_links": [final], "abstract": "", "keywords": [], "final_url": final}
+    mp = MetaParser()
+    try:
+        mp.feed(body.decode("utf-8", errors="replace"))
+    except Exception:
+        pass
+    m = mp.meta
+    cands = []
+    for k in ("citation_abstract", "dc.description", "dc.description.abstract", "description",
+              "og:description", "twitter:description", "dcterms.abstract", "eprints.abstract"):
+        for v in m.get(k, []):
+            cands.append(strip_tags(v))
+    for blob in mp.ld:
+        for node in (blob if isinstance(blob, list) else [blob]):
+            if isinstance(node, dict):
+                for k in ("abstract", "description"):
+                    if isinstance(node.get(k), str):
+                        cands.append(strip_tags(node[k]))
+    cands = [c for c in cands if len(c) >= MIN_ABSTRACT and not re.search(r"cookie|javascript is (disabled|required)", c, re.I)]
+    abstract = max(cands, key=len) if cands else ""
+    kws = []
+    for k in ("citation_keywords", "keywords", "dc.subject"):
+        for v in m.get(k, []):
+            kws += [x.strip() for x in re.split(r"[;,|]", v) if x.strip()]
+    pdfs = list(dict.fromkeys(m.get("citation_pdf_url", [])))
+    return {"abstract": abstract, "keywords": kws[:15], "pdf_links": pdfs, "final_url": final,
+            "citation_doi": (m.get("citation_doi") or [""])[0]}
+
+
+def p_arxiv(title):
+    q = urllib.parse.quote('ti:"%s"' % re.sub(r'["\']', " ", title))
+    st, body, _, _ = http("%s?search_query=%s&max_results=3" % (URL_ARXIV, q), "arxiv", retries=3)
+    if st != 200:
+        return None
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return None
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    for e in root.findall("a:entry", ns):
+        t = re.sub(r"\s+", " ", (e.findtext("a:title", "", ns) or "")).strip()
+        if title_sim(t, title) >= 0.93:
+            aid = (e.findtext("a:id", "", ns) or "").rsplit("/abs/", 1)[-1]
+            return {"arxiv_id": aid, "title": t,
+                    "abstract": re.sub(r"\s+", " ", e.findtext("a:summary", "", ns) or "").strip(),
+                    "published": (e.findtext("a:published", "", ns) or "")[:10],
+                    "pdf_links": ["https://arxiv.org/pdf/" + aid]}
+    return None
+
+
+# --------------------------------------------------------------------------- enrich
+def enrich_one(run, p, s2rec):
+    cpath = run.cache_dir / ("%s.json" % p["id"])
+    c = read_json(cpath, {})
+    if c.get("done"):
+        return p["id"], "cached"
+    c = {"id": p["id"], "errors": []}
+    doi, title, year = p.get("doi"), p["title"], p.get("year")
+    try:
+        c["crossref"] = p_crossref(doi=doi) if doi else p_crossref(title=title, year=year)
+        c["openalex"] = p_openalex(doi=doi) if doi else p_openalex(title=title, year=year)
+        if doi and not c["openalex"]:
+            c["openalex"] = p_openalex(title=title, year=year)
+        c["s2"] = s2rec
+        have = any(len((c.get(k) or {}).get("abstract", "")) >= MIN_ABSTRACT for k in ("crossref", "openalex", "s2"))
+        landing_url = p.get("ee") or p.get("url") or ("https://doi.org/" + doi if doi else "")
+        if landing_url and not landing_url.startswith("http"):
+            landing_url = "https://dblp.org/" + landing_url.lstrip("/") if False else ""
+        if landing_url and (not have or not doi):
+            c["landing"] = p_landing(landing_url)
+            have = have or len((c.get("landing") or {}).get("abstract", "")) >= MIN_ABSTRACT
+        if not have:
+            c["arxiv"] = p_arxiv(title)
+    except Exception as e:  # never let one paper stop the run
+        c["errors"].append("%s: %s" % (type(e).__name__, e))
+    c["done"] = True
+    c["fetched_at"] = now()
+    write_json(cpath, c)
+    return p["id"], "fetched"
+
+
+def cmd_doctor(a):
+    res = {}
+    tests = {"crossref": "%s/works/10.1145/3372297.3417268" % URL_CROSSREF,
+             "openalex": "%s/works/doi:10.1145/3372297.3417268?select=id" % URL_OPENALEX,
+             "semanticscholar": "%s/graph/v1/paper/DOI:10.1145/3372297.3417268?fields=title" % URL_S2,
+             "arxiv": "%s?search_query=all:test&max_results=1" % URL_ARXIV,
+             "doi.org": "https://doi.org/10.1145/3372297.3417268"}
+    for k, u in tests.items():
+        st, _, _, h = http(u, "doctor" + k, retries=1, timeout=12, browser=(k == "doi.org"))
+        res[k] = "ok" if st in (200, 301, 302, 303) else ("HTTP %s" % st if st else "unreachable")
+    res["pdftotext"] = bool(shutil.which("pdftotext"))
+    try:
+        import pypdf  # noqa
+        res["pypdf"] = True
+    except Exception:
+        res["pypdf"] = False
+    try:
+        import sentence_transformers  # noqa
+        res["sentence_transformers"] = True
+    except Exception:
+        res["sentence_transformers"] = False
+    res["python"] = sys.version.split()[0]
+    print(json.dumps(res, indent=1))
+    reachable = [k for k in ("crossref", "openalex", "semanticscholar") if res[k] == "ok"]
+    if not reachable:
+        print("\nNO metadata API reachable from the shell. Use your own web-search / web-fetch tools to find "
+              "abstracts (store each with `ph.py fill`), or ask for network access. Do NOT skip papers.")
+
+
+def cmd_enrich(a):
+    run = Run(a.run)
+    papers = [p for p in run.papers() if p.get("in_range") or a.all_years]
+    if a.limit:
+        papers = papers[:a.limit]
+    todo = [p for p in papers if not (read_json(run.cache_dir / ("%s.json" % p["id"]), {}) or {}).get("done")]
+    print("enrich: %d papers, %d still to fetch" % (len(papers), len(todo)))
+    s2map = {}
+    dois = sorted({p["doi"] for p in todo if p.get("doi")})
+    if dois and not a.skip_s2:
+        print("semantic scholar batch pre-pass for %d DOIs ..." % len(dois))
+        s2map = s2_batch(dois)
+        print("  matched %d" % len(s2map))
+    done, t0 = 0, time.time()
+    with ThreadPoolExecutor(max_workers=a.workers) as ex:
+        futs = [ex.submit(enrich_one, run, p, s2map.get(p.get("doi"))) for p in todo]
+        for f in as_completed(futs):
+            f.result()
+            done += 1
+            if done % 50 == 0 or done == len(todo):
+                print("  %d/%d  (%.0fs)" % (done, len(todo), time.time() - t0), flush=True)
+    build_dossiers(run, embed=a.embed)
+    cmd_coverage(run)
+
+
+def cmd_coverage(run):
+    d = run.dossiers()
+    rows = [d[i] for i in run.eligible()]
+    src = Counter(r.get("abstract_source", "none") for r in rows)
+    print("abstract coverage (eligible papers = %d): %s" % (len(rows), dict(src)))
+    miss = [r["id"] for r in rows if r.get("abstract_source", "none") == "none"]
+    print("papers WITHOUT abstract: %d" % len(miss))
+    if miss:
+        print("  -> you must look these up yourself (web search / fetch the DOI page) and store with `ph.py fill`.")
+        print("  ids: " + " ".join(miss[:400]) + (" ..." if len(miss) > 400 else ""))
+        (run.dir / "missing_abstracts.txt").write_text("\n".join(miss))
+    else:
+        (run.dir / "missing_abstracts.txt").write_text("")
+
+
+# --------------------------------------------------------------------------- signals (fuzzy / term / tf-idf / optional embeddings)
+def rx(*pats):
+    return [re.compile(p, re.I) for p in pats]
+
+
+G_AGENT = rx(r"\bllms?\b", r"large language model", r"\bgpt[- ]?\w*", r"chatgpt", r"language model",
+             r"\bagent(s|ic)?\b", r"agentic", r"multi-?agent", r"\bautonomous", r"\breact\b",
+             r"\bplanner\b|planning agent", r"tool[- ](use|using|augmented|calling)", r"copilot",
+             r"foundation model", r"\bmcp\b|model context protocol")
+G_OFFENSE = rx(r"penetration[- ]test|pen[- ]?test|pentest", r"red[- ]?team", r"adversary emulation|attack emulation",
+               r"ethical hack", r"\bexploit", r"privilege escalation", r"lateral movement", r"post[- ]?exploitation",
+               r"reconnaissance|\brecon\b", r"attack (chain|path|graph|plan|tree|automation)",
+               r"kill[- ]chain", r"offensive (security|cyber|operation)", r"cyber ?(attack|operation)s?",
+               r"\bcve-\d|\bcves?\b", r"capture[- ]the[- ]flag|\bctfs?\b", r"metasploit|\bnmap\b|kali linux",
+               r"hack ?the ?box|vulnhub|\bhtb\b", r"mitre att&ck|att&ck", r"cyber range", r"command and control|\bc2\b",
+               r"zero-day|one-day|n-day", r"vulnerability (assessment|exploitation|scanning)|\bvapt\b",
+               r"sql injection|\bxss\b|\brce\b|remote code execution", r"hacking|hacker", r"jailbreak(ing)? .* (shell|root)")
+G_STRUCT = {"survey": rx(r"\bsurvey\b", r"systematic (literature )?review", r"\bsok\b|systemati[sz]ation of knowledge",
+                         r"taxonomy", r"literature review", r"roadmap|state of the art", r"mapping study", r"overview of"),
+            "benchmark": rx(r"benchmark", r"\bdatasets?\b", r"test ?bed", r"cyber range", r"leaderboard",
+                            r"evaluation framework|evaluation harness|environment for"),
+            "evaluation": rx(r"empirical (study|evaluation|analysis)", r"evaluat(e|ing|ion) (of )?(the )?(capabilit|performance)",
+                             r"how (well|good|capable)", r"capabilit(y|ies)", r"comparative (study|analysis|evaluation)",
+                             r"case study", r"assess(ing|ment)? .* (llm|gpt|model)", r"risk (assessment|evaluation)")}
+G_SETTING = rx(r"black[- ]?box", r"gr[ae]y[- ]?box", r"zero[- ]knowledge", r"unknown (target|network|system)",
+               r"no prior (knowledge|information)", r"partial(ly)? (known|knowledge)")
+G_NEG = rx(r"intrusion detection", r"malware detection", r"anomaly detection", r"phishing detection",
+           r"blue[- ]team", r"\bdefen[cs]e\b", r"spam", r"fraud detection", r"forensic", r"honeypot")
+G_RL = rx(r"reinforcement learning", r"\brl\b", r"q-learning|deep q|\bdqn\b|\bppo\b", r"monte[- ]carlo tree|\bmcts\b|\bucb\b")
+SEEDS = rx(r"pentestgpt", r"autoattacker", r"hacksynth", r"vulnbot", r"incalmo", r"\bmhbench\b", r"\bcybench\b",
+           r"cve-bench", r"bountybench", r"autopenbench", r"nyu ctf", r"intercode-ctf", r"enigma", r"d-cipher",
+           r"pentesteval", r"\bhptsa\b", r"\bxbow\b", r"\bmapta\b", r"hackworld", r"prediql", r"\bcai\b.*cyber", r"pentestagent",
+           r"penheal", r"pentest-?r1|pentestr1", r"\bpenligent|\bshellgpt|\bpwnagent")
+
+PROFILES = {
+    "domain": "LLM-based autonomous agent for penetration testing, red teaming and offensive security. A large language "
+              "model agent plans and executes reconnaissance, scanning, exploitation, privilege escalation, lateral "
+              "movement and post-exploitation against black-box or gray-box targets using tools, shell, nmap, metasploit. "
+              "Multi-step attack chain, attack path, attack graph, planning, memory, context management, long-horizon. "
+              "Capture the flag CTF challenge solving agent, CVE exploitation agent, web application vulnerability "
+              "exploitation, Active Directory enterprise network, cyber range, vulnerable machines Hack The Box.",
+    "baseline": "We propose a novel LLM-powered agent framework that autonomously performs penetration testing. Planner, "
+                "executor, memory, reflection and multi-agent architecture. Evaluated on CTF challenges, Hack The Box, "
+                "VulnHub machines and CVE exploitation, success rate outperforms baselines such as PentestGPT and AutoAttacker.",
+    "survey": "A survey and systematic literature review, SoK, taxonomy of large language models and AI agents for "
+              "penetration testing, offensive security and cyber attacks. Challenges, open problems, future directions, roadmap.",
+    "benchmark": "We introduce a benchmark, dataset and testbed for evaluating LLM agents on penetration testing, capture "
+                 "the flag, cyber range tasks. Vulnerable machines and environments with automatic grading, flags, oracle.",
+    "evaluation": "An empirical study evaluating the capabilities of large language models and agents on offensive security "
+                  "and penetration testing tasks. How well can GPT-4 hack. Comparison of models, success rate, cost, "
+                  "failure analysis, risk assessment of AI offensive cyber capabilities.",
+}
+STOP = set("a an the of for and or in on to with by from is are be this that these those we our it its as at using use based "
+           "via into over under between across than their can which also such not has have been more most new novel paper "
+           "study approach method results show shown propose proposed present presented".split())
+SWEEP_QUERIES = [
+    "LLM agent autonomous penetration testing", "survey large language models penetration testing offensive security",
+    "systematic literature review AI agents cyber attacks", "benchmark LLM agents capture the flag",
+    "benchmark penetration testing agents vulnerable environments", "evaluating GPT capability exploit vulnerabilities",
+    "empirical study LLM hacking capabilities", "multi-agent red team framework LLM", "attack graph planning LLM agent",
+    "privilege escalation LLM agent", "Active Directory lateral movement agent", "web application exploitation LLM agent",
+    "CVE exploit generation agent reproduce vulnerability", "CTF solving agent LLM",
+    "reinforcement learning penetration testing agent", "MCP tool server penetration testing",
+    "fine-tuned LLM for penetration testing", "cyber range LLM agent attack", "adversary emulation LLM MITRE ATT&CK",
+    "AI risk evaluation offensive cyber capabilities", "retrieval augmented generation pentest knowledge agent",
+    "smart contract exploit agent LLM", "IoT ICS cloud penetration testing automation LLM",
+    "taxonomy of AI-powered cyberattacks", "vulnerability scanner LLM automation security assessment",
+    "autonomous cyber operations agent network", "kill chain red team agent capture the flag",
+    "LLM generated exploits security testing framework"]
+
+
+def toks(text):
+    words = [w.strip(".-+") for w in re.findall(r"[a-z0-9][a-z0-9\-\+\.]*", (text or "").lower())]
+    uni = [w for w in words if w and w not in STOP and len(w) > 1]
+    return uni + [a + "_" + b for a, b in zip(uni, uni[1:])]
+
+
+def vec(tokens, idf):
+    tf = Counter(tokens)
+    v = {t: (1 + math.log(c)) * idf.get(t, 0.0) for t, c in tf.items()}
+    n = math.sqrt(sum(x * x for x in v.values())) or 1.0
+    return {t: x / n for t, x in v.items()}
+
+
+def cosine(a, b):
+    if len(a) > len(b):
+        a, b = b, a
+    return sum(x * b.get(t, 0.0) for t, x in a.items())
+
+
+def group_score(patterns, title, body):
+    s, hits = 0, []
+    for p in patterns:
+        t, b = bool(p.search(title)), bool(p.search(body))
+        if t or b:
+            hits.append(p.pattern[:24])
+        s += (1 if b else 0) + (1 if t else 0)
+    return min(1.0, s / 3.0), hits
+
+
+def try_embeddings(texts):
+    try:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(os.environ.get("PH_EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
+        docs = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        prof = model.encode([PROFILES["domain"]], normalize_embeddings=True, show_progress_bar=False)[0]
+        return [float(sum(x * y for x, y in zip(d, prof))) for d in docs]
+    except Exception:
+        return None
+
+
+def compute_signals(rows, embed="auto"):
+    texts = [(r["title"] + " . " + r["title"] + " . " + (r.get("abstract") or "") + " . "
+              + " ".join(r.get("keywords") or []) + " " + " ".join(r.get("topics") or [])) for r in rows]
+    toklists = [toks(t) for t in texts]
+    prof_tokens = {k: toks(v) for k, v in PROFILES.items()}
+    df = Counter()
+    for tl in toklists + list(prof_tokens.values()):
+        df.update(set(tl))
+    N = len(toklists) + len(prof_tokens)
+    idf = {t: math.log((N + 1) / (c + 1)) + 1.0 for t, c in df.items()}
+    pvec = {k: vec(v, idf) for k, v in prof_tokens.items()}
+    sims = []
+    for tl in toklists:
+        v = vec(tl, idf)
+        sims.append({k: cosine(v, pv) for k, pv in pvec.items()})
+    order = sorted(range(len(rows)), key=lambda i: sims[i]["domain"])
+    pct = [0.0] * len(rows)
+    for rank, i in enumerate(order):
+        pct[i] = rank / max(1, len(rows) - 1)
+    emb = try_embeddings(texts) if embed in ("auto", "on") else None
+    emb_pct = [None] * len(rows)
+    if emb:
+        eo = sorted(range(len(rows)), key=lambda i: emb[i])
+        for rank, i in enumerate(eo):
+            emb_pct[i] = rank / max(1, len(rows) - 1)
+    out = []
+    for i, r in enumerate(rows):
+        title, body = r["title"], (r.get("abstract") or "") + " " + " ".join(r.get("keywords") or []) + " " + " ".join(r.get("topics") or [])
+        a, a_h = group_score(G_AGENT, title, body)
+        o, o_h = group_score(G_OFFENSE, title, body)
+        st, st_h = group_score(G_SETTING, title, body)
+        ng, _ = group_score(G_NEG, title, body)
+        rl, _ = group_score(G_RL, title, body)
+        sd, _ = group_score(SEEDS, title, body)
+        struct_flags = [k for k, pats in G_STRUCT.items() if group_score(pats, title, body)[0] > 0]
+        score = 100 * min(a, o) + 30 * max(a, o) * (1 if o > 0 else 0.5) + (10 if st > 0 else 0) + (6 if struct_flags else 0)
+        if ng > 0 and o < 0.34:
+            score -= 15
+        score = max(0, min(100, round(score)))
+        flags = [n for n, v in (("agent", a), ("offense", o), ("setting", st), ("rl", rl)) if v > 0] + \
+                ["struct:" + f for f in struct_flags] + (["seed"] if sd > 0 else []) + (["defensive_terms"] if ng > 0 else [])
+        safety = (min(a, o) >= 0.34 or o >= 0.67 or sd > 0 or (rl > 0 and o >= 0.34) or pct[i] >= 0.93
+                  or (emb_pct[i] is not None and emb_pct[i] >= 0.94)
+                  or (o >= 0.34 and bool(struct_flags)))
+        out.append({"signal_score": score, "signal_flags": flags, "safety_net": bool(safety),
+                    "sim": {k: round(v, 4) for k, v in sims[i].items()}, "sim_domain_pct": round(pct[i], 3),
+                    "emb_domain": round(emb[i], 4) if emb else None})
+    return out
+
+
+def merge_enrichment(p, c, manual):
+    d = dict(p)
+    cr, oa, s2, ld, ax = (c.get(k) or {} for k in ("crossref", "openalex", "s2", "landing", "arxiv"))
+    cands = [("crossref", cr.get("abstract", "")), ("openalex", oa.get("abstract", "")),
+             ("semanticscholar", s2.get("abstract", "")), ("landing_page", ld.get("abstract", "")),
+             ("arxiv", ax.get("abstract", ""))]
+    cands = [(k, re.sub(r"\s+", " ", v or "").strip()) for k, v in cands]
+    good = [(k, v) for k, v in cands if len(v) >= MIN_ABSTRACT]
+    d["abstract_candidates"] = {k: len(v) for k, v in cands if v}
+    if manual.get("abstract"):
+        d["abstract"], d["abstract_source"] = manual["abstract"], manual.get("source", "manual_web")
+    elif good:
+        best = good[0]
+        for k, v in good[1:]:
+            if len(v) > 1.35 * len(best[1]):
+                best = (k, v)
+        d["abstract"], d["abstract_source"] = best[1], best[0]
+    else:
+        short = [(k, v) for k, v in cands if v]
+        d["abstract"], d["abstract_source"] = ("", "none") if not short else (short[0][1], short[0][0] + "_short")
+        if short:  # a short snippet is better than nothing but must not count as a real abstract
+            d["abstract_source"] = "none"
+            d["abstract_snippet"] = short[0][1]
+    kws = list(dict.fromkeys((oa.get("keywords") or []) + (ld.get("keywords") or []) + (cr.get("subjects") or [])))
+    d["keywords"] = [k for k in kws if k][:20]
+    d["topics"] = oa.get("topics") or []
+    d["tldr"] = s2.get("tldr", "")
+    arx = manual.get("arxiv_id") or ax.get("arxiv_id") or oa.get("arxiv_id") or s2.get("arxiv_id") or ""
+    if not arx:
+        for pid_ in cr.get("preprint_ids") or []:
+            m = re.search(r"arxiv\.org/abs/(.+)$", pid_ or "") or re.search(r"10\.48550/arxiv\.(.+)$", pid_ or "", re.I)
+            if m:
+                arx = m.group(1)
+    d["arxiv_id"] = arx
+    d["arxiv_url"] = ("https://arxiv.org/abs/" + arx) if arx else ""
+    pdfs = []
+    for u in [manual.get("pdf")] + [s2.get("pdf")] + (oa.get("pdf_links") or []) + (cr.get("pdf_links") or []) + (ld.get("pdf_links") or []) + (ax.get("pdf_links") or []):
+        if u and u not in pdfs:
+            pdfs.append(u)
+    d["pdf_urls"] = pdfs
+    d["crossref_type"] = cr.get("type") or oa.get("type") or ""
+    d["container"] = cr.get("container") or oa.get("container") or s2.get("venue") or ""
+    d["published_date"] = cr.get("date") or ""
+    d["cited_by"] = cr.get("cited_by") if cr.get("cited_by") is not None else (oa.get("cited_by") if oa.get("cited_by") is not None else s2.get("cited_by"))
+    d["retracted"] = bool(cr.get("retracted") or oa.get("retracted"))
+    hint = p.get("pub_hint", "unknown")
+    if (p.get("doi") or "").startswith("10.48550") or d["crossref_type"] in ("posted-content", "preprint", "repository"):
+        hint = "preprint_only"
+    elif d["crossref_type"] in ("dissertation",):
+        hint = "thesis"
+    elif hint == "unknown":
+        if d["crossref_type"] == "journal-article":
+            hint = "journal"
+        elif d["crossref_type"] in ("proceedings-article", "book-chapter"):
+            hint = "conference"
+    d["pub_hint"] = hint
+    d["manual_notes"] = manual.get("notes", "")
+    return d
+
+
+def build_dossiers(run, embed="auto"):
+    rows = []
+    for p in run.papers():
+        c = read_json(run.cache_dir / ("%s.json" % p["id"]), {}) or {}
+        m = read_json(run.manual_dir / ("%s.json" % p["id"]), {}) or {}
+        rows.append(merge_enrichment(p, c, m))
+    sig = compute_signals(rows, embed=embed)
+    for r, s in zip(rows, sig):
+        r.update(s)
+    write_jsonl(run.dossier_path, rows)
+    run._dos = None
+    return rows
+
+
+def cmd_signals(a):
+    run = Run(a.run)
+    build_dossiers(run, embed=a.embed)
+    cmd_coverage(run)
+
+
+def cmd_fill(a):
+    run = Run(a.run)
+    if a.id not in {p["id"] for p in run.papers()}:
+        die("unknown id " + a.id)
+    m = read_json(run.manual_dir / ("%s.json" % a.id), {}) or {}
+    ab = a.abstract
+    if a.abstract_file:
+        ab = Path(a.abstract_file).read_text(encoding="utf-8")
+    if ab:
+        m["abstract"] = re.sub(r"\s+", " ", ab).strip()
+        m["source"] = a.source
+    if a.arxiv:
+        m["arxiv_id"] = re.sub(r"^.*arxiv\.org/(abs|pdf)/", "", a.arxiv).replace(".pdf", "")
+    if a.pdf:
+        m["pdf"] = a.pdf
+    if a.notes:
+        m["notes"] = a.notes
+    if a.url:
+        m["url"] = a.url
+    write_json(run.manual_dir / ("%s.json" % a.id), m)
+    build_dossiers(run, embed="off")
+    print("stored for %s (abstract_source=%s)" % (a.id, run.dossiers()[a.id]["abstract_source"]))
+
+
+# --------------------------------------------------------------------------- show / search
+def render_dossier(d, run=None, with_prior=None):
+    L = []
+    flags = ",".join(d.get("signal_flags", [])) or "-"
+    L.append("[%s]  signal=%s  safety_net=%s  flags=%s  sim_domain_pct=%s"
+             % (d["id"], d.get("signal_score"), "YES" if d.get("safety_net") else "no", flags, d.get("sim_domain_pct")))
+    L.append("TITLE:   " + d["title"])
+    L.append("AUTHORS: " + (d.get("authors") or "?"))
+    L.append("VENUE:   %s | %s | dblp=%s | pub_hint=%s | crossref_type=%s"
+             % (d.get("venue"), d.get("year"), d.get("dblp_key"), d.get("pub_hint"), d.get("crossref_type") or "?"))
+    L.append("DOI:     %s | arXiv: %s | link: %s | cited_by=%s%s"
+             % (d.get("doi") or "none", d.get("arxiv_id") or "none", d.get("ee") or d.get("url"),
+                d.get("cited_by"), " | RETRACTED?!" if d.get("retracted") else ""))
+    ab = d.get("abstract") or ""
+    if ab:
+        L.append("ABSTRACT [%s, %d chars]:" % (d.get("abstract_source"), len(ab)))
+        L.append(wrap(ab, 118, "  "))
+    else:
+        L.append("ABSTRACT: *** NONE FOUND *** (you must look it up: web search / fetch the DOI page, then `ph.py fill`)")
+        if d.get("abstract_snippet"):
+            L.append("  short snippet only: " + d["abstract_snippet"][:400])
+    if d.get("keywords"):
+        L.append("KEYWORDS: " + "; ".join(d["keywords"]))
+    if d.get("topics"):
+        L.append("TOPICS:   " + "; ".join(d["topics"]))
+    if d.get("tldr"):
+        L.append("S2 TLDR:  " + d["tldr"])
+    if d.get("manual_notes"):
+        L.append("NOTES:    " + d["manual_notes"])
+    if with_prior:
+        for tag, rec in with_prior:
+            if rec:
+                L.append("PRIOR %s: verdict=%s roles=%s conf=%s | %s" % (tag, rec.get("verdict"), rec.get("roles"),
+                                                                       rec.get("confidence"), rec.get("reason")))
+    return "\n".join(L)
+
+
+def cmd_show(a):
+    run = Run(a.run)
+    d = run.dossiers().get(a.id)
+    if not d:
+        die("unknown id")
+    print(render_dossier(d, with_prior=[(p, run.decisions(p).get(a.id)) for p in ("A", "B", "C", "F")] if not a.blind else None))
+
+
+def search_docs(run, query, top=20):
+    dos = run.dossiers()
+    ids = [i for i in run.eligible() if i in dos]
+    texts = [dos[i]["title"] + " . " + dos[i]["title"] + " . " + (dos[i].get("abstract") or "") + " " + " ".join(dos[i].get("keywords") or []) for i in ids]
+    tl = [toks(t) for t in texts]
+    df = Counter()
+    for t in tl:
+        df.update(set(t))
+    N = len(tl)
+    idf = {t: math.log((N + 1) / (c + 1)) + 1.0 for t, c in df.items()}
+    vocab = [t for t in df if "_" not in t and len(t) >= 5]
+    qt = toks(query)
+    expanded = list(qt)
+    for t in qt:  # fuzzy expansion: typo / inflection tolerant
+        if "_" in t or t in df or len(t) < 5:
+            continue
+        expanded += difflib.get_close_matches(t, vocab, n=2, cutoff=0.84)
+    qv = vec(expanded, idf)
+    res = []
+    for i, t in zip(ids, tl):
+        s = cosine(vec(t, idf), qv)
+        tsim = title_sim(query, dos[i]["title"])
+        res.append((0.85 * s + 0.15 * tsim, i))
+    res.sort(reverse=True)
+    return res[:top]
+
+
+def cmd_search(a):
+    run = Run(a.run)
+    dos = run.dossiers()
+    for s, i in search_docs(run, a.query, a.top):
+        print("%.3f  %s  sig=%-3s  %s" % (s, i, dos[i].get("signal_score"), dos[i]["title"][:110]))
+
+
+# --------------------------------------------------------------------------- status / plans / batches
+def pass_plan(run, p):
+    if p == "A":
+        return run.eligible()
+    pl = run.plans()
+    if p not in pl:
+        return None
+    return pl[p]
+
+
+def cmd_status(a):
+    run = Run(a.run if hasattr(a, "run") else None)
+    el = run.eligible()
+    d = run.dossiers()
+    print("run: %s | csv: %s | papers: %d | eligible (in range, not duplicate): %d"
+          % (run.name, run.meta.get("csv"), len(run.papers()), len(el)))
+    if run.dossier_path.exists():
+        cmd_coverage(run)
+    else:
+        print("dossiers not built yet -> run `ph.py enrich`")
+    pl = run.plans()
+    for p in ("A", "B", "C", "F"):
+        plan = pass_plan(run, p)
+        dec = run.decisions(p)
+        if plan is None:
+            print("pass %s: not planned yet" % p)
+        else:
+            done = sum(1 for i in plan if i in dec)
+            print("pass %s: %d / %d done, %d remaining" % (p, done, len(plan), len(plan) - done))
+    A = run.decisions("A")
+    if A:
+        print("pass A verdicts: %s" % dict(Counter(r["verdict"] for r in A.values())))
+    fin = read_jsonl(run.dir / "final.jsonl")
+    if fin:
+        print("final verdicts: %s" % dict(Counter(r["verdict"] for r in fin)))
+
+
+def ensure_plan_B(run, force=False):
+    pl = run.plans()
+    if "B" in pl:
+        return pl["B"]
+    A, dos, el = run.decisions("A"), run.dossiers(), run.eligible()
+    missing = [i for i in el if i not in A]
+    if missing and not force:
+        die("pass A incomplete (%d papers left) - finish it first" % len(missing))
+    B = []
+    for i in el:
+        a = A.get(i)
+        if not a:
+            continue
+        if (a["verdict"] in ("accept", "borderline") or a.get("needs_deep_dive") or dos[i].get("safety_net")
+                or (dos[i].get("abstract_source") == "none" and a.get("confidence", 1) < 0.9)
+                or a.get("confidence", 1) < 0.6 or dos[i].get("retracted")):
+            B.append(i)
+    B.sort(key=lambda i: -dos[i].get("signal_score", 0))
+    pl["B"] = B
+    run.save_plans(pl)
+    print("plan B frozen: %d papers (A-accept/borderline/needs_deep_dive + safety-net + weak-evidence rejects)" % len(B))
+    return B
+
+
+def ensure_plan_C(run):
+    pl = run.plans()
+    if "C" in pl:
+        return pl["C"]
+    if "B" not in pl:
+        die("plan B not frozen yet (finish pass A, then `batch --pass B`)")
+    dos, el = run.dossiers(), run.eligible()
+    C = set(pl["B"])
+    rest = sorted([i for i in el if i not in C], key=lambda i: -dos[i].get("signal_score", 0))
+    top = rest[:40]
+    tail = rest[40:]
+    rnd = random.Random(SEED)
+    k = min(len(tail), max(60, math.ceil(0.12 * len(tail))))
+    samp = rnd.sample(tail, k) if tail else []
+    C |= set(top) | set(samp)
+    lst = sorted(C)
+    random.Random(SEED + 1).shuffle(lst)
+    pl["C"] = lst
+    pl["C_audit_sample"] = top + samp
+    run.save_plans(pl)
+    print("plan C frozen: %d papers = %d from B + %d top-signal rejects + %d random rejects (blind audit)"
+          % (len(lst), len(pl["B"]), len(top), len(samp)))
+    return lst
+
+
+def cmd_batch(a):
+    run = Run(a.run)
+    p = a.pass_.upper()
+    if p == "A":
+        ids = run.eligible()
+        dos = run.dossiers()
+        if not run.dossier_path.exists():
+            die("run `ph.py enrich` first")
+        ids = sorted(ids, key=lambda i: -dos[i].get("signal_score", 0))
+    elif p == "B":
+        ids = ensure_plan_B(run, a.force)
+    elif p == "C":
+        ids = ensure_plan_C(run)
+    elif p == "F":
+        ids = run.plans().get("F")
+        if ids is None:
+            die("no adjudication queue yet - run `ph.py reconcile` after pass C")
+    else:
+        die("pass must be A, B, C or F")
+    dec = run.decisions(p)
+    todo = [i for i in ids if i not in dec]
+    if a.ids:
+        todo = [i for i in a.ids.split(",") if i in ids and i not in dec] or [i for i in a.ids.split(",")]
+    if not todo:
+        print("PASS %s COMPLETE (%d/%d)." % (p, len(ids), len(ids)))
+        return
+    chunk = todo[:a.n]
+    dos = run.dossiers()
+    print("=" * 100)
+    print("PASS %s | batch of %d | %d remaining before this batch | %d total in pass" % (p, len(chunk), len(todo), len(ids)))
+    if p == "C":
+        print("BLIND PASS: you must NOT open decisions_A/B files or reuse earlier verdicts. Judge from scratch.")
+    print("=" * 100)
+    for i in chunk:
+        prior = None
+        if p == "B":
+            prior = [("A", run.decisions("A").get(i))]
+        elif p == "F":
+            prior = [("A", run.decisions("A").get(i)), ("B", run.decisions("B").get(i)), ("C", run.decisions("C").get(i))]
+        print(render_dossier(dos[i], with_prior=prior))
+        print("-" * 100)
+    print("Next: judge every paper above (follow prompt.md), then `python3 tools/ph.py record --pass %s` with a JSON array." % p)
+
+
+# --------------------------------------------------------------------------- record + validation
+def normtext(s):
+    s = unicodedata.normalize("NFKC", s or "").lower()
+    s = s.replace("\u2010", "-").replace("\u2011", "-").replace("\u2012", "-").replace("\u2013", "-").replace("\u2014", "-")
+    s = re.sub(r"[\"'`\u2018\u2019\u201c\u201d]", "", s)
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s\-]", " ", s)).strip()
+
+
+def quote_in(quote, hay):
+    q, h = normtext(quote), normtext(hay)
+    if not q or not h:
+        return False
+    if q in h:
+        return True
+    sm = difflib.SequenceMatcher(None, q, h, autojunk=False)
+    m = sm.find_longest_match(0, len(q), 0, len(h))
+    return m.size >= 0.92 * len(q)
+
+
+def hay_for(run, d, src):
+    if src == "title":
+        return d["title"]
+    if src == "abstract":
+        return (d.get("abstract") or "") + " " + (d.get("abstract_snippet") or "")
+    if src == "fulltext":
+        f = run.fulltext_dir / ("%s.txt" % d["id"])
+        return f.read_text(encoding="utf-8", errors="replace") if f.exists() else ""
+    return ""
+
+
+def validate_record(run, r, p, policy):
+    errs = []
+    dos = run.dossiers()
+    pid = r.get("id")
+    if pid not in dos:
+        return ["unknown id %r" % pid]
+    d = dos[pid]
+    v = r.get("verdict")
+    if v not in VERDICTS:
+        errs.append("verdict must be one of %s" % VERDICTS)
+    roles = r.get("roles", [])
+    if not isinstance(roles, list) or any(x not in ROLES for x in roles):
+        errs.append("roles must be a list drawn from %s" % ROLES)
+        roles = []
+    pc = r.get("primary_contribution")
+    if pc not in CONTRIBS:
+        errs.append("primary_contribution must be one of %s" % CONTRIBS)
+    if r.get("subject_scope") not in SCOPES:
+        errs.append("subject_scope must be one of %s" % SCOPES)
+    crit = r.get("criteria") or {}
+    off_domain = v == "reject" and r.get("reject_class") in ("off_domain", "security_other", "defensive_only", "vuln_detection_or_code_scan", "generic_llm_security", "static_qa_benchmark")
+    for k in ("llm_agent", "offensive_security", "black_box", "long_horizon"):
+        if crit.get(k) not in YNU:
+            if off_domain and k not in crit:
+                crit[k] = "no"
+                r["criteria"] = crit
+            else:
+                errs.append("criteria.%s must be yes|no|unclear" % k)
+    if not isinstance(r.get("confidence"), (int, float)) or not (0 <= r["confidence"] <= 1):
+        errs.append("confidence must be a number 0..1")
+    reason = (r.get("reason") or "").strip()
+    if len(reason) < 10:
+        errs.append("reason is required (one or two sentences, <= 60 words)")
+    elif len(reason.split()) > 80:
+        errs.append("reason too long (<= 60 words)")
+    if r.get("abstract_source") not in ABSTRACT_SOURCES + [None]:
+        errs.append("abstract_source must be one of %s" % ABSTRACT_SOURCES)
+    if r.get("publication_status") not in PUB_STATUS:
+        errs.append("publication_status must be one of %s" % PUB_STATUS)
+    if not isinstance(r.get("fulltext_read"), bool):
+        errs.append("fulltext_read must be true/false")
+    # evidence
+    ev, es = (r.get("evidence") or "").strip(), r.get("evidence_source")
+    if es not in EVIDENCE_SOURCES:
+        errs.append("evidence_source must be one of %s" % EVIDENCE_SOURCES)
+    elif len(ev.split()) < 4 or len(ev.split()) > 45:
+        errs.append("evidence must be a verbatim quote of 4-45 words")
+    elif es == "web":
+        if not r.get("evidence_url"):
+            errs.append("evidence_source=web needs evidence_url")
+    elif not quote_in(ev, hay_for(run, d, es)):
+        errs.append("evidence quote NOT found verbatim in the %s text of %s - copy it exactly (or use ph.py fulltext first)" % (es, pid))
+    if es == "fulltext" and r.get("fulltext_read") is False:
+        errs.append("evidence_source=fulltext but fulltext_read=false")
+    # verdict logic
+    if v == "reject":
+        if r.get("reject_class") not in REJECT_CLASSES:
+            errs.append("reject needs reject_class in %s" % REJECT_CLASSES)
+        if roles:
+            errs.append("reject must have roles=[]")
+    if v == "borderline":
+        if r.get("borderline_reason") not in BORDER_REASONS:
+            errs.append("borderline needs borderline_reason in %s" % BORDER_REASONS)
+    if v == "accept":
+        if not roles:
+            errs.append("accept needs at least one role")
+        pr = r.get("primary_role")
+        if pr not in roles:
+            errs.append("accept needs primary_role contained in roles")
+        elif pc != ROLE_TO_CONTRIB[pr]:
+            errs.append("primary_role=%s requires primary_contribution=%s" % (pr, ROLE_TO_CONTRIB[pr]))
+        if crit.get("llm_agent") != "yes" or crit.get("offensive_security") != "yes":
+            errs.append("accept requires criteria llm_agent=yes AND offensive_security=yes (judged on the system(s) the paper presents/surveys/benchmarks/evaluates)")
+        if "baseline" in roles:
+            if r.get("primary_role") != "baseline":
+                errs.append("baseline may only be the primary role")
+            if any(crit.get(k) != "yes" for k in ("llm_agent", "offensive_security", "black_box", "long_horizon")):
+                errs.append("baseline requires ALL FOUR criteria = yes (3 and 4 under their soft definitions, on positive evidence)")
+        if r.get("subject_scope") not in ("core", "broad"):
+            errs.append("accept requires subject_scope core or broad")
+        if r.get("publication_status") not in PUB_OK_STRICT and policy == "strict":
+            errs.append("publication_policy=strict: status %r cannot be accepted - use verdict=borderline, borderline_reason=not_peer_reviewed/workshop_unverified" % r.get("publication_status"))
+        if d.get("retracted"):
+            errs.append("paper looks retracted")
+    if p == "F" and r.get("needs_deep_dive"):
+        errs.append("pass F must be definitive (needs_deep_dive=false)")
+    if r.get("abstract_source") == "none" and d.get("abstract_source") != "none":
+        errs.append("abstract_source=none but the dossier has an abstract (%s)" % d.get("abstract_source"))
+    if d.get("abstract_source") == "none" and r.get("abstract_source") not in ("none", "manual_web", "fulltext", None) and False:
+        pass
+    return errs
+
+
+def cmd_record(a):
+    run = Run(a.run)
+    p = a.pass_.upper()
+    if p not in ("A", "B", "C", "F"):
+        die("pass must be A, B, C or F")
+    raw = Path(a.file).read_text(encoding="utf-8") if a.file else sys.stdin.read()
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-z]*\n|\n```$", "", raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        data = [json.loads(ln) for ln in raw.splitlines() if ln.strip()]
+    if isinstance(data, dict):
+        data = [data]
+    policy = run.meta.get("publication_policy", "strict")
+    plan = pass_plan(run, p)
+    ok, bad = 0, 0
+    for r in data:
+        errs = validate_record(run, r, p, policy)
+        if plan is not None and r.get("id") not in plan and p not in ("A", "F"):
+            errs.append("id %s is not part of pass %s" % (r.get("id"), p))
+        if errs:
+            bad += 1
+            print("REJECTED %s: %s" % (r.get("id"), " | ".join(errs)))
+            continue
+        r["pass"], r["ts"] = p, now()
+        if r["verdict"] == "reject":
+            r["roles"] = []
+        append_jsonl(run.dec_path(p), r)
+        ok += 1
+    print("recorded %d, rejected %d (fix the rejected ones and resend only those)" % (ok, bad))
+    if plan is not None:
+        dec = run.decisions(p)
+        print("pass %s: %d/%d done" % (p, sum(1 for i in plan if i in dec), len(plan)))
+
+
+# --------------------------------------------------------------------------- fulltext
+class TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.skip = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "nav", "footer", "header", "noscript"):
+            self.skip += 1
+        if tag in ("p", "div", "br", "h1", "h2", "h3", "h4", "li", "section"):
+            self.out.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "nav", "footer", "header", "noscript") and self.skip:
+            self.skip -= 1
+
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(data)
+
+
+def pdf_to_text(data):
+    with tempfile.TemporaryDirectory() as td:
+        fp = Path(td) / "x.pdf"
+        fp.write_bytes(data)
+        if shutil.which("pdftotext"):
+            try:
+                subprocess.run(["pdftotext", "-layout", str(fp), str(Path(td) / "x.txt")], check=True, timeout=180,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                t = (Path(td) / "x.txt").read_text(encoding="utf-8", errors="replace")
+                if len(t) > 2000:
+                    return t
+            except Exception:
+                pass
+        try:
+            import pypdf
+            rd = pypdf.PdfReader(str(fp))
+            return "\n".join((pg.extract_text() or "") for pg in rd.pages)
+        except Exception:
+            pass
+        try:
+            import PyPDF2
+            rd = PyPDF2.PdfReader(str(fp))
+            return "\n".join((pg.extract_text() or "") for pg in rd.pages)
+        except Exception:
+            return ""
+
+
+KWIC_TERMS = [r"black[- ]?box", r"gr[ae]y[- ]?box|white[- ]?box", r"attack chain|kill chain|multi-?step|long[- ]horizon",
+              r"autonomous(ly)?", r"human (intervention|in the loop|operator)|manual", r"we (propose|present|introduce|develop)",
+              r"contributions?", r"benchmark", r"limitations?", r"nmap|metasploit|shell|tool"]
+
+
+def cmd_fulltext(a):
+    run = Run(a.run)
+    d = run.dossiers().get(a.id)
+    if not d:
+        die("unknown id")
+    dst = run.fulltext_dir / ("%s.txt" % a.id)
+    text = dst.read_text(encoding="utf-8", errors="replace") if dst.exists() and not a.refresh else ""
+    src = "cache"
+    if not text:
+        urls = list(a.url or []) + d.get("pdf_urls", [])
+        if d.get("arxiv_id"):
+            urls.append("https://arxiv.org/pdf/" + d["arxiv_id"])
+        if d.get("ee"):
+            urls.append(d["ee"])
+        if d.get("doi"):
+            urls.append("https://doi.org/" + d["doi"])
+        for u in dict.fromkeys(urls):
+            st, body, final, hdr = http(u, urllib.parse.urlparse(u).netloc, browser=True, retries=2, timeout=45)
+            if st != 200 or not body:
+                continue
+            if body[:5] == b"%PDF-":
+                t = pdf_to_text(body)
+            else:
+                ex = TextExtractor()
+                try:
+                    ex.feed(body.decode("utf-8", errors="replace"))
+                except Exception:
+                    pass
+                t = re.sub(r"\n\s*\n+", "\n\n", "".join(ex.out))
+                mp = MetaParser()
+                try:
+                    mp.feed(body.decode("utf-8", errors="replace"))
+                except Exception:
+                    pass
+                for pu in mp.meta.get("citation_pdf_url", []):  # publisher page pointing to a PDF
+                    st2, b2, _, _ = http(pu, urllib.parse.urlparse(pu).netloc, browser=True, retries=1, timeout=45)
+                    if st2 == 200 and b2[:5] == b"%PDF-":
+                        t2 = pdf_to_text(b2)
+                        if len(t2) > len(t):
+                            t, final = t2, pu
+            if len(t) >= 3000:
+                text, src = t, final
+                dst.write_text(text, encoding="utf-8")
+                break
+    if not text:
+        print("NO FULL TEXT RETRIEVABLE for %s. Options: use your own web tools to read the publisher/arXiv page; "
+              "if you quote from it use evidence_source=web with evidence_url; otherwise decide from the abstract "
+              "and mark fulltext_read=false." % a.id)
+        return
+    print("FULL TEXT for %s saved at %s  (%d chars, source: %s)" % (a.id, dst, len(text), src))
+    heads = [(m.start(), m.group(0).strip()) for m in re.finditer(
+        r"(?im)^\s*(\d+\.?\s*)?(abstract|introduction|background|related work|threat model|design|approach|methodology|method|"
+        r"system overview|architecture|implementation|evaluation|experiments?|results|discussion|limitations?|conclusions?|references)\b.{0,60}$", text)]
+    print("OUTLINE: " + " | ".join("%s@%d" % (h[:40], pos) for pos, h in heads[:30]))
+    m = re.search(r"(?i)\bintroduction\b", text)
+    s = m.start() if m else 0
+    print("\n--- INTRODUCTION / OPENING (first %d chars) ---" % a.chars)
+    print(text[s:s + a.chars])
+    print("\n--- KEY-TERM CONTEXTS ---")
+    for t in KWIC_TERMS:
+        hits = list(re.finditer(t, text, re.I))[:3]
+        for h in hits:
+            print("[%s] ...%s..." % (t[:18], re.sub(r"\s+", " ", text[max(0, h.start() - 170):h.end() + 170])))
+    print("\n(open the saved file with `view`/grep for the method + evaluation sections; quotes from it can be used with evidence_source=fulltext)")
+
+
+# --------------------------------------------------------------------------- audit expansion
+def cmd_expand_audit(a):
+    run = Run(a.run)
+    pl = run.plans()
+    if "C" not in pl:
+        die("plan C does not exist yet")
+    dos = run.dossiers()
+    cur = set(pl["C"])
+    cand = [i for i in run.eligible() if i not in cur and (a.all or dos[i].get("signal_score", 0) >= a.min_signal
+                                                        or dos[i].get("sim_domain_pct", 0) >= a.min_pct)]
+    pl["C"] = pl["C"] + cand
+    run.save_plans(pl)
+    print("added %d papers to the blind pass C (now %d)" % (len(cand), len(pl["C"])))
+
+
+def cmd_sweep(a):
+    run = Run(a.run)
+    pl = run.plans()
+    if "C" not in pl:
+        die("plan C does not exist yet")
+    cur, add = set(pl["C"]), []
+    for q in SWEEP_QUERIES:
+        for s, i in search_docs(run, q, a.top):
+            if i not in cur and s >= a.min_score:
+                cur.add(i)
+                add.append(i)
+    pl["C"] = pl["C"] + add
+    run.save_plans(pl)
+    print("recall sweep: %d queries -> %d new papers added to blind pass C (now %d)" % (len(SWEEP_QUERIES), len(add), len(pl["C"])))
+
+
+# --------------------------------------------------------------------------- reconcile / validate / export
+def conf(r):
+    return float(r.get("confidence", 0)) if r else 1.0
+
+
+def primary_of(A, B, i):
+    return B.get(i) or A.get(i)
+
+
+def disagreement(p, c):
+    if p["verdict"] != c["verdict"]:
+        return "verdict %s vs %s" % (p["verdict"], c["verdict"])
+    if set(p.get("roles", [])) != set(c.get("roles", [])):
+        return "roles %s vs %s" % (p.get("roles"), c.get("roles"))
+    if p["verdict"] != "reject" and p.get("primary_role") != c.get("primary_role"):
+        return "primary_role differs"
+    if min(conf(p), conf(c)) < 0.6:
+        return "low confidence"
+    return ""
+
+
+def cmd_reconcile(a):
+    run = Run(a.run)
+    pl = run.plans()
+    A, B, C, F = (run.decisions(x) for x in "ABCF")
+    el = run.eligible()
+    if any(i not in A for i in el):
+        die("pass A incomplete")
+    if "B" in pl and any(i not in B for i in pl["B"]):
+        die("pass B incomplete (%d left)" % sum(1 for i in pl["B"] if i not in B))
+    if "C" not in pl:
+        die("pass C not planned - run `batch --pass C` first")
+    if any(i not in C for i in pl["C"]):
+        die("pass C incomplete (%d left)" % sum(1 for i in pl["C"] if i not in C))
+    queue, why, fn = list(pl.get("F", [])), {}, []
+    for i in pl["C"]:
+        p, c = primary_of(A, B, i), C[i]
+        dis = disagreement(p, c)
+        if dis:
+            why[i] = dis
+            if i not in queue:
+                queue.append(i)
+        if A[i]["verdict"] == "reject" and c["verdict"] in ("accept", "borderline") and i in set(pl.get("C_audit_sample", [])):
+            fn.append(i)
+    pl["F"] = queue
+    pl["F_why"] = {**pl.get("F_why", {}), **why}
+    run.save_plans(pl)
+    sample = [i for i in pl.get("C_audit_sample", [])]
+    print("blind audit sample of rejected papers: %d | rescued by blind pass (false negatives in pass A): %d %s"
+          % (len(sample), len(fn), fn[:20]))
+    print("adjudication queue (pass F): %d papers, %d still undecided" % (len(queue), sum(1 for i in queue if i not in F)))
+    if any(i not in F for i in queue):
+        print("Run `batch --pass F` and settle them with full-text evidence.")
+        return
+    if fn and not pl.get("expanded_once"):
+        print("!! The audit found false negatives. Widen the net once: `ph.py expand-audit --min-signal 1 --min-pct 0.5` "
+              "(or --all), finish pass C on the new papers, then reconcile again.")
+    final = []
+    for p in run.papers():
+        i = p["id"]
+        row = None
+        if not p.get("in_range"):
+            row = {"id": i, "verdict": "reject", "reject_class": "out_of_range", "roles": [], "reason": "year outside configured range",
+                   "confidence": 1.0, "passes": ["auto"]}
+        elif p.get("dup_of"):
+            row = {"id": i, "verdict": "reject", "reject_class": "duplicate", "roles": [], "dup_of": p["dup_of"],
+                   "reason": "duplicate of %s" % p["dup_of"], "confidence": 1.0, "passes": ["auto"]}
+        else:
+            base = F.get(i) or primary_of(A, B, i)
+            row = dict(base)
+            row["passes"] = [x for x, dd in (("A", A), ("B", B), ("C", C), ("F", F)) if i in dd]
+            if i in C and i not in F:
+                c = C[i]
+                row["confidence"] = round((conf(base) + conf(c)) / 2, 2)
+                row["fulltext_read"] = bool(base.get("fulltext_read") or c.get("fulltext_read"))
+        final.append(row)
+    write_jsonl(run.dir / "final.jsonl", final)
+    print("final.jsonl written: %s" % dict(Counter(r["verdict"] for r in final)))
+
+
+def cmd_validate(a):
+    run = Run(a.run)
+    fin = read_jsonl(run.dir / "final.jsonl")
+    if not fin:
+        die("no final.jsonl - run reconcile")
+    policy = run.meta.get("publication_policy", "strict")
+    errs, ids = [], {r["id"] for r in fin}
+    for p in run.papers():
+        if p["id"] not in ids:
+            errs.append("%s missing from final" % p["id"])
+    for r in fin:
+        if r.get("passes") == ["auto"]:
+            continue
+        e = validate_record(run, dict(r), "F", policy)
+        e = [x for x in e if "not part of pass" not in x]
+        if e:
+            errs.append("%s: %s" % (r["id"], " | ".join(e)))
+    if errs:
+        print("VALIDATION FAILED (%d):" % len(errs))
+        print("\n".join(errs[:60]))
+        sys.exit(1)
+    print("validation OK: %d papers, every eligible paper has a verified final verdict" % len(fin))
+
+
+CSV_COLS = ["paper_id", "title", "authors", "year", "venue", "doi", "arxiv_url", "ee", "dblp_key", "url", "tier", "primary_role",
+            "roles", "primary_contribution", "subject_scope", "llm_agent", "offensive_security", "black_box", "long_horizon",
+            "publication_status", "system_or_artifact_name", "attack_surfaces", "confidence", "review_passes", "full_text_read",
+            "abstract_source", "evidence_quote", "reason", "abstract"]
+
+
+def row_out(d, r):
+    return {"paper_id": d["id"], "title": d["title"], "authors": d.get("authors"), "year": d.get("year"), "venue": d.get("venue"),
+            "doi": ("https://doi.org/" + d["doi"]) if d.get("doi") else "", "arxiv_url": d.get("arxiv_url", ""),
+            "ee": d.get("ee"), "dblp_key": d.get("dblp_key"), "url": d.get("url"), "tier": r["verdict"],
+            "primary_role": r.get("primary_role", ""), "roles": ";".join(r.get("roles", [])),
+            "primary_contribution": r.get("primary_contribution", ""), "subject_scope": r.get("subject_scope", ""),
+            "llm_agent": (r.get("criteria") or {}).get("llm_agent", ""), "offensive_security": (r.get("criteria") or {}).get("offensive_security", ""),
+            "black_box": (r.get("criteria") or {}).get("black_box", ""), "long_horizon": (r.get("criteria") or {}).get("long_horizon", ""),
+            "publication_status": r.get("publication_status", ""), "system_or_artifact_name": r.get("system_name", ""),
+            "attack_surfaces": ";".join(r.get("attack_surfaces", []) or []), "confidence": r.get("confidence", ""),
+            "review_passes": "".join(r.get("passes", [])) if r.get("passes") != ["auto"] else "auto",
+            "full_text_read": "yes" if r.get("fulltext_read") else "no", "abstract_source": d.get("abstract_source"),
+            "evidence_quote": r.get("evidence", ""), "reason": r.get("reason", ""), "abstract": d.get("abstract", "")}
+
+
+def write_csv(path, cols, rows):
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+
+
+def cmd_export(a):
+    run = Run(a.run)
+    try:
+        cmd_validate(argparse.Namespace(run=a.run))
+    except SystemExit:
+        if not a.force:
+            die("fix validation errors first (or use --force)")
+    fin = {r["id"]: r for r in read_jsonl(run.dir / "final.jsonl")}
+    dos = run.dossiers()
+    if not a.no_network:  # fill arXiv links for the shortlist (cheap, ~tens of papers)
+        n = 0
+        for i, r in fin.items():
+            if r["verdict"] in ("accept", "borderline") and not dos[i].get("arxiv_id"):
+                ax = p_arxiv(dos[i]["title"])
+                if ax:
+                    m = read_json(run.manual_dir / ("%s.json" % i), {}) or {}
+                    m["arxiv_id"] = ax["arxiv_id"]
+                    write_json(run.manual_dir / ("%s.json" % i), m)
+                    n += 1
+        if n:
+            build_dossiers(run, embed="off")
+            dos = run.dossiers()
+    out = Path(a.out_dir or run.meta.get("output_dir") or DEFAULT_OUTPUT)
+    out.mkdir(parents=True, exist_ok=True)
+    stem = run.name
+    order = {r: n for n, r in enumerate(ROLES)}
+    acc = [row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "accept"]
+    acc.sort(key=lambda x: (order.get(x["primary_role"], 9), -float(x["confidence"] or 0), x["title"]))
+    bor = [row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "borderline"]
+    for b_, (i, r) in zip(bor, [(i, r) for i, r in fin.items() if r["verdict"] == "borderline"]):
+        b_["reason"] = "[%s] %s" % (r.get("borderline_reason"), r.get("reason"))
+    bor.sort(key=lambda x: -float(x["confidence"] or 0))
+    f_main, f_bord, f_audit = out / ("%s_filtered.csv" % stem), out / ("%s_borderline.csv" % stem), out / ("%s_audit_all.csv" % stem)
+    write_csv(f_main, CSV_COLS, acc)
+    write_csv(f_bord, CSV_COLS, bor)
+    audit = []
+    for p in run.papers():
+        r = fin[p["id"]]
+        d = dos[p["id"]]
+        audit.append({"paper_id": p["id"], "dblp_key": p["dblp_key"], "title": p["title"], "year": p["year"], "venue": p["venue"],
+                      "tier": r["verdict"], "roles": ";".join(r.get("roles", [])), "reject_class": r.get("reject_class", ""),
+                      "borderline_reason": r.get("borderline_reason", ""), "confidence": r.get("confidence", ""),
+                      "review_passes": "".join(r.get("passes", [])), "signal_score": d.get("signal_score"),
+                      "abstract_source": d.get("abstract_source"), "reason": r.get("reason", "")})
+    write_csv(f_audit, ["paper_id", "dblp_key", "title", "year", "venue", "tier", "roles", "reject_class", "borderline_reason",
+                        "confidence", "review_passes", "signal_score", "abstract_source", "reason"], audit)
+    cnt = Counter(r["primary_role"] for r in acc)
+    rep = ["# paper-hunter run report: %s" % stem, "", "- input CSV: `%s`" % run.meta.get("csv"),
+           "- papers: %d | accepted: %d | borderline: %d | rejected: %d" % (len(fin), len(acc), len(bor), len(fin) - len(acc) - len(bor)),
+           "- accepted by primary role: %s" % dict(cnt),
+           "- abstracts found: %s" % dict(Counter(d.get("abstract_source") for d in dos.values())),
+           "- passes: A=%d B=%d C=%d F=%d decisions" % tuple(len(run.decisions(x)) for x in "ABCF"), ""]
+    (out / ("%s_report.md" % stem)).write_text("\n".join(rep), encoding="utf-8")
+    print("wrote:\n  %s  (%d accepted)\n  %s  (%d borderline)\n  %s\n  %s" % (f_main, len(acc), f_bord, len(bor), f_audit, out / ("%s_report.md" % stem)))
+
+
+# --------------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(prog="ph.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--run", default=None, help="run name (default: current)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("init"); s.add_argument("--csv", required=True); s.add_argument("--min-year", type=int, default=2023)
+    s.add_argument("--max-year", type=int, default=2026); s.add_argument("--output-dir", default=None)
+    s.add_argument("--publication-policy", choices=["strict", "relaxed"], default="strict"); s.add_argument("--fresh", action="store_true")
+    s.set_defaults(f=cmd_init)
+    s = sub.add_parser("doctor"); s.set_defaults(f=cmd_doctor)
+    s = sub.add_parser("enrich"); s.add_argument("--workers", type=int, default=6); s.add_argument("--limit", type=int, default=0)
+    s.add_argument("--skip-s2", action="store_true"); s.add_argument("--all-years", action="store_true")
+    s.add_argument("--embed", choices=["auto", "on", "off"], default="auto"); s.set_defaults(f=cmd_enrich)
+    s = sub.add_parser("signals"); s.add_argument("--embed", choices=["auto", "on", "off"], default="auto"); s.set_defaults(f=cmd_signals)
+    s = sub.add_parser("fill"); s.add_argument("id"); s.add_argument("--abstract"); s.add_argument("--abstract-file")
+    s.add_argument("--source", default="manual_web", choices=["manual_web", "fulltext"]); s.add_argument("--arxiv"); s.add_argument("--pdf")
+    s.add_argument("--notes"); s.add_argument("--url"); s.set_defaults(f=cmd_fill)
+    s = sub.add_parser("show"); s.add_argument("id"); s.add_argument("--blind", action="store_true"); s.set_defaults(f=cmd_show)
+    s = sub.add_parser("search"); s.add_argument("query"); s.add_argument("--top", type=int, default=20); s.set_defaults(f=cmd_search)
+    s = sub.add_parser("status"); s.set_defaults(f=cmd_status)
+    s = sub.add_parser("batch"); s.add_argument("--pass", dest="pass_", required=True); s.add_argument("--n", type=int, default=10)
+    s.add_argument("--ids"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_batch)
+    s = sub.add_parser("record"); s.add_argument("--pass", dest="pass_", required=True); s.add_argument("--file"); s.set_defaults(f=cmd_record)
+    s = sub.add_parser("fulltext"); s.add_argument("id"); s.add_argument("--url", action="append"); s.add_argument("--chars", type=int, default=5000)
+    s.add_argument("--refresh", action="store_true"); s.set_defaults(f=cmd_fulltext)
+    s = sub.add_parser("expand-audit"); s.add_argument("--all", action="store_true"); s.add_argument("--min-signal", type=int, default=1)
+    s.add_argument("--min-pct", type=float, default=0.5); s.set_defaults(f=cmd_expand_audit)
+    s = sub.add_parser("sweep"); s.add_argument("--top", type=int, default=10); s.add_argument("--min-score", type=float, default=0.02)
+    s.set_defaults(f=cmd_sweep)
+    s = sub.add_parser("reconcile"); s.set_defaults(f=cmd_reconcile)
+    s = sub.add_parser("validate"); s.set_defaults(f=cmd_validate)
+    s = sub.add_parser("export"); s.add_argument("--out-dir"); s.add_argument("--force", action="store_true")
+    s.add_argument("--no-network", action="store_true"); s.set_defaults(f=cmd_export)
+    a = ap.parse_args()
+    a.f(a)
+
+
+if __name__ == "__main__":
+    main()
