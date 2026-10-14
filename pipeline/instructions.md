@@ -126,7 +126,7 @@ python prepare_for_screening.py ../papers/q4-2026.csv
 **AI agent classifies ALL papers using semantic understanding.**
 
 ```bash
-./stage1_ai_screen.sh work/q4-2026_prepared.json screen1
+./g_ai_screen.sh work/q4-2026_prepared.json screen1
 ```
 
 **What it does:**
@@ -170,7 +170,7 @@ Currently manual - you need to:
 
 **To automate with your AI agent:**
 
-Edit `stage1_ai_screen.sh` line ~62 and replace the manual pause with:
+Edit `g_ai_screen.sh` line ~62 and replace the manual pause with:
 
 ```bash
 # Example for antigravity or similar CLI agent
@@ -185,7 +185,7 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 
 ```bash
 # IMPORTANT: Run in a FRESH SESSION - don't open screen1 files!
-./stage1_ai_screen.sh work/q4-2026_prepared.json screen2
+./g_ai_screen.sh work/q4-2026_prepared.json screen2
 ```
 
 **Why screen2?**
@@ -307,10 +307,10 @@ pipeline/
 ├── instructions.md                # Pipeline usage guide
 ├── prompt.md                      # AI agent prompt template
 ├── a_config.py                    # Configuration
-├── run_pipeline.sh               # Master runner
+├── z_run_pipeline.sh             # Master runner
 │
 ├── b_prepare_for_screening.py    # Prepare: Load ALL papers
-├── stage1_ai_screen.sh          # Screen: AI screening orchestrator
+├── g_ai_screen.sh                # Screen: AI screening orchestrator
 ├── c_batch_manager.py            # Screen: Batch manager
 ├── d_aggregate.py                # Aggregate: Aggregation
 ├── e_summarize_all.py            # Utility: Cross-CSV summary
@@ -430,7 +430,7 @@ Need to customize the pipeline? Edit these files:
 - **Prioritization keywords**: `a_config.py`
 - **Screening criteria**: `prompt.md`
 - **Batch size/timeouts**: `a_config.py` (BATCH_SIZE)
-- **AI agent integration**: `stage1_ai_screen.sh` (line ~62)
+- **AI agent integration**: `g_ai_screen.sh` (line ~62)
 
 ---
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from collections import defaultdict, Counter
 
 sys.path.insert(0, str(Path(__file__).parent))
-from a_config import *
+from b_config import *
 
 
 def load_decisions(decisions_jsonl):
@@ -342,7 +342,7 @@ from pathlib import Path
 from collections import defaultdict, Counter
 
 sys.path.insert(0, str(Path(__file__).parent))
-from a_config import *
+from b_config import *
 
 
 def load_decisions(decisions_jsonl):
