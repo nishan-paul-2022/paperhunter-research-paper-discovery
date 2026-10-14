@@ -304,7 +304,8 @@ Edit `ai_screening_prompt.md` to:
 
 ```
 pipeline/
-├── README.md                      # This file
+├── instructions.md                # Pipeline usage guide
+├── prompt.md                      # AI agent prompt template
 ├── config.py                      # Configuration
 ├── run_pipeline.sh               # Master runner
 │
@@ -312,7 +313,6 @@ pipeline/
 ├── stage1_ai_screen.sh          # Screen: AI screening orchestrator
 ├── stage2_batch_manager.py       # Screen: Batch manager
 ├── stage2_aggregate.py           # Aggregate: Aggregation
-├── ai_screening_prompt.md        # AI agent prompt template
 ├── summarize_all.py              # Utility: Cross-CSV summary
 │
 ├── work/                          # Working directory (gitignored)
@@ -428,7 +428,7 @@ Once you have filtered papers:
 Need to customize the pipeline? Edit these files:
 
 - **Prioritization keywords**: `config.py`
-- **Screening criteria**: `ai_screening_prompt.md`
+- **Screening criteria**: `prompt.md`
 - **Batch size/timeouts**: `config.py` (BATCH_SIZE)
 - **AI agent integration**: `stage1_ai_screen.sh` (line ~62)
 

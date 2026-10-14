@@ -1,5 +1,27 @@
-.vscode/
-dblp.xml
-dblp.xml.gz
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# DBLP database files
+database/dblp.xml
+database/dblp.xml.gz
+
+# Pipeline working directories
+pipeline/work/
+pipeline/output/

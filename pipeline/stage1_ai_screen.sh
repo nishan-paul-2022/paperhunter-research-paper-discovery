@@ -28,7 +28,7 @@ PASS_NAME="$2"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BATCH_MGR="$SCRIPT_DIR/stage2_batch_manager.py"
-PROMPT_FILE="$SCRIPT_DIR/ai_screening_prompt.md"
+PROMPT_FILE="$SCRIPT_DIR/prompt.md"
 WORK_DIR="$SCRIPT_DIR/work"
 
 # Ensure prepared JSON exists
