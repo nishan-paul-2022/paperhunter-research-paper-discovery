@@ -71,6 +71,12 @@ Ask first: **"Is the headline contribution a system that attacks, or a thing use
 - **Strict test:** all four criteria (section 4) = `yes` on positive evidence (3 and 4 under their soft definitions) AND `primary_contribution = agent_system` AND publication filter passed.
 - **Reject as baseline:** benchmark/dataset/testbed/evaluation-framework papers (even if they ship a baseline agent or evaluate several LLMs as agents); empirical-study-only papers; LLM only advises a human; single exploit/payload generation; defence only; non-LLM automated pentesting.
 
+### 3.1b `baseline_candidate`  — likely baseline but criteria 3 or 4 unclear
+*Use this role when criteria 1 and 2 are clearly `yes` (agent system performing offensive ops) but criteria 3 (`black_box`) or 4 (`long_horizon`) can only be rated `partial` or `unclear` from available evidence.*
+- Sets `verdict=borderline`, `borderline_reason=criteria_unclear`, `primary_contribution=agent_system`.
+- The human reviewer will upgrade to `baseline` after reading the full paper.
+- Do NOT use for papers where criteria 1 or 2 fail.
+
 ### 3.2 `survey`  — maps the field
 *Headline contribution = literature review, systematic review (SLR), mapping study, SoK, taxonomy, roadmap, tutorial, or position/vision paper that reviews the field.*
 - **Accept (`subject_scope=core`):** the survey's scope is LLMs / AI agents for penetration testing, red teaming, offensive security or autonomous cyber operations.
@@ -90,9 +96,10 @@ Ask first: **"Is the headline contribution a system that attacks, or a thing use
 - **Reject:** studies of LLM vulnerability *detection* accuracy, jailbreak/safety evaluations, defence-side evaluations.
 
 ### 3.5 Multi-role rules
-- `baseline` may only be the **primary** role (strict).
+- `baseline` must be the **primary role** (`primary_role = "baseline"`). It **may** appear alongside secondary roles in the `roles` array (e.g. `["baseline", "benchmark"]`) only when the paper explicitly and substantively makes that secondary contribution. A paper whose headline is an agent system but which also introduces a small benchmark is `roles=["baseline", "benchmark"]` with `primary_role="baseline"`.  
+- `baseline_candidate` must be `primary_role="baseline_candidate"` with `verdict=borderline`. Never combine with `baseline` in the same record.
 - `benchmark`, `evaluation`, `survey` may be secondary roles only when the paper makes that contribution **explicitly and substantively** (listed in its contribution statement). A benchmark paper that merely evaluates several LLMs is `benchmark` only, unless the evaluation is a separately claimed contribution.
-- `primary_contribution` must match `primary_role` (`agent_system`, `benchmark_dataset`, `evaluation_study`, `survey`).
+- `primary_contribution` must match `primary_role`: `agent_system` for `baseline` and `baseline_candidate`, `benchmark_dataset` for `benchmark`, `evaluation_study` for `evaluation`, `survey` for `survey`.
 
 ---
 
@@ -221,6 +228,7 @@ Create no other deliverables. `runs/` is working state.
   "publication_status": "published",
   "evidence": "verbatim quote of 4-45 words",
   "evidence_source": "abstract",
+  "evidence_url": "",
   "reason": "one or two sentences, at most 60 words",
   "confidence": 0.9,
   "abstract_source": "crossref",
@@ -231,9 +239,11 @@ Create no other deliverables. `runs/` is working state.
 }]
 ```
 
-- `verdict` ∈ accept | borderline | reject; `roles` ⊆ baseline, benchmark, evaluation, survey (empty unless accept/borderline-with-intended-role).
+- `verdict` ∈ accept | borderline | reject; `roles` ⊆ `baseline`, `baseline_candidate`, `benchmark`, `evaluation`, `survey` (empty for reject).
+- `primary_role` must be one of the roles listed above and must match `primary_contribution`.
+- **Multi-role clarification:** `baseline` may appear with secondary roles (e.g. `["baseline", "benchmark"]`) when the paper explicitly contributes both; `primary_role` must still be `"baseline"`. `baseline_candidate` is never combined with `baseline`.
 - `primary_contribution` ∈ agent_system | benchmark_dataset | evaluation_study | survey | other; `subject_scope` ∈ core | broad | adjacent | none.
-- reject adds `"reject_class"`; borderline adds `"borderline_reason"`; `evidence_source` ∈ abstract | title | fulltext | web (web needs `"evidence_url"`).
+- reject adds `"reject_class"`; borderline adds `"borderline_reason"`; `evidence_source` ∈ abstract | title | fulltext | web (**web requires `evidence_url`**).
 - `abstract_source` must be the dossier's source (`crossref`, `openalex`, `semanticscholar`, `landing_page`, `arxiv`, `manual_web`, `fulltext`, `none`).
 - For clear off-domain rejects `criteria` may be omitted (it defaults to all `no`).
 - Send only JSON (no comments, no trailing commas). The tool prints exactly what is wrong with any rejected record.

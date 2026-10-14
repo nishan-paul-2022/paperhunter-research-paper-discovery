@@ -1,0 +1,10 @@
+{
+ "csv": "/tmp/tmpm7k5zjj6.csv",
+ "sha1": "165e38b26535140e46d0b6fc9b20da423755167d",
+ "created": "2026-10-14T11:12:29+00:00",
+ "n_rows": 12,
+ "min_year": 2000,
+ "max_year": 2030,
+ "output_dir": "/home/nishan/Documents/paperhunter-research-paper-discovery/paper-hunter-2/runs/__selftest_1791976349/out",
+ "publication_policy": "strict"
+}
