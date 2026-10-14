@@ -250,6 +250,52 @@ def s2_batch(dois):
     return out
 
 
+def openalex_batch(dois):
+    out = {}
+    m_str = "&mailto=" + urllib.parse.quote(MAILTO or "research-ph@gmail.com")
+    chunk_size = 50
+    for i in range(0, len(dois), chunk_size):
+        chunk = dois[i:i + chunk_size]
+        filt = "doi:" + "|".join(chunk)
+        url = "%s/works?filter=%s&per-page=50&select=%s%s" % (
+            URL_OPENALEX, urllib.parse.quote(filt), OA_SELECT, m_str)
+        j = jget(url, "openalex")
+        if not j:
+            continue
+        for w in (j.get("results") or []):
+            d = (w.get("doi") or "").replace("https://doi.org/", "").lower()
+            if not d:
+                continue
+            pl = w.get("primary_location") or {}
+            pdfs = []
+            for loc in [w.get("best_oa_location") or {}] + (w.get("locations") or []):
+                if loc.get("pdf_url") and loc["pdf_url"] not in pdfs:
+                    pdfs.append(loc["pdf_url"])
+            arx = ""
+            for loc in (w.get("locations") or []):
+                lu = loc.get("landing_page_url") or ""
+                mm = re.search(r"arxiv\.org/(?:abs|pdf)/([^\s?#]+?)(?:\.pdf)?$", lu)
+                if mm:
+                    arx = mm.group(1)
+                    break
+            out[d] = {
+                "abstract": oa_abstract(w.get("abstract_inverted_index")),
+                "title": w.get("title"),
+                "container": ((pl.get("source") or {}).get("display_name")) or "",
+                "type": w.get("type"),
+                "topics": [t.get("display_name") for t in (w.get("topics") or [])][:6],
+                "keywords": [k.get("display_name") for k in (w.get("keywords") or [])][:12],
+                "cited_by": w.get("cited_by_count"),
+                "ref_count": w.get("referenced_works_count"),
+                "retracted": bool(w.get("is_retracted")),
+                "pdf_links": pdfs,
+                "arxiv_id": arx,
+                "openalex_id": w.get("id"),
+                "doi": d,
+            }
+    return out
+
+
 class _MetaParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)

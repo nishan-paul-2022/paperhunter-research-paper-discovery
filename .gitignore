@@ -25,3 +25,4 @@ paper-database/dblp.xml.gz
 # Pipeline working directories
 paper-hunter/work/
 paper-hunter/output/
+paper-hunter-2/runs/

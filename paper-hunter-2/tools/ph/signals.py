@@ -165,8 +165,9 @@ def try_embeddings(texts):
     try:
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(os.environ.get("PH_EMBED_MODEL",
-                                                    "sentence-transformers/all-MiniLM-L6-v2"))
-        docs  = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+                                                    "sentence-transformers/all-MiniLM-L6-v2"),
+                                    device="cpu")
+        docs  = model.encode(texts, batch_size=128, normalize_embeddings=True, show_progress_bar=False)
         prof  = model.encode([PROFILES["domain"]], normalize_embeddings=True,
                               show_progress_bar=False)[0]
         return [float(sum(x * y for x, y in zip(d, prof))) for d in docs]
