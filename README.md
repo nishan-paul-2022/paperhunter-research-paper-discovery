@@ -45,4 +45,4 @@ Provide `conference-context/conference-matching-guide.md` to AI.
 python3 database/papers.py
 ```
 
-**Output:** `papers/*.csv` (32 files organized by ranking and year)
+**Output:** `paper-list/*.csv` (32 files organized by ranking and year)

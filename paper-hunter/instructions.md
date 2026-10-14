@@ -79,7 +79,7 @@ chmod +x run_pipeline.sh stage2_ai_screen.sh
 
 ```bash
 # Run complete pipeline on one CSV file (ALL papers processed)
-./run_pipeline.sh full ../papers/q4-2026.csv
+./a_run_pipeline.sh full ../paper-list/q4-2026.csv
 ```
 
 ### Option 2: Process All CSVs (32 files)
@@ -104,7 +104,7 @@ chmod +x run_pipeline.sh stage2_ai_screen.sh
 **Loads all papers with optional prioritization scores.**
 
 ```bash
-python prepare_for_screening.py ../papers/q4-2026.csv
+python c_prepare_for_screening.py ../paper-list/q4-2026.csv
 ```
 
 **What it does:**
@@ -231,7 +231,7 @@ evidence, reason, confidence, reconciliation
 ### Check processing status
 
 ```bash
-./run_pipeline.sh status work/q4-2026_prepared.json
+./a_run_pipeline.sh status work/q4-2026_prepared.json
 ```
 
 Shows:
@@ -249,7 +249,7 @@ Shows:
 
 ```bash
 # 1. Prepare all CSVs (fast, ~3 minutes, NO filtering)
-./run_pipeline.sh batch-all
+./a_run_pipeline.sh batch-all
 
 # 2. Review prepared results - check which CSVs have papers
 ls -lh work/*_prepared.json
@@ -257,13 +257,13 @@ ls -lh work/*_prepared.json
 # 3. For each CSV, run screening
 for prepared in work/*_prepared.json; do
     echo "Processing $prepared..."
-    ./run_pipeline.sh screen "$prepared" screen1
+    ./a_run_pipeline.sh screen "$prepared" screen1
 done
 
 # 4. Aggregate each one
 for prepared in work/*_prepared.json; do
     stem="${prepared%.json}"
-    ./run_pipeline.sh aggregate "$stem"
+    ./a_run_pipeline.sh aggregate "$stem"
 done
 
 # 5. Merge all core papers into master list

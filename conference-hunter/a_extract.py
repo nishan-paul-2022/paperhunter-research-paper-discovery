@@ -24,7 +24,7 @@ except ImportError:
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
-DATA_DIR = REPO_ROOT / "database"
+DATA_DIR = REPO_ROOT / "paper-database"
 CONTEXT_DIR = REPO_ROOT / "conference-context"
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 

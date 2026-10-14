@@ -18,10 +18,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# DBLP database files
-database/dblp.xml
-database/dblp.xml.gz
+# DBLP paper-database files
+paper-database/dblp.xml
+paper-database/dblp.xml.gz
 
 # Pipeline working directories
-pipeline/work/
-pipeline/output/
+paper-hunter/work/
+paper-hunter/output/

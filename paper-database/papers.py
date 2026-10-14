@@ -2,7 +2,7 @@
 """
 Paper Extractor - Extract papers from DBLP XML based on journal/conference lists.
 
-Outputs: papers/q1-2023.csv, papers/a-star-2024.csv, etc.
+Outputs: paper-list/q1-2023.csv, paper-list/a-star-2024.csv, etc.
 """
 
 import csv
@@ -20,7 +20,7 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 XML_PATH = SCRIPT_DIR / "dblp.xml"
-OUTPUT_DIR = REPO_ROOT / "papers"
+OUTPUT_DIR = REPO_ROOT / "paper-list"
 
 JOURNAL_LIST = REPO_ROOT / "journal-context" / "list-of-journals.csv"
 CONF_LIST = REPO_ROOT / "conference-context" / "list-of-conferences.csv"
@@ -263,7 +263,7 @@ def main():
     write_papers(papers, OUTPUT_DIR)
     
     print("━" * 70)
-    print("  Done! Papers extracted to papers/ directory.")
+    print("  Done! Papers extracted to paper-list/ directory.")
     print("━" * 70)
     print()
 

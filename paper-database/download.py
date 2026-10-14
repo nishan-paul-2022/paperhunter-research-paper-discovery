@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DB_DIR = Path(__file__).resolve().parent.parent / "database"
+DB_DIR = Path(__file__).resolve().parent.parent / "paper-database"
 
 GZ_PATH = DB_DIR / "dblp.xml.gz"
 XML_PATH = DB_DIR / "dblp.xml"

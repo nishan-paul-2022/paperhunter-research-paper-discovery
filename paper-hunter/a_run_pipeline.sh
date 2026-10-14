@@ -19,11 +19,11 @@ Commands:
   screen <prepared_json>    Run AI screening on prepared papers
   aggregate <prepared_stem> Aggregate screening results
   status <prepared_json>    Show processing status
-  batch-all                 Prepare all CSV files in papers/
+  batch-all                 Prepare all CSV files in paper-list/
 
 Examples:
   # Run complete pipeline on one CSV
-  $0 full ../papers/q4-2026.csv
+  $0 full ../paper-list/q4-2026.csv
 
   # Prepare all CSVs
   $0 batch-all
@@ -150,7 +150,7 @@ cmd_status() {
 }
 
 cmd_batch_all() {
-    local papers_dir="$(dirname "$SCRIPT_DIR")/papers"
+    local papers_dir="$(dirname "$SCRIPT_DIR")/paper-list"
     
     if [ ! -d "$papers_dir" ]; then
         echo "ERROR: Papers directory not found: $papers_dir"

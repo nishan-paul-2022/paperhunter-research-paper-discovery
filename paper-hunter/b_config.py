@@ -6,8 +6,8 @@ from pathlib import Path
 
 # Paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PAPERS_DIR = REPO_ROOT / "papers"
-PIPELINE_DIR = REPO_ROOT / "pipeline"
+PAPERS_DIR = REPO_ROOT / "paper-list"
+PIPELINE_DIR = REPO_ROOT / "paper-hunter"
 WORK_DIR = PIPELINE_DIR / "work"
 OUTPUT_DIR = PIPELINE_DIR / "output"
 
