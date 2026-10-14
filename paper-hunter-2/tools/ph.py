@@ -849,12 +849,14 @@ def cmd_selftest(a):
         w.writeheader()
         w.writerows(rows)
 
-    # run_dir is named from the CSV stem by cmd_init — track it for cleanup
+    # Sentinel defaults so finally can always access these even on early failure
     _actual_run_dir = None
+    out_dir  = None
+    run_name = ""
     ok = False
     try:
         # 1. init — cmd_init writes the run name into RUNS_DIR/.current
-        out_dir = Path(tempfile.mkdtemp(prefix="ph_selftest_out_"))
+        out_dir = Path(tempfile.mkdtemp(prefix="ph_selftest_out_"))  # now set before any failure
         ns = argparse.Namespace(csv=str(tmp_csv), fresh=True, min_year=2000, max_year=2030,
                                 output_dir=str(out_dir),
                                 publication_policy="strict", run=None)
@@ -904,7 +906,7 @@ def cmd_selftest(a):
                     "publication_status": "published",
                     "fulltext_read": False,
                     "evidence_source": "title",
-                    "evidence": (dos[pid]["title"])[:40].strip() or "selftest paper title stub",
+                    "evidence": " ".join(dos[pid]["title"].split()[:12]) or "paper title stub text",
                     "reason": "Selftest: accepted as evaluation for smoke-test purposes.",
                     "confidence": 0.85, "abstract_source": "none",
                     "needs_deep_dive": False,
@@ -921,7 +923,7 @@ def cmd_selftest(a):
                     "publication_status": "unknown",
                     "fulltext_read": False,
                     "evidence_source": "title",
-                    "evidence": (dos[pid]["title"])[:40].strip() or "off topic title stub",
+                    "evidence": " ".join(dos[pid]["title"].split()[:12]) or "paper off domain stub text",
                     "reason": "Selftest: off-domain paper.",
                     "confidence": 0.95, "abstract_source": "none",
                     "needs_deep_dive": False,
@@ -956,10 +958,8 @@ def cmd_selftest(a):
         cmd_validate(argparse.Namespace(run=run.name))
 
         # 7. export
-        (tmp_run_dir / "out").mkdir(parents=True, exist_ok=True)
-        cmd_export(argparse.Namespace(run=run.name, out_dir=str(tmp_run_dir / "out"),
-                                      force=False))
-        assert list((tmp_run_dir / "out").glob("*_filtered.csv")), \
+        cmd_export(argparse.Namespace(run=run.name, out_dir=str(out_dir), force=False))
+        assert list(out_dir.glob("*_filtered.csv")), \
             "selftest: filtered CSV not produced"
 
         ok = True
@@ -968,12 +968,18 @@ def cmd_selftest(a):
         traceback.print_exc()
         sys.exit(1)
     finally:
-        shutil.rmtree(tmp_run_dir, ignore_errors=True)
+        if _actual_run_dir and _actual_run_dir.exists():
+            shutil.rmtree(_actual_run_dir, ignore_errors=True)
+        if out_dir and out_dir.exists():
+            shutil.rmtree(out_dir, ignore_errors=True)
         tmp_csv.unlink(missing_ok=True)
-        # Remove the .current pointer we created
+        # Clear .current only if it still points to our temp run
         cur = RUNS_DIR / ".current"
-        if cur.exists() and "selftest" in cur.read_text():
-            cur.unlink(missing_ok=True)
+        try:
+            if run_name and cur.exists() and cur.read_text().strip() == run_name:
+                cur.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
