@@ -1,30 +1,15 @@
 #!/usr/bin/env python3
-"""
-Conference Matcher - Match remaining DBLP conferences to CORE rankings.
-
-Uses:
-  - Curated, verified mappings for known conference renamings, acronym variations,
-    and historical conference keys (e.g., NIPS -> NeurIPS, KBSE -> ASE, SoCG -> COMPGEOM, etc.)
-  - Case-insensitive acronym matching
-  - Generates supplement/4-conf-matched.csv
-"""
-
 import csv
 import re
 import unicodedata
 from pathlib import Path
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
-
 DBLP_CSV = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
 CORE_CSV = SUPPLEMENT_DIR / "3-source-pool.csv"
 CORE_MASTER_CSV = REPO_ROOT / "conference-context" / "core-2026.csv"
 OUT_CSV = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
-
-# Curated, verified mappings for conferences in 2-dblp-unmatched.csv to 3-source-pool.csv
 EXPLICIT_MAP = {
-    # ─── A* Conferences ───
     'conf/mm': ('ACM Multimedia', 'HIGH', 'Official DBLP key for ACM Multimedia (ACMMM)'),
     'conf/nips': ('Advances in Neural Information Processing Systems (was NIPS)', 'HIGH', 'Conference renamed from NIPS to NeurIPS (2018)'),
     'conf/kbse': ('Automated Software Engineering Conference', 'HIGH', 'DBLP key for ASE (formerly Knowledge-Based Software Engineering KBSE)'),
@@ -32,8 +17,6 @@ EXPLICIT_MAP = {
     'conf/uss': ('Usenix Security Symposium', 'HIGH', 'Official DBLP key for USENIX Security Symposium'),
     'conf/sigsoft': ('ACM International Conference on the Foundations of Software Engineering (was ESEC/FSE, changed 2024; duplicate previously listed as ESEC, removed from DB)', 'HIGH', 'SIGSOFT is DBLP key for modern FSE papers (2018+), conf/fse is for older papers'),
     'conf/icmas': ('International Joint Conference on Autonomous Agents and Multiagent Systems (previously the International Conference on Multiagent Systems, ICMAS, changed in 2000)', 'HIGH', 'Historical DBLP key for ICMAS, joined with Agents and ATAL to form AAMAS in 2002'),
-
-    # ─── A Conferences ───
     'conf/gis': ('ACM International Conference on Advances in Geographic Information Systems', 'HIGH', 'Official DBLP key for ACM SIGSPATIAL (GIS)'),
     'conf/ecml': ('European Conference on Machine Learning and Principles and Practice of Knowledge Discovery in Database (PKDD and ECML combined from 2008)', 'HIGH', 'ECML co-located and merged into ECML PKDD in 2008'),
     'conf/pkdd': ('European Conference on Machine Learning and Principles and Practice of Knowledge Discovery in Database (PKDD and ECML combined from 2008)', 'HIGH', 'PKDD co-located and merged into ECML PKDD in 2008'),
@@ -53,8 +36,6 @@ EXPLICIT_MAP = {
     'conf/approx': ('International Workshop on Approximation Algorithms for Combinatorial Optimization Problems and International Conference on Randomization and Computation', 'HIGH', 'Co-located joint APPROX/RANDOM conference series'),
     'conf/random': ('International Workshop on Approximation Algorithms for Combinatorial Optimization Problems and International Conference on Randomization and Computation', 'HIGH', 'Co-located joint APPROX/RANDOM conference series'),
     'conf/pet': ('Privacy Enhancing Technologies Symposium (was International Workshop of Privacy Enhancing Technologies)', 'HIGH', 'Conference was International Workshop on Privacy Enhancing Technologies (PET), became PETS in 2008'),
-
-    # ─── B Conferences ───
     'conf/lats': ('ACM Conference on Learning @ Scale', 'HIGH', 'Official DBLP key for ACM Learning @ Scale (L@S)'),
     'conf/wisec': ('ACM Conference on Security and Privacy in Wireless and Mobile Networks', 'HIGH', 'Official DBLP acronym WiSec for ACM WiSec'),
     'conf/lctrts': ('ACM SIGPLAN Conference on Languages, Compilers and Tools for Embedded Systems', 'HIGH', 'DBLP key for LCTES (formerly LCTRTS: Languages, Compilers, and Tools for Real-Time Systems)'),
@@ -93,8 +74,6 @@ EXPLICIT_MAP = {
     'conf/iwpec': ('International Symposium on Parameterized and Exact Computation (was IWPEC pre 2004)', 'HIGH', 'Historical DBLP key for IWPEC, became IPEC in 2010'),
     'conf/ssd': ('International Symposium on Spatial and Temporal Databases', 'HIGH', 'Conference was Symposium on Spatial Databases (SSD), became SSTD in 2001'),
     'conf/kcap': ('Knowledge capture', 'HIGH', 'Official DBLP key for K-CAP'),
-
-    # ─── C Conferences ───
     'conf/dimea': ('ACM International Conference on Advances in Computer Entertainment (merged with DIMEA, Digital Interactive Media in Entertainment and Arts, in 2009)', 'HIGH', 'Historical DBLP key for DIMEA, merged with ACE in 2009'),
     'conf/tvx': ('ACM International Conference on Interactive Media Experiences', 'HIGH', 'Conference was TVX (Interactive Experiences for TV & Video), renamed to IMX in 2020'),
     'conf/mmasia': ('ACM International Conference on Multimedia in Asia', 'HIGH', 'Official DBLP key for ACM MM Asia'),
@@ -147,24 +126,17 @@ EXPLICIT_MAP = {
     'conf/hotchips': ('Symposium on High Performance Chips', 'HIGH', 'Official DBLP key for Hot Chips (HOTCHIPS)'),
     'conf/eurova-ws': ('Visual Analytics', 'HIGH', 'Official DBLP key for EuroVA (International EuroVis Workshop on Visual Analytics)'),
 }
-
-
 def strip_accents(s: str) -> str:
     return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-
-
 def clean_str(s: str) -> str:
     s = strip_accents(s).lower()
     s = re.sub(r'[^\w\s]', ' ', s)
     return ' '.join(s.split())
-
-
 def build_matcher():
     with open(DBLP_CSV, encoding='utf-8') as f:
         dblp_rows = list(csv.DictReader(f))
     with open(CORE_CSV, encoding='utf-8') as f:
         core_rows = list(csv.DictReader(f))
-
     core_master_rows = []
     if CORE_MASTER_CSV.exists():
         with open(CORE_MASTER_CSV, encoding='utf-8') as f:
@@ -176,15 +148,11 @@ def build_matcher():
                         'acronym': r['Acronym'].strip(),
                         'ranking': ranking,
                     })
-
     core_master_by_clean = {clean_str(r['title']): r for r in core_master_rows}
     core_by_clean = {clean_str(r['title']): r for r in core_rows}
     core_by_acronym = {r['acronym'].lower(): r for r in core_rows}
-
     matched_dblp = {}
     used_core_titles = set()
-
-    # Pass 1: Explicit curated mappings (verified against DBLP bibliography and history)
     for d in dblp_rows:
         key = d['dblp_key']
         if key in EXPLICIT_MAP:
@@ -200,29 +168,22 @@ def build_matcher():
                         matched_dblp[key] = (c, conf, reason)
                         used_core_titles.add(c['title'])
                         break
-
-    # Pass 2: Case-insensitive acronym match for any remaining entries
     for d in dblp_rows:
         key = d['dblp_key']
         if key in matched_dblp:
             continue
-
         dblp_acronym_lower = d['dblp_acronym'].lower()
         if dblp_acronym_lower in core_by_acronym:
             c = core_by_acronym[dblp_acronym_lower]
             if c['title'] not in used_core_titles:
                 matched_dblp[key] = (c, 'HIGH', f"Acronym match: {d['dblp_acronym']}")
                 used_core_titles.add(c['title'])
-
-    # Prepare output rows
     output_rows = []
     high_count = 0
     none_count = 0
-
     for d in dblp_rows:
         key = d['dblp_key']
         acronym = d['dblp_acronym']
-
         if key in matched_dblp:
             c, conf, reason = matched_dblp[key]
             high_count += 1
@@ -246,8 +207,6 @@ def build_matcher():
                 'confidence': 'NONE',
                 'reasoning': 'Not in CORE rankings (regional workshop, defunct, or unranked venue)',
             })
-
-    # Write output
     fieldnames = [
         'dblp_key', 'dblp_acronym', 'core_title', 'acronym', 'ranking',
         'confidence', 'reasoning'
@@ -256,13 +215,10 @@ def build_matcher():
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(output_rows)
-
     print(f"Generated {len(output_rows)} total rows in {OUT_CSV}")
     print(f"  HIGH confidence matches:   {high_count}")
     print(f"  NONE (NO_MATCH):           {none_count}")
     print(f"  Total matched conferences: {high_count}")
     print(f"  Distinct CORE matched:     {len(used_core_titles)}")
-
-
 if __name__ == '__main__':
     build_matcher()

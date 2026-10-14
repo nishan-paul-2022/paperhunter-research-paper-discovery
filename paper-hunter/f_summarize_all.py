@@ -1,40 +1,23 @@
 #!/usr/bin/env python3
-"""
-Summarize all pipeline results across multiple CSVs
-
-Usage: python summarize_all.py [work_dir]
-"""
-
 import json
 import sys
 from pathlib import Path
 from collections import defaultdict, Counter
-
 sys.path.insert(0, str(Path(__file__).parent))
 from b_config import *
-
-
 def load_stats(stats_file):
-    """Load statistics from JSON file."""
     with open(stats_file, 'r', encoding='utf-8') as f:
         return json.load(f)
-
-
 def main():
     work_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else OUTPUT_DIR
-    
     if not work_dir.exists():
         print(f"ERROR: Directory not found: {work_dir}")
         sys.exit(1)
-    
-    # Find all stats files
     stats_files = list(work_dir.glob('*_stats.json'))
-    
     if not stats_files:
         print(f"No stats files found in {work_dir}")
         print("Run stage3 first to generate statistics.")
         sys.exit(0)
-    
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║          Summary: All Filtered Papers                                ║")
@@ -42,8 +25,6 @@ def main():
     print()
     print(f"Found {len(stats_files)} processed CSV files")
     print()
-    
-    # Aggregate statistics
     total_stats = {
         'total_papers': 0,
         'by_tier': Counter(),
@@ -55,13 +36,9 @@ def main():
         'evaluation_count': 0,
         'files_processed': 0
     }
-    
     file_summaries = []
-    
     for stats_file in sorted(stats_files):
         stats = load_stats(stats_file)
-        
-        # Aggregate
         total_stats['total_papers'] += stats['total']
         total_stats['by_tier'].update(stats['by_tier'])
         total_stats['by_role'].update(stats['by_role'])
@@ -71,8 +48,6 @@ def main():
         total_stats['benchmark_count'] += len(stats.get('benchmark_papers', []))
         total_stats['evaluation_count'] += len(stats.get('evaluation_papers', []))
         total_stats['files_processed'] += 1
-        
-        # File summary
         file_summaries.append({
             'file': stats_file.stem.replace('_stats', ''),
             'total': stats['total'],
@@ -80,8 +55,6 @@ def main():
             'related': stats['by_tier'].get('related', 0),
             'baseline': len(stats.get('baseline_papers', []))
         })
-    
-    # Print overall statistics
     print("━" * 70)
     print("OVERALL STATISTICS")
     print("━" * 70)
@@ -103,36 +76,25 @@ def main():
     print(f"Evaluation papers:  {total_stats['evaluation_count']:>6}")
     print("━" * 70)
     print()
-    
-    # Print per-file breakdown
     print("━" * 70)
     print("PER-FILE BREAKDOWN")
     print("━" * 70)
     print(f"{'File':<30} {'Total':>8} {'Core':>8} {'Related':>8} {'Baseline':>8}")
     print("─" * 70)
-    
     for summary in sorted(file_summaries, key=lambda x: -x['core']):
         print(f"{summary['file']:<30} {summary['total']:>8} {summary['core']:>8} {summary['related']:>8} {summary['baseline']:>8}")
-    
     print("━" * 70)
     print()
-    
-    # Recommendations
     if total_stats['baseline_count'] > 0:
         print("✓ Found baseline papers! Review these carefully.")
         print()
-    
     if total_stats['by_tier']['needs_manual'] > 0:
         print(f"⚠  {total_stats['by_tier']['needs_manual']} papers need manual review.")
         print()
-    
-    # Generate master CSV paths
     print("Output files:")
     print(f"  Core papers:     {work_dir}/*_core.csv")
     print(f"  Related papers:  {work_dir}/*_related.csv")
     print(f"  All papers:      {work_dir}/*_all.csv")
     print()
-
-
 if __name__ == '__main__':
     main()

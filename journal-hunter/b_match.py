@@ -3,19 +3,16 @@ import re
 import unicodedata
 from pathlib import Path
 from collections import defaultdict
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONTEXT_DIR = REPO_ROOT / "journal-context"
 SUPPLEMENT_DIR = REPO_ROOT / "journal-supplement"
 DBLP_CSV = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
 SJR_CSV = SUPPLEMENT_DIR / "3-source-pool.csv"
 OUT_CSV = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
-
 STOPWORDS = {
     'of', 'the', 'and', 'in', 'on', 'for', 'to', 'a', 'an', '&', 'at', 'by', 'with', 'part',
     'de', 'des', 'du', 'd', 'la', 'le', 'et', 'fur', 'und'
 }
-
 ABBREV_EXPANSIONS = {
     'trans': ['transactions'],
     'trans.': ['transactions'],
@@ -174,8 +171,6 @@ ABBREV_EXPANSIONS = {
     'vldb': ['very', 'large', 'data', 'bases', 'vldb'],
     'siam': ['society', 'industrial', 'applied', 'mathematics', 'siam'],
 }
-
-# Explicit curated mappings for acronyms, renamings, and specific journal keys
 EXPLICIT_MAP = {
     'journals/cacm': ('Communications of the ACM', 'HIGH', 'Official ACM abbreviation match'),
     'journals/jacm': ('Journal of the ACM', 'HIGH', 'Official ACM abbreviation match'),
@@ -289,20 +284,16 @@ EXPLICIT_MAP = {
     'journals/ijautcomp': ('Machine Intelligence Research', 'HIGH', 'Formerly Int. J. Autom. Comput., renamed in 2022, ISSN 2731-538X verified'),
     'journals/cl': ('Journal of Computer Languages', 'HIGH', 'Formerly Comput. Lang. Syst. Struct., merged into COLA in 2018, ISSN 2590-1184 verified'),
 }
-
 def strip_accents(s: str) -> str:
     return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
-
 def clean_str(s: str) -> str:
     s = strip_accents(s).lower()
     s = re.sub(r'[^\w\s]', ' ', s)
     return ' '.join(s.split())
-
 def tokenize(s: str) -> list[str]:
     s = strip_accents(s).lower()
     tokens = re.findall(r'[a-z0-9]+', s)
     return [t for t in tokens if t not in STOPWORDS]
-
 def token_match(dt: str, st: str) -> bool:
     if dt == st:
         return True
@@ -311,25 +302,19 @@ def token_match(dt: str, st: str) -> bool:
     if len(dt) >= 3 and st.startswith(dt):
         return True
     return False
-
 def tokens_match(d_toks: list[str], s_toks: list[str]) -> bool:
     if len(d_toks) != len(s_toks):
         return False
     return all(token_match(dt, st) for dt, st in zip(d_toks, s_toks))
-
 def build_matcher():
     with open(DBLP_CSV, encoding='utf-8') as f:
         dblp_rows = list(csv.DictReader(f))
     with open(SJR_CSV, encoding='utf-8') as f:
         sjr_rows = list(csv.DictReader(f))
-
     sjr_by_clean = {clean_str(r['title']): r for r in sjr_rows}
     sjr_toks = [(r, tokenize(r['title'])) for r in sjr_rows]
-
     matched_dblp = {}
     used_sjr_titles = set()
-
-    # Pass 1: Curated explicit map
     for d in dblp_rows:
         key = d['dblp_key']
         if key in EXPLICIT_MAP:
@@ -340,8 +325,6 @@ def build_matcher():
                         matched_dblp[key] = (s, conf, reason)
                         used_sjr_titles.add(s['title'])
                     break
-
-    # Pass 2: Exact normalized clean string match
     for d in dblp_rows:
         key = d['dblp_key']
         if key in matched_dblp:
@@ -352,8 +335,6 @@ def build_matcher():
             if s['title'] not in used_sjr_titles:
                 matched_dblp[key] = (s, 'HIGH', 'Exact normalized name match')
                 used_sjr_titles.add(s['title'])
-
-    # Pass 3: Token sequence match (ISO-4 abbreviations)
     candidates = defaultdict(list)
     for d in dblp_rows:
         key = d['dblp_key']
@@ -367,20 +348,16 @@ def build_matcher():
                 continue
             if tokens_match(d_tokens, s_tokens):
                 candidates[key].append(s)
-
     for key, c_list in candidates.items():
         if len(c_list) == 1:
             s = c_list[0]
             if s['title'] not in used_sjr_titles:
                 matched_dblp[key] = (s, 'HIGH', f"Standard ISO abbreviation match to '{s['title']}'"[:100])
                 used_sjr_titles.add(s['title'])
-
-    # Pass 4: Prepare complete output
     output_rows = []
     high_count = 0
     medium_count = 0
     none_count = 0
-
     for d in dblp_rows:
         key = d['dblp_key']
         name = d['dblp_name']
@@ -412,8 +389,6 @@ def build_matcher():
                 'confidence': 'NONE',
                 'reasoning': 'Not indexed in SJR CS pool (regional, defunct, or non-CS category)',
             })
-
-    # Write output CSV
     fieldnames = [
         'dblp_key', 'dblp_name', 'sjr_title', 'issn_1', 'issn_2',
         'quartile', 'confidence', 'reasoning'
@@ -422,13 +397,11 @@ def build_matcher():
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(output_rows)
-
     print(f"Generated {len(output_rows)} total rows in {OUT_CSV}")
     print(f"  HIGH confidence matches:   {high_count}")
     print(f"  MEDIUM confidence matches: {medium_count}")
     print(f"  NONE (NO_MATCH):           {none_count}")
     print(f"  Total matched journals:    {high_count + medium_count}")
     print(f"  Distinct SJR matched:      {len(used_sjr_titles)}")
-
 if __name__ == '__main__':
     build_matcher()
