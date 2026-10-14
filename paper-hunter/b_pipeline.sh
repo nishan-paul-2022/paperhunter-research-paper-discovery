@@ -75,14 +75,14 @@ cmd_full() {
     # Stage 2: AI screening (screen1)
     echo ""
     echo "Running Screen: AI Screening (screen1)..."
-    "$SCRIPT_DIR/h_ai_screen.sh" "$prepared_json" screen1
+    "$SCRIPT_DIR/h_screen.sh" "$prepared_json" screen1
     
     # Optional: Independent screen2
     echo ""
     read -p "Run independent screen2 pass? (y/n) " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        "$SCRIPT_DIR/h_ai_screen.sh" "$prepared_json" screen2
+        "$SCRIPT_DIR/h_screen.sh" "$prepared_json" screen2
     fi
     
     # Stage 3: Aggregation
@@ -108,7 +108,7 @@ cmd_stage1() {
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/d_prepare_for_screening.py" "$csv_file"
+    python3 "$SCRIPT_DIR/d_prepare.py" "$csv_file"
 }
 
 cmd_stage2() {
@@ -121,7 +121,7 @@ cmd_stage2() {
         exit 1
     fi
     
-    "$SCRIPT_DIR/h_ai_screen.sh" "$prepared_json" "$pass_name"
+    "$SCRIPT_DIR/h_screen.sh" "$prepared_json" "$pass_name"
 }
 
 cmd_stage3() {
@@ -146,7 +146,7 @@ cmd_status() {
         exit 1
     fi
     
-    python3 "$SCRIPT_DIR/e_batch_manager.py" status "$prepared_json" --pass "$pass_name"
+    python3 "$SCRIPT_DIR/e_batch.py" status "$prepared_json" --pass "$pass_name"
 }
 
 cme_batch_all() {
@@ -180,7 +180,7 @@ cme_batch_all() {
         echo "Processing [$current/$total]: $(basename "$csv_file")"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
-        python3 "$SCRIPT_DIR/d_prepare_for_screening.py" "$csv_file"
+        python3 "$SCRIPT_DIR/d_prepare.py" "$csv_file"
     done
     
     echo ""

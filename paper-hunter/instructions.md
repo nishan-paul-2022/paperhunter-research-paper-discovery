@@ -68,7 +68,7 @@ pip install lxml
 cd /home/nishan/Documents/paperhunter-research-paper-discovery/pipeline
 
 # Make scripts executable
-chmod +x run_pipeline.sh stage2_ai_screen.sh
+chmod +x b_pipeline.sh h_screen.sh
 ```
 
 ---
@@ -79,20 +79,20 @@ chmod +x run_pipeline.sh stage2_ai_screen.sh
 
 ```bash
 # Run complete pipeline on one CSV file (ALL papers processed)
-./a_run_pipeline.sh full ../paper-list/q4-2026.csv
+./b_pipeline.sh full ../paper-list/q4-2026.csv
 ```
 
 ### Option 2: Process All CSVs (32 files)
 
 ```bash
 # Step 1: Prepare all CSVs (NO filtering)
-./run_pipeline.sh batch-all
+./b_pipeline.sh batch-all
 
 # Step 2: Pick a prepared file and run screening
-./run_pipeline.sh screen work/q4-2026_prepared.json
+./b_pipeline.sh screen work/q4-2026_prepared.json screen1
 
 # Step 3: Aggregate results
-./run_pipeline.sh aggregate work/q4-2026_prepared
+./b_pipeline.sh aggregate work/q4-2026_prepared
 ```
 
 ---
@@ -104,7 +104,7 @@ chmod +x run_pipeline.sh stage2_ai_screen.sh
 **Loads all papers with optional prioritization scores.**
 
 ```bash
-python d_prepare_for_screening.py ../paper-list/q4-2026.csv
+python d_prepare.py ../paper-list/q4-2026.csv
 ```
 
 **What it does:**
@@ -126,7 +126,7 @@ python d_prepare_for_screening.py ../paper-list/q4-2026.csv
 **AI agent classifies ALL papers using semantic understanding.**
 
 ```bash
-./h_ai_screen.sh work/q4-2026_prepared.json screen1
+./h_screen.sh work/q4-2026_prepared.json screen1
 ```
 
 **What it does:**
@@ -170,7 +170,7 @@ Currently manual - you need to:
 
 **To automate with your AI agent:**
 
-Edit `h_ai_screen.sh` line ~62 and replace the manual pause with:
+Edit `h_screen.sh` line ~62 and replace the manual pause with:
 
 ```bash
 # Example for antigravity or similar CLI agent
@@ -185,7 +185,7 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 
 ```bash
 # IMPORTANT: Run in a FRESH SESSION - don't open screen1 files!
-./h_ai_screen.sh work/q4-2026_prepared.json screen2
+./h_screen.sh work/q4-2026_prepared.json screen2
 ```
 
 **Why screen2?**
@@ -231,7 +231,7 @@ evidence, reason, confidence, reconciliation
 ### Check processing status
 
 ```bash
-./b_run_pipeline.sh status work/q4-2026_prepared.json
+./b_pipeline.sh status work/q4-2026_prepared.json screen1
 ```
 
 Shows:
@@ -293,7 +293,7 @@ EXCLUSION_KEYWORDS = [
 
 ### Customize AI Screening Criteria
 
-Edit `ai_screening_prompt.md` to:
+Edit `prompt.md` to:
 - Adjust criterion definitions
 - Change role requirements
 - Add domain-specific rules
@@ -344,7 +344,7 @@ pipeline/
 2. Fix the `batch_output_N.json` file
 3. Resubmit manually:
    ```bash
-   python stage2_batch_manager.py submit work/q4-2026_fuzzy.json work/batch_output_N.json --pass screen1
+   python e_batch.py submit work/q4-2026_prepared.json work/batch_output_N.json --pass screen1
    ```
 
 ### Issue: AI agent produces invalid JSON
@@ -429,8 +429,8 @@ Need to customize the pipeline? Edit these files:
 
 - **Prioritization keywords**: `a_config.py`
 - **Screening criteria**: `prompt.md`
-- **Batch size/timeouts**: `a_config.py` (BATCH_SIZE)
-- **AI agent integration**: `h_ai_screen.sh` (line ~62)
+- **Batch size/timeouts**: `c_config.py` (BATCH_SIZE)
+- **AI agent integration**: `h_screen.sh` (line ~62)
 
 ---
 

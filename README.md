@@ -43,7 +43,7 @@ Provide `conference-context/conference-matching-guide.md` to AI.
 
 ```bash
 cd paper-hunter
-python a_extract_papers.py
+python a_extract.py
 ```
 
 **Output:** `paper-list/*.csv` (32 files organized by ranking and year)

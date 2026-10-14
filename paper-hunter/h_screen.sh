@@ -8,7 +8,7 @@
 # ⚠️  IMPORTANT: ALL papers are processed (no filtering)
 #    Fuzzy scores only determine processing order
 #
-# Usage: ./stage1_ai_screen.sh <prepared_json> <pass_name>
+# Usage: ./h_screen.sh <prepared_json> <pass_name>
 #
 
 set -e
@@ -17,7 +17,7 @@ if [ $# -lt 2 ]; then
     echo "Usage: $0 <prepared_json> <pass_name>"
     echo ""
     echo "Example:"
-    echo "  ./stage1_ai_screen.sh work/q4-2026_prepared.json screen1"
+    echo "  ./h_screen.sh work/q4-2026_prepared.json screen1"
     echo ""
     echo "Pass names: screen1, screen2, verify"
     exit 1
@@ -27,7 +27,7 @@ PREPARED_JSON="$1"
 PASS_NAME="$2"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BATCH_MGR="$SCRIPT_DIR/e_batch_manager.py"
+BATCH_MGR="$SCRIPT_DIR/e_batch.py"
 PROMPT_FILE="$SCRIPT_DIR/prompt.md"
 WORK_DIR="$SCRIPT_DIR/work"
 

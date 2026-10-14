@@ -85,10 +85,10 @@ def process_csv(input_csv_path, prioritize=True):
     return all_papers, stats
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python c_prepare_for_screening.py <input_csv> [--no-prioritize]")
+        print("Usage: python d_prepare.py <input_csv> [--no-prioritize]")
         print("\nExample:")
-        print("  python c_prepare_for_screening.py ../paper-list/q4-2026.csv")
-        print("  python c_prepare_for_screening.py ../paper-list/q4-2026.csv --no-prioritize")
+        print("  python d_prepare.py ../paper-list/q4-2026.csv")
+        print("  python d_prepare.py ../paper-list/q4-2026.csv --no-prioritize")
         print("\nNote: NO papers are filtered out (except date range).")
         print("      Fuzzy scores only help with processing order.")
         sys.exit(1)
@@ -152,10 +152,10 @@ def main():
     print("━" * 70)
     print()
     print("Next step:")
-    print(f"  python stage2_batch_manager.py next {output_json} --pass screen1")
+    print(f"  python e_batch.py next {output_json} --pass screen1")
     print()
     print("Or use the master runner:")
-    print(f"  ./a_run_pipeline.sh prepare {input_csv}")
+    print(f"  ./b_pipeline.sh prepare {input_csv}")
     print()
 if __name__ == '__main__':
     main()
