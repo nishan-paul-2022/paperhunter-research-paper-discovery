@@ -15,8 +15,8 @@ class BatchManager:
             data = json.load(f)
             self.papers = data['papers']
             self.source_csv = data.get('source_csv', '')
-        self.state_file = WORK_DIR / f"{self.prepared_json_path.stem}_{pass_name}_state.json"
-        self.decisions_file = WORK_DIR / f"{self.prepared_json_path.stem}_{pass_name}_decisions.jsonl"
+        self.state_file = WORK_DIR / f"{self.prepared_json_path.stem}-{pass_name}-state.json"
+        self.decisions_file = WORK_DIR / f"{self.prepared_json_path.stem}-{pass_name}-decisions.jsonl"
         self.load_state()
     def load_state(self):
         if self.state_file.exists():

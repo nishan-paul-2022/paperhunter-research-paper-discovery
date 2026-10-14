@@ -169,18 +169,18 @@ def print_statistics(stats):
     print()
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python stage2_aggregate.py <prepared_json_stem>")
+        print("Usage: python f_aggregate.py <prepared_json_stem>")
         print("\nExample:")
-        print("  python stage2_aggregate.py work/q4-2026_prepared")
+        print("  python f_aggregate.py work/q4-2026_prepared")
         print("\nThis will load:")
-        print("  work/q4-2026_prepared_screen1_decisions.jsonl")
-        print("  work/q4-2026_prepared_screen2_decisions.jsonl (optional)")
+        print("  work/q4-2026_prepared-screen1-decisions.jsonl")
+        print("  work/q4-2026_prepared-screen2-decisions.jsonl (optional)")
         sys.exit(1)
     prepared_stem = sys.argv[1]
     if prepared_stem.endswith('.json'):
         prepared_stem = prepared_stem[:-5]
-    screen1_file = Path(f"{prepared_stem}_screen1_decisions.jsonl")
-    screen2_file = Path(f"{prepared_stem}_screen2_decisions.jsonl")
+    screen1_file = Path(f"{prepared_stem}-screen1-decisions.jsonl")
+    screen2_file = Path(f"{prepared_stem}-screen2-decisions.jsonl")
     if not screen1_file.exists():
         print(f"ERROR: Screen1 decisions not found: {screen1_file}")
         sys.exit(1)
@@ -205,13 +205,13 @@ def main():
     print(f"  ✓ {len(decisions_by_id)} papers reconciled")
     print()
     print("Generating filtered CSV files...")
-    output_base = OUTPUT_DIR / Path(screen1_file.stem.replace('_screen1_decisions', ''))
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_all.csv'))
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_core.csv'), ['core'])
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_related.csv'), ['related'])
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_baseline.csv'), ['core'])
+    output_base = OUTPUT_DIR / Path(screen1_file.stem.replace('-screen1-decisions', ''))
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-all.csv'))
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-core.csv'), ['core'])
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-related.csv'), ['related'])
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-baseline.csv'), ['core'])
     stats = generate_statistics(decisions_by_id)
-    stats_file = output_base.with_name(output_base.name + '_stats.json')
+    stats_file = output_base.with_name(output_base.name + '-stats.json')
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
     print(f"  ✓ {stats_file.name}: statistics saved")
@@ -271,18 +271,18 @@ Load decisions from JSONL file.
     print()
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python stage2_aggregate.py <prepared_json_stem>")
+        print("Usage: python f_aggregate.py <prepared_json_stem>")
         print("\nExample:")
-        print("  python stage2_aggregate.py work/q4-2026_prepared")
+        print("  python f_aggregate.py work/q4-2026_prepared")
         print("\nThis will load:")
-        print("  work/q4-2026_prepared_screen1_decisions.jsonl")
-        print("  work/q4-2026_prepared_screen2_decisions.jsonl (optional)")
+        print("  work/q4-2026_prepared-screen1-decisions.jsonl")
+        print("  work/q4-2026_prepared-screen2-decisions.jsonl (optional)")
         sys.exit(1)
     prepared_stem = sys.argv[1]
     if prepared_stem.endswith('.json'):
         prepared_stem = prepared_stem[:-5]
-    screen1_file = Path(f"{prepared_stem}_screen1_decisions.jsonl")
-    screen2_file = Path(f"{prepared_stem}_screen2_decisions.jsonl")
+    screen1_file = Path(f"{prepared_stem}-screen1-decisions.jsonl")
+    screen2_file = Path(f"{prepared_stem}-screen2-decisions.jsonl")
     if not screen1_file.exists():
         print(f"ERROR: Screen1 decisions not found: {screen1_file}")
         sys.exit(1)
@@ -307,13 +307,13 @@ def main():
     print(f"  ✓ {len(decisions_by_id)} papers reconciled")
     print()
     print("Generating filtered CSV files...")
-    output_base = OUTPUT_DIR / Path(screen1_file.stem.replace('_screen1_decisions', ''))
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_all.csv'))
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_core.csv'), ['core'])
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_related.csv'), ['related'])
-    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '_baseline.csv'), ['core'])
+    output_base = OUTPUT_DIR / Path(screen1_file.stem.replace('-screen1-decisions', ''))
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-all.csv'))
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-core.csv'), ['core'])
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-related.csv'), ['related'])
+    generate_filtered_csv(decisions_by_id, output_base.with_name(output_base.name + '-baseline.csv'), ['core'])
     stats = generate_statistics(decisions_by_id)
-    stats_file = output_base.with_name(output_base.name + '_stats.json')
+    stats_file = output_base.with_name(output_base.name + '-stats.json')
     with open(stats_file, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
     print(f"  ✓ {stats_file.name}: statistics saved")

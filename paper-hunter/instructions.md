@@ -89,10 +89,10 @@ chmod +x b_pipeline.sh h_screen.sh
 ./b_pipeline.sh batch-all
 
 # Step 2: Pick a prepared file and run screening
-./b_pipeline.sh screen work/q4-2026_prepared.json screen1
+./b_pipeline.sh screen work/q4-2026-prepared.json screen1
 
 # Step 3: Aggregate results
-./b_pipeline.sh aggregate work/q4-2026_prepared
+./b_pipeline.sh aggregate work/q4-2026-prepared
 ```
 
 ---
@@ -114,7 +114,7 @@ python d_prepare.py ../paper-list/q4-2026.csv
 - High-score papers processed first for efficiency
 
 **Output:**
-- `work/q4-2026_prepared.json` - ALL papers ready for AI screening
+- `work/q4-2026-prepared.json` - ALL papers ready for AI screening
 
 **Configuration:**
 - Edit `a_config.py` to customize prioritization keywords
@@ -126,7 +126,7 @@ python d_prepare.py ../paper-list/q4-2026.csv
 **AI agent classifies ALL papers using semantic understanding.**
 
 ```bash
-./h_screen.sh work/q4-2026_prepared.json screen1
+./h_screen.sh work/q4-2026-prepared.json screen1
 ```
 
 **What it does:**
@@ -158,8 +158,8 @@ python d_prepare.py ../paper-list/q4-2026.csv
 - **needs_manual** - Ambiguous, requires human review
 
 **Output:**
-- `work/q4-2026_prepared_screen1_decisions.jsonl` - Decisions in JSONL format
-- `work/q4-2026_prepared_screen1_state.json` - Progress tracking
+- `work/q4-2026-prepared_screen1_decisions.jsonl` - Decisions in JSONL format
+- `work/q4-2026-prepared_screen1_state.json` - Progress tracking
 
 **AI Agent Integration:**
 
@@ -185,7 +185,7 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 
 ```bash
 # IMPORTANT: Run in a FRESH SESSION - don't open screen1 files!
-./h_screen.sh work/q4-2026_prepared.json screen2
+./h_screen.sh work/q4-2026-prepared.json screen2
 ```
 
 **Why screen2?**
@@ -200,7 +200,7 @@ your-ai-agent-cli --prompt "$FULL_PROMPT" --output "$BATCH_OUTPUT" --format json
 **Reconcile screens and generate final filtered CSVs.**
 
 ```bash
-python stage2_aggregate.py work/q4-2026_prepared
+python stage2_aggregate.py work/q4-2026-prepared
 ```
 
 **What it does:**
@@ -211,10 +211,10 @@ python stage2_aggregate.py work/q4-2026_prepared
 - Creates statistics report
 
 **Output:**
-- `output/q4-2026_prepared_all.csv` - All decisions
-- `output/q4-2026_prepared_core.csv` - Core papers only
-- `output/q4-2026_prepared_related.csv` - Related papers
-- `output/q4-2026_prepared_stats.json` - Statistics
+- `output/q4-2026-prepared_all.csv` - All decisions
+- `output/q4-2026-prepared_core.csv` - Core papers only
+- `output/q4-2026-prepared_related.csv` - Related papers
+- `output/q4-2026-prepared_stats.json` - Statistics
 
 **CSV Fields:**
 ```
@@ -231,7 +231,7 @@ evidence, reason, confidence, reconciliation
 ### Check processing status
 
 ```bash
-./b_pipeline.sh status work/q4-2026_prepared.json screen1
+./b_pipeline.sh status work/q4-2026-prepared.json screen1
 ```
 
 Shows:
@@ -344,7 +344,7 @@ pipeline/
 2. Fix the `batch_output_N.json` file
 3. Resubmit manually:
    ```bash
-   python e_batch.py submit work/q4-2026_prepared.json work/batch_output_N.json --pass screen1
+   python e_batch.py submit work/q4-2026-prepared.json work/batch_output_N.json --pass screen1
    ```
 
 ### Issue: AI agent produces invalid JSON

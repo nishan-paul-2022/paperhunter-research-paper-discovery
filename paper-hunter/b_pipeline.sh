@@ -29,13 +29,13 @@ Examples:
   $0 batch-all
 
   # Continue screening after manual work
-  $0 screen work/q4-2026_prepared.json
+  $0 screen work/q4-2026-prepared.json
 
   # Aggregate results
   $0 aggregate work/q4-2026_prepared
 
   # Check status
-  $0 status work/q4-2026_prepared.json
+  $0 status work/q4-2026-prepared.json
 
 EOF
 }
@@ -70,7 +70,7 @@ cmd_full() {
     python3 "$SCRIPT_DIR/d_prepare_for_screening.py" "$csv_file"
     
     local csv_stem=$(basename "$csv_file" .csv)
-    local prepared_json="$SCRIPT_DIR/work/${csv_stem}_prepared.json"
+    local prepared_json="$SCRIPT_DIR/work/${csv_stem}-prepared.json"
     
     # Stage 2: AI screening (screen1)
     echo ""
@@ -193,7 +193,7 @@ cme_batch_all() {
     echo "Next steps:"
     echo "  1. Review prepared files"
     echo "  2. Run screening on selected files:"
-    echo "     $0 screen work/<file>_prepared.json"
+    echo "     $0 screen work/<file>-prepared.json"
     echo ""
 }
 

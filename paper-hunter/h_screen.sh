@@ -17,7 +17,7 @@ if [ $# -lt 2 ]; then
     echo "Usage: $0 <prepared_json> <pass_name>"
     echo ""
     echo "Example:"
-    echo "  ./h_screen.sh work/q4-2026_prepared.json screen1"
+    echo "  ./h_screen.sh work/q4-2026-prepared.json screen1"
     echo ""
     echo "Pass names: screen1, screen2, verify"
     exit 1
@@ -73,8 +73,8 @@ while true; do
     fi
     
     # Save batch to temp file
-    BATCH_INPUT="$WORK_DIR/batch_input_${BATCH_NUM}.json"
-    BATCH_OUTPUT="$WORK_DIR/batch_output_${BATCH_NUM}.json"
+    BATCH_INPUT="$WORK_DIR/batch-input-${BATCH_NUM}.json"
+    BATCH_OUTPUT="$WORK_DIR/batch-output-${BATCH_NUM}.json"
     
     echo "$BATCH_JSON" > "$BATCH_INPUT"
     

@@ -97,7 +97,7 @@ def main():
     if not input_csv.exists():
         print(f"ERROR: File not found: {input_csv}")
         sys.exit(1)
-    output_json = WORK_DIR / f"{input_csv.stem}_prepared.json"
+    output_json = WORK_DIR / f"{input_csv.stem}-prepared.json"
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║          Prepare Papers for AI Screening                             ║")
