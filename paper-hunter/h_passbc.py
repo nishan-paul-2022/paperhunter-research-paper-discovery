@@ -4,7 +4,6 @@ from b_io import Run, now
 from c_schema import validate_record
 from g_passa import judge_paper
 
-
 LANE_BATCH = {"A": 3, "B": 8, "C": 20}
 
 
@@ -20,16 +19,19 @@ def run_pass(pass_name, run_name=None):
     ids = plans.get(pass_name, [])
     dossiers = run.dossiers()
     rec_batch = lane_batch_size(ids, dossiers)
-    print("Executing Pass %s on %d papers (suggested batch size: %d)..." % (
-        pass_name, len(ids), rec_batch))
+    print(
+        "Executing Pass %s on %d papers (suggested batch size: %d)..."
+        % (pass_name, len(ids), rec_batch)
+    )
 
     t0 = time.time()
     errors = 0
     for idx, pid in enumerate(ids):
         d = dossiers[pid]
         rec = judge_paper(d, pass_name=pass_name)
-        errs = validate_record(run, rec, pass_name, "strict", dos=dossiers,
-                               lane=d.get("lane", "C"))
+        errs = validate_record(
+            run, rec, pass_name, "strict", dos=dossiers, lane=d.get("lane", "C")
+        )
         if errs:
             errors += 1
             if errors <= 10:
@@ -41,8 +43,10 @@ def run_pass(pass_name, run_name=None):
             print("  %d/%d screened in %.1fs" % (idx + 1, len(ids), elapsed))
 
     run.save_papers()
-    print("Pass %s complete: %d decisions saved to consolidated papers.jsonl (errors: %d)"
-          % (pass_name, len(ids), errors))
+    print(
+        "Pass %s complete: %d decisions saved to consolidated papers.jsonl (errors: %d)"
+        % (pass_name, len(ids), errors)
+    )
 
     try:
         passes = run.state().get("passes", {})
@@ -53,12 +57,12 @@ def run_pass(pass_name, run_name=None):
             "status": "completed",
             "completed_at": now(),
             "papers_screened": len(ids),
-            "errors": errors
+            "errors": errors,
         }
         run.update_state(
             current_stage="pass_%s_complete" % pass_name.lower(),
             stages=stages,
-            passes=passes
+            passes=passes,
         )
     except Exception:
         pass
@@ -74,9 +78,17 @@ def run_sweep(run_name=None, top=None, min_score=None):
 
     rejects = [pid for pid, r in fin.items() if r.get("verdict") == "reject"]
     if min_score is not None:
-        rejects = [pid for pid in rejects if dossiers.get(pid, {}).get("signal_score", 0) >= min_score]
+        rejects = [
+            pid
+            for pid in rejects
+            if dossiers.get(pid, {}).get("signal_score", 0) >= min_score
+        ]
     if top is not None:
-        rejects = sorted(rejects, key=lambda pid: dossiers.get(pid, {}).get("signal_score", 0), reverse=True)[:top]
+        rejects = sorted(
+            rejects,
+            key=lambda pid: dossiers.get(pid, {}).get("signal_score", 0),
+            reverse=True,
+        )[:top]
     print("Sweep pass: re-screening %d rejects for recall..." % len(rejects))
 
     rescued = []
@@ -101,17 +113,23 @@ def run_sweep(run_name=None, top=None, min_score=None):
             run.save_plans(plans)
 
         if (idx + 1) % 500 == 0 or (idx + 1) == len(rejects):
-            print("  %d/%d swept (rescued: %d) in %.1fs"
-                  % (idx + 1, len(rejects), len(rescued), time.time() - t0))
+            print(
+                "  %d/%d swept (rescued: %d) in %.1fs"
+                % (idx + 1, len(rejects), len(rescued), time.time() - t0)
+            )
 
     run.save_papers()
-    print("Sweep complete: %d papers rescued from reject and queued for pass F." % len(rescued))
+    print(
+        "Sweep complete: %d papers rescued from reject and queued for pass F."
+        % len(rescued)
+    )
     if rescued:
         print("Rescued IDs: %s" % " ".join(rescued[:40]))
 
 
 if __name__ == "__main__":
     import sys
+
     p = sys.argv[1] if len(sys.argv) > 1 else "B"
     if p.lower() == "sweep":
         run_sweep()

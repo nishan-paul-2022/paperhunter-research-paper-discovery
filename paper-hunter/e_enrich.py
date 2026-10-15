@@ -1,11 +1,17 @@
-import math, os, re, time
+import re
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 
-from b_io      import MIN_ABSTRACT, now
-from d_network import (p_crossref, p_openalex, p_landing, p_arxiv,
-                      s2_batch, openalex_batch, BROWSER_UA)
+from b_io import MIN_ABSTRACT, now
+from d_network import (
+    openalex_batch,
+    p_arxiv,
+    p_crossref,
+    p_landing,
+    p_openalex,
+    s2_batch,
+)
 from f_signals import compute_signals
 
 
@@ -14,17 +20,26 @@ def enrich_one(run, p, s2rec, oarec=None, deep=True):
     if cached and cached.get("done"):
         return p["id"], "cached"
 
-    c   = {"id": p["id"], "errors": []}
+    c = {"id": p["id"], "errors": []}
     doi, title, year = p.get("doi"), p["title"], p.get("year")
     lane = p.get("lane", "C")
     try:
         c["s2"] = s2rec
-        c["openalex"] = oarec or (p_openalex(doi=doi) if doi else p_openalex(title=title, year=year))
-        have = any(len((c.get(k) or {}).get("abstract", "")) >= MIN_ABSTRACT
-                   for k in ("openalex", "s2"))
+        c["openalex"] = oarec or (
+            p_openalex(doi=doi) if doi else p_openalex(title=title, year=year)
+        )
+        have = any(
+            len((c.get(k) or {}).get("abstract", "")) >= MIN_ABSTRACT
+            for k in ("openalex", "s2")
+        )
         if not have:
-            c["crossref"] = p_crossref(doi=doi) if doi else p_crossref(title=title, year=year)
-            have = have or len((c.get("crossref") or {}).get("abstract", "")) >= MIN_ABSTRACT
+            c["crossref"] = (
+                p_crossref(doi=doi) if doi else p_crossref(title=title, year=year)
+            )
+            have = (
+                have
+                or len((c.get("crossref") or {}).get("abstract", "")) >= MIN_ABSTRACT
+            )
         else:
             c["crossref"] = None
 
@@ -36,10 +51,12 @@ def enrich_one(run, p, s2rec, oarec=None, deep=True):
 
         if landing_url and not have:
             c["landing"] = p_landing(landing_url)
-            have = have or len((c.get("landing") or {}).get("abstract", "")) >= MIN_ABSTRACT
+            have = (
+                have
+                or len((c.get("landing") or {}).get("abstract", "")) >= MIN_ABSTRACT
+            )
         else:
             c["landing"] = None
-
 
         c["arxiv"] = None
         do_arxiv = (not have) or ("arxiv" in (landing_url or "").lower())
@@ -51,7 +68,7 @@ def enrich_one(run, p, s2rec, oarec=None, deep=True):
 
     except Exception as e:
         c["errors"].append("%s: %s" % (type(e).__name__, e))
-    c["done"]       = True
+    c["done"] = True
     c["fetched_at"] = now()
 
     run.save_enrichment(p["id"], c)
@@ -66,16 +83,23 @@ def _merge_one(p, c, manual):
     ld = (c.get("landing") or {}) if c else {}
     ax = (c.get("arxiv") or {}) if c else {}
 
-    cands = [(src, re.sub(r"\s+", " ", (v or "")).strip())
-             for src, v in [("crossref", cr.get("abstract", "")),
-                             ("openalex", oa.get("abstract", "")),
-                             ("semanticscholar", s2.get("abstract", "")),
-                             ("landing_page", ld.get("abstract", "")),
-                             ("arxiv", ax.get("abstract", ""))]]
-    good  = [(k, v) for k, v in cands if len(v) >= MIN_ABSTRACT]
+    cands = [
+        (src, re.sub(r"\s+", " ", (v or "")).strip())
+        for src, v in [
+            ("crossref", cr.get("abstract", "")),
+            ("openalex", oa.get("abstract", "")),
+            ("semanticscholar", s2.get("abstract", "")),
+            ("landing_page", ld.get("abstract", "")),
+            ("arxiv", ax.get("abstract", "")),
+        ]
+    ]
+    good = [(k, v) for k, v in cands if len(v) >= MIN_ABSTRACT]
     d["abstract_candidates"] = {k: len(v) for k, v in cands if v}
     if manual and manual.get("abstract"):
-        d["abstract"], d["abstract_source"] = manual["abstract"], manual.get("source", "manual_web")
+        d["abstract"], d["abstract_source"] = (
+            manual["abstract"],
+            manual.get("source", "manual_web"),
+        )
     elif good:
         best = good[0]
         for k, v in good[1:]:
@@ -84,52 +108,73 @@ def _merge_one(p, c, manual):
         d["abstract"], d["abstract_source"] = best[1], best[0]
     else:
         short = [(k, v) for k, v in cands if v]
-        d["abstract"], d["abstract_source"] = ("", "none") if not short else (short[0][1], short[0][0])
+        d["abstract"], d["abstract_source"] = (
+            ("", "none") if not short else (short[0][1], short[0][0])
+        )
         if short:
-            d["abstract_source"]  = "none"
+            d["abstract_source"] = "none"
             d["abstract_snippet"] = short[0][1]
-    kws  = list(dict.fromkeys((oa.get("keywords") or []) +
-                               (ld.get("keywords") or []) +
-                               (cr.get("subjects") or [])))
-    d["keywords"]  = [k for k in kws if k][:20]
-    d["topics"]    = oa.get("topics") or []
-    d["tldr"]      = s2.get("tldr", "")
+    kws = list(
+        dict.fromkeys(
+            (oa.get("keywords") or [])
+            + (ld.get("keywords") or [])
+            + (cr.get("subjects") or [])
+        )
+    )
+    d["keywords"] = [k for k in kws if k][:20]
+    d["topics"] = oa.get("topics") or []
+    d["tldr"] = s2.get("tldr", "")
 
-
-    arx = ((manual.get("arxiv_id") if manual else "")
-           or ax.get("arxiv_id")
-           or oa.get("arxiv_id")
-           or s2.get("arxiv_id") or "")
+    arx = (
+        (manual.get("arxiv_id") if manual else "")
+        or ax.get("arxiv_id")
+        or oa.get("arxiv_id")
+        or s2.get("arxiv_id")
+        or ""
+    )
     if not arx:
         for pid_ in cr.get("preprint_ids") or []:
-            m = (re.search(r"arxiv\.org/abs/(.+)$", pid_ or "")
-                 or re.search(r"10\.48550/arxiv\.(.+)$", pid_ or "", re.I))
+            m = re.search(r"arxiv\.org/abs/(.+)$", pid_ or "") or re.search(
+                r"10\.48550/arxiv\.(.+)$", pid_ or "", re.IGNORECASE
+            )
             if m:
                 arx = m.group(1)
-    d["arxiv_id"]  = arx
+    d["arxiv_id"] = arx
     d["arxiv_url"] = ("https://arxiv.org/abs/" + arx) if arx else ""
     pdfs = []
-    for u in ([(manual.get("pdf") if manual else "")] + [s2.get("pdf")] +
-              (oa.get("pdf_links") or []) + (cr.get("pdf_links") or []) +
-              (ld.get("pdf_links") or []) + (ax.get("pdf_links") or [])):
+    for u in (
+        [(manual.get("pdf") if manual else "")]
+        + [s2.get("pdf")]
+        + (oa.get("pdf_links") or [])
+        + (cr.get("pdf_links") or [])
+        + (ld.get("pdf_links") or [])
+        + (ax.get("pdf_links") or [])
+    ):
         if u and u not in pdfs:
             pdfs.append(u)
-    d["pdf_urls"]      = pdfs
+    d["pdf_urls"] = pdfs
     d["crossref_type"] = cr.get("type") or oa.get("type") or ""
-    d["container"]     = cr.get("container") or oa.get("container") or s2.get("venue") or ""
-    d["published_date"]= cr.get("date") or ""
-    d["cited_by"]      = (cr.get("cited_by") if cr.get("cited_by") is not None
-                          else (oa.get("cited_by") if oa.get("cited_by") is not None
-                                else s2.get("cited_by")))
-    d["retracted"]     = bool(cr.get("retracted") or oa.get("retracted"))
+    d["container"] = cr.get("container") or oa.get("container") or s2.get("venue") or ""
+    d["published_date"] = cr.get("date") or ""
+    d["cited_by"] = (
+        cr.get("cited_by")
+        if cr.get("cited_by") is not None
+        else (
+            oa.get("cited_by") if oa.get("cited_by") is not None else s2.get("cited_by")
+        )
+    )
+    d["retracted"] = bool(cr.get("retracted") or oa.get("retracted"))
     hint = p.get("pub_hint", "unknown")
     k = p.get("dblp_key", "")
     if k.startswith("conf/"):
         hint = "conference"
     elif k.startswith("journals/") and not k.startswith("journals/corr/"):
         hint = "journal"
-    elif (p.get("doi") or "").startswith("10.48550") or\
-            d["crossref_type"] in ("posted-content", "preprint", "repository"):
+    elif (p.get("doi") or "").startswith("10.48550") or d["crossref_type"] in (
+        "posted-content",
+        "preprint",
+        "repository",
+    ):
         hint = "preprint_only"
     elif d["crossref_type"] == "dissertation":
         hint = "thesis"
@@ -138,8 +183,8 @@ def _merge_one(p, c, manual):
             hint = "journal"
         elif d["crossref_type"] in ("proceedings-article", "book-chapter"):
             hint = "conference"
-    d["pub_hint"]      = hint
-    d["manual_notes"]  = manual.get("notes", "") if manual else ""
+    d["pub_hint"] = hint
+    d["manual_notes"] = manual.get("notes", "") if manual else ""
     return d
 
 
@@ -157,22 +202,26 @@ def build_dossiers(run, embed="auto"):
 
 
 def coverage_report(run):
-    d    = run.dossiers()
+    d = run.dossiers()
     rows = [d[i] for i in run.eligible()]
-    src  = Counter(r.get("abstract_source", "none") for r in rows)
+    src = Counter(r.get("abstract_source", "none") for r in rows)
     print("abstract coverage (eligible papers = %d): %s" % (len(rows), dict(src)))
     miss = [r["id"] for r in rows if r.get("abstract_source", "none") == "none"]
     print("papers WITHOUT abstract: %d" % len(miss))
     if miss:
-        print("  -> you must look these up yourself (web search / fetch the DOI page) "
-              "and store with `a_cli.py fill`.")
+        print(
+            "  -> you must look these up yourself (web search / fetch the DOI page) "
+            "and store with `a_cli.py fill`."
+        )
         print("  ids: " + " ".join(miss[:400]) + (" ..." if len(miss) > 400 else ""))
 
 
 _PROBE_N = 6
 
 
-def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="auto", deep=True):
+def run_enrich(
+    run, workers=8, limit=0, all_years=False, skip_s2=False, embed="auto", deep=True
+):
     papers = [p for p in run.papers() if p.get("in_range") or all_years]
     if limit:
         papers = papers[:limit]
@@ -192,7 +241,6 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
         s2map = s2_batch(dois)
         print("  matched %d" % len(s2map))
 
-
     if todo and not (s2map or oamap):
         probe_ok = 0
         for p in todo[:_PROBE_N]:
@@ -203,24 +251,38 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
             except Exception:
                 pass
         if probe_ok == 0 and len(todo) > _PROBE_N:
-            print("ERROR: Early network probe failed (%d attempts, 0 succeeded). "
-                  "Check internet connectivity and try again. "
-                  "Aborting to avoid %d silent failures." % (_PROBE_N, len(todo)))
+            print(
+                "ERROR: Early network probe failed (%d attempts, 0 succeeded). "
+                "Check internet connectivity and try again. "
+                "Aborting to avoid %d silent failures." % (_PROBE_N, len(todo))
+            )
             return
-        print("Network probe: %d/%d succeeded, proceeding with full batch."
-              % (probe_ok, min(_PROBE_N, len(todo))))
+        print(
+            "Network probe: %d/%d succeeded, proceeding with full batch."
+            % (probe_ok, min(_PROBE_N, len(todo)))
+        )
 
     done, t0 = 0, time.time()
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = [ex.submit(enrich_one, run, p, s2map.get(p.get("doi")),
-                          oamap.get(p.get("doi")), deep) for p in todo]
+        futs = [
+            ex.submit(
+                enrich_one,
+                run,
+                p,
+                s2map.get(p.get("doi")),
+                oamap.get(p.get("doi")),
+                deep,
+            )
+            for p in todo
+        ]
         for f in as_completed(futs):
             f.result()
             done += 1
             if done % 200 == 0 or done == len(todo):
-
                 run.save_papers()
-                print("  %d/%d  (%.0fs)" % (done, len(todo), time.time() - t0), flush=True)
+                print(
+                    "  %d/%d  (%.0fs)" % (done, len(todo), time.time() - t0), flush=True
+                )
 
     build_dossiers(run, embed=embed)
     coverage_report(run)
@@ -228,11 +290,14 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
     try:
         run.update_state(
             current_stage="enrichment_complete",
-            stages={**run.state()["stages"], "enrichment": {
-                "status": "completed",
-                "completed_at": now(),
-                "papers_enriched": len(papers)
-            }}
+            stages={
+                **run.state()["stages"],
+                "enrichment": {
+                    "status": "completed",
+                    "completed_at": now(),
+                    "papers_enriched": len(papers),
+                },
+            },
         )
     except Exception:
         pass

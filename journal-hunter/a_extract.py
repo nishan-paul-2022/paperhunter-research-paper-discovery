@@ -3,13 +3,10 @@ import csv
 import os
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
-from typing import Optional
-try:
-    from lxml import etree
-except ImportError:
-    sys.exit("Missing lxml.  Run:  pip install lxml")
+from lxml import etree
+
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 DATA_DIR = REPO_ROOT / "paper-database"
@@ -25,19 +22,27 @@ OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
 OUT_FIELDS_DBLP = ["dblp_key", "dblp_name"]
 OUT_FIELDS_SJR = ["title", "issn_1", "issn_2", "quartile"]
 VALID_QUARTILES = {"Q1", "Q2", "Q3", "Q4"}
+
+
 def _format_issn(raw: str) -> str:
     s = raw.strip().replace("-", "").replace(" ", "")
     return f"{s[:4]}-{s[4:]}" if len(s) == 8 and s.isdigit() else raw.strip()
+
+
 def _extract_issns(text: str) -> set[str]:
-    issn_pattern = r'\b\d{4}-?\d{3}[\dXx]\b'
+    issn_pattern = r"\b\d{4}-?\d{3}[\dXx]\b"
     matches = re.findall(issn_pattern, text)
     return {_format_issn(m) for m in matches}
+
+
 def _split_issns(cell: str) -> tuple[str, str]:
     parts = [p.strip() for p in cell.split(",") if p.strip()]
     return (
         _format_issn(parts[0]) if parts else "",
         _format_issn(parts[1]) if len(parts) > 1 else "",
     )
+
+
 def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
     print("━" * 70)
     print("  Phase 1 – Cleaning SJR CSV")
@@ -66,14 +71,20 @@ def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
     print(f"  ✓  {len(rows)} valid journals  |  {dropped} malformed rows dropped")
     print(f"  ✓  {len(issn_index)} ISSNs indexed for fast lookup\n")
     return rows, issn_index
+
+
 def _scan_xml(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
     size = os.path.getsize(xml_path)
     seen = index = 0
     result: dict[str, tuple[str, set[str]]] = {}
     f = open(xml_path, "rb")
     ctx = etree.iterparse(
-        f, events=("end",), tag="article",
-        load_dtd=True, resolve_entities=True, huge_tree=True,
+        f,
+        events=("end",),
+        tag="article",
+        load_dtd=True,
+        resolve_entities=True,
+        huge_tree=True,
     )
     for _, el in ctx:
         seen += 1
@@ -90,15 +101,20 @@ def _scan_xml(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
                 index += 1
         if seen % 500_000 == 0:
             pct = f.tell() * 100 // size
-            print(f"  {pct:3}%  |  articles scanned: {seen:,}"
-                  f"  |  journal keys found: {index:,}",
-                  end="\r", flush=True)
+            print(
+                f"  {pct:3}%  |  articles scanned: {seen:,}"
+                f"  |  journal keys found: {index:,}",
+                end="\r",
+                flush=True,
+            )
         el.clear()
         while el.getprevious() is not None:
             del el.getparent()[0]
     f.close()
     print(f"  100%  |  articles scanned: {seen:,}  |  journal keys found: {index:,}")
     return result
+
+
 def phase_index(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
     print("━" * 70)
     print("  Phase 2 – DBLP Journal Index")
@@ -110,6 +126,8 @@ def phase_index(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
     print(f"\n  ✓  {len(idx):,} unique journal keys found")
     print(f"  ✓  {issn_count:,} journals have ISSN data\n")
     return idx
+
+
 def phase_match(
     dblp_index: dict[str, tuple[str, set[str]]],
     sjr_rows: list[dict],
@@ -129,14 +147,16 @@ def phase_match(
         for issn in dblp_issns:
             if issn in sjr_issn_index:
                 sjr_record = sjr_issn_index[issn]
-                issn_matched.append({
-                    "dblp_key": dblp_key,
-                    "dblp_name": dblp_name,
-                    "title": sjr_record["title"],
-                    "issn_1": sjr_record["issn_1"],
-                    "issn_2": sjr_record["issn_2"],
-                    "quartile": sjr_record["quartile"],
-                })
+                issn_matched.append(
+                    {
+                        "dblp_key": dblp_key,
+                        "dblp_name": dblp_name,
+                        "title": sjr_record["title"],
+                        "issn_1": sjr_record["issn_1"],
+                        "issn_2": sjr_record["issn_2"],
+                        "quartile": sjr_record["quartile"],
+                    }
+                )
                 dblp_matched_keys.add(dblp_key)
                 sjr_matched_titles.add(sjr_record["title"])
                 print(f"  ✓  {sjr_record['quartile']}  {dblp_name[:50]}")
@@ -159,85 +179,118 @@ def phase_match(
     ]
     total_dblp = len(dblp_index)
     total_sjr = len(sjr_rows)
-    print(f"  Unmatched Journals (Need AI Review)")
-    print(f"  " + "─" * 66)
+    print("  Unmatched Journals (Need AI Review)")
+    print("  " + "─" * 66)
     print(f"  ├─ DBLP unmatched: {len(dblp_unmatched)}")
     print(f"  └─ SJR available pool: {len(sjr_available)}")
     print()
-    print(f"  Summary Statistics:")
+    print("  Summary Statistics:")
     print(f"  ├─ Total DBLP journals in XML: {total_dblp:,}")
     print(f"  ├─ Total SJR journals (Q1-Q4): {total_sjr:,}")
-    print(f"  ├─ ISSN auto-matched: {len(issn_matched):,} ({len(issn_matched)/total_dblp*100:.1f}% of DBLP)")
-    print(f"  ├─ DBLP needs matching: {len(dblp_unmatched):,} ({len(dblp_unmatched)/total_dblp*100:.1f}% of DBLP)")
-    print(f"  ├─ SJR available for matching: {len(sjr_available):,} ({len(sjr_available)/total_sjr*100:.1f}% of SJR)")
-    print(f"  └─ Potential comparisons: {len(dblp_unmatched):,} × {len(sjr_available):,} = {len(dblp_unmatched) * len(sjr_available):,}\n")
+    print(
+        f"  ├─ ISSN auto-matched: {len(issn_matched):,} ({len(issn_matched) / total_dblp * 100:.1f}% of DBLP)"
+    )
+    print(
+        f"  ├─ DBLP needs matching: {len(dblp_unmatched):,} ({len(dblp_unmatched) / total_dblp * 100:.1f}% of DBLP)"
+    )
+    print(
+        f"  ├─ SJR available for matching: {len(sjr_available):,} ({len(sjr_available) / total_sjr * 100:.1f}% of SJR)"
+    )
+    print(
+        f"  └─ Potential comparisons: {len(dblp_unmatched):,} × {len(sjr_available):,} = {len(dblp_unmatched) * len(sjr_available):,}\n"
+    )
     return issn_matched, dblp_unmatched, sjr_available
+
+
 def phase_write(
     issn_matched: list[dict],
     dblp_unmatched: list[dict],
     sjr_available: list[dict],
     out_issn: Path,
     out_dblp: Path,
-    out_sjr: Path
+    out_sjr: Path,
 ) -> None:
     print("━" * 70)
     print("  Phase 4 – Writing Output Files")
     print("━" * 70)
     order = {"Q1": 0, "Q2": 1, "Q3": 2, "Q4": 3}
-    issn_sorted = sorted(issn_matched,
-                        key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
+    issn_sorted = sorted(
+        issn_matched, key=lambda r: (order.get(r["quartile"], 9), r["title"].lower())
+    )
     out_issn.parent.mkdir(parents=True, exist_ok=True)
     with open(out_issn, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS, delimiter=",",
-                                quoting=csv.QUOTE_MINIMAL)
+        writer = csv.DictWriter(
+            f, fieldnames=OUT_FIELDS, delimiter=",", quoting=csv.QUOTE_MINIMAL
+        )
         writer.writeheader()
         writer.writerows(issn_sorted)
     qtrs = Counter(r["quartile"] for r in issn_matched)
-    print(f"\n  File 1: 1-exact-matched.csv (AUTO-APPROVED)")
+    print("\n  File 1: 1-exact-matched.csv (AUTO-APPROVED)")
     print(f"  → {out_issn}")
     print(f"  Total: {len(issn_matched)} journals")
-    print(f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n")
+    print(
+        f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n"
+    )
     dblp_sorted = sorted(dblp_unmatched, key=lambda r: r["dblp_key"])
     with open(out_dblp, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS_DBLP, delimiter=",",
-                                quoting=csv.QUOTE_MINIMAL)
+        writer = csv.DictWriter(
+            f, fieldnames=OUT_FIELDS_DBLP, delimiter=",", quoting=csv.QUOTE_MINIMAL
+        )
         writer.writeheader()
         writer.writerows(dblp_sorted)
-    print(f"  File 2: 2-dblp-unmatched.csv (Need Matching)")
+    print("  File 2: 2-dblp-unmatched.csv (Need Matching)")
     print(f"  → {out_dblp}")
     print(f"  Total: {len(dblp_unmatched)} journals\n")
-    sjr_sorted = sorted(sjr_available,
-                       key=lambda r: (order.get(r["quartile"], 9), r["title"].lower()))
+    sjr_sorted = sorted(
+        sjr_available, key=lambda r: (order.get(r["quartile"], 9), r["title"].lower())
+    )
     with open(out_sjr, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS_SJR, delimiter=",",
-                                quoting=csv.QUOTE_MINIMAL)
+        writer = csv.DictWriter(
+            f, fieldnames=OUT_FIELDS_SJR, delimiter=",", quoting=csv.QUOTE_MINIMAL
+        )
         writer.writeheader()
         writer.writerows(sjr_sorted)
     qtrs_sjr = Counter(r["quartile"] for r in sjr_available)
-    print(f"  File 3: 3-source-pool.csv (Available for Matching)")
+    print("  File 3: 3-source-pool.csv (Available for Matching)")
     print(f"  → {out_sjr}")
     print(f"  Total: {len(sjr_available)} journals")
-    print(f"  Q1: {qtrs_sjr['Q1']}   Q2: {qtrs_sjr['Q2']}   Q3: {qtrs_sjr['Q3']}   Q4: {qtrs_sjr['Q4']}\n")
-    print(f"  NEXT STEP:")
-    print(f"  → Run c_match.py to generate matches")
-    print(f"  → Or use AI prompt with files 2 & 3\n")
-    print(f"  Overall Statistics:")
+    print(
+        f"  Q1: {qtrs_sjr['Q1']}   Q2: {qtrs_sjr['Q2']}   Q3: {qtrs_sjr['Q3']}   Q4: {qtrs_sjr['Q4']}\n"
+    )
+    print("  NEXT STEP:")
+    print("  → Run c_match.py to generate matches")
+    print("  → Or use AI prompt with files 2 & 3\n")
+    print("  Overall Statistics:")
     print(f"  ├─ 1-exact-matched.csv: {len(issn_matched):,} journals (AUTO-APPROVED)")
-    print(f"  ├─ 2-dblp-unmatched.csv: {len(dblp_unmatched):,} journals (NEED MATCHING)")
+    print(
+        f"  ├─ 2-dblp-unmatched.csv: {len(dblp_unmatched):,} journals (NEED MATCHING)"
+    )
     print(f"  ├─ 3-source-pool.csv: {len(sjr_available):,} journals (AVAILABLE)")
-    print(f"  └─ Expected final output: ~{len(issn_matched) + int(len(dblp_unmatched)*0.5):,} matched journals\n")
+    print(
+        f"  └─ Expected final output: ~{len(issn_matched) + int(len(dblp_unmatched) * 0.5):,} matched journals\n"
+    )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--xml", default=str(XML_PATH),
-                    help=f"Path to dblp.xml  (default: {XML_PATH.name})")
-    ap.add_argument("--sjr", default=str(SJR_SRC),
-                    help=f"Path to SJR CSV   (default: {SJR_SRC.name})")
-    ap.add_argument("--out", default=str(OUT_FINAL),
-                    help=f"Output CSV        (default: {OUT_FINAL.name})")
+    ap.add_argument(
+        "--xml",
+        default=str(XML_PATH),
+        help=f"Path to dblp.xml  (default: {XML_PATH.name})",
+    )
+    ap.add_argument(
+        "--sjr",
+        default=str(SJR_SRC),
+        help=f"Path to SJR CSV   (default: {SJR_SRC.name})",
+    )
+    ap.add_argument(
+        "--out",
+        default=str(OUT_FINAL),
+        help=f"Output CSV        (default: {OUT_FINAL.name})",
+    )
     args = ap.parse_args()
     xml_path = Path(args.xml)
     sjr_path = Path(args.sjr)
-    out_path = Path(args.out)
     if not sjr_path.exists():
         sys.exit(f"SJR CSV not found: {sjr_path}")
     if not xml_path.exists():
@@ -252,10 +305,16 @@ def main() -> None:
     print()
     sjr_rows, sjr_issn_index = phase_clean(sjr_path)
     dblp_index = phase_index(xml_path)
-    issn_matched, dblp_unmatched, sjr_available = phase_match(dblp_index, sjr_rows, sjr_issn_index)
+    issn_matched, dblp_unmatched, sjr_available = phase_match(
+        dblp_index, sjr_rows, sjr_issn_index
+    )
     phase_write(
-        issn_matched, dblp_unmatched, sjr_available,
-        OUT_1_ISSN, OUT_2_DBLP_TODO, OUT_3_SJR_POOL
+        issn_matched,
+        dblp_unmatched,
+        sjr_available,
+        OUT_1_ISSN,
+        OUT_2_DBLP_TODO,
+        OUT_3_SJR_POOL,
     )
     print("━" * 70)
     print("  Done.")
@@ -263,5 +322,7 @@ def main() -> None:
     print("  → Run c_match.py to process 2-dblp-unmatched.csv + 3-source-pool.csv")
     print("━" * 70)
     print()
+
+
 if __name__ == "__main__":
     main()

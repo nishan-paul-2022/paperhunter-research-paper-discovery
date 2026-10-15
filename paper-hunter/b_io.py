@@ -1,17 +1,22 @@
-import csv, hashlib, html, io, json, os, re, unicodedata
-from datetime import datetime, timezone
+import csv
+import html
+import json
+import os
+import re
+import unicodedata
+from datetime import UTC, datetime
 from pathlib import Path
 
-TOOLS_DIR  = Path(__file__).resolve().parent
-ROOT       = TOOLS_DIR.parent
-RUNS_DIR   = ROOT / "paper-supplement"
+TOOLS_DIR = Path(__file__).resolve().parent
+ROOT = TOOLS_DIR.parent
+RUNS_DIR = ROOT / "paper-supplement"
 DEFAULT_OUTPUT = ROOT / "paper-reference"
 
 MIN_ABSTRACT = 120
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def read_jsonl(path):
@@ -34,8 +39,7 @@ def write_jsonl(path, rows):
     path = Path(path)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
     os.replace(tmp, path)
 
 
@@ -74,7 +78,7 @@ def clean_title(t):
 def strip_tags(s):
     s = re.sub(r"<[^>]+>", " ", s or "")
     s = html.unescape(s)
-    s = re.sub(r"^\s*abstract[:.\\s-]*", "", s, flags=re.I)
+    s = re.sub(r"^\s*abstract[:.\\s-]*", "", s, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -89,48 +93,44 @@ def write_csv(path, cols, rows):
 class Run:
     def __init__(self, name=None):
         if not name:
-
             cur = TOOLS_DIR / ".current"
             if not cur.exists():
                 raise SystemExit(
-                    "ERROR: no active run. Create .current file with CSV path")
+                    "ERROR: no active run. Create .current file with CSV path"
+                )
             csv_path = cur.read_text().strip()
             if not csv_path or not Path(csv_path).exists():
                 raise SystemExit(
-                    "ERROR: CSV path in .current does not exist: %s" % csv_path)
+                    "ERROR: CSV path in .current does not exist: %s" % csv_path
+                )
 
             name = Path(csv_path).stem
         self.name = name
-        self.dir  = RUNS_DIR / name
+        self.dir = RUNS_DIR / name
         if not self.dir.exists():
             raise SystemExit("ERROR: run directory %s does not exist" % self.dir)
 
-
         self.papers_path = self.dir / "papers.jsonl"
-        self.state_path  = self.dir / "state.json"
+        self.state_path = self.dir / "state.json"
 
-
-        self.dossier_path        = self.papers_path
-        self.decisions_path      = self.papers_path
-        self.enrichment_db_path  = self.papers_path
+        self.dossier_path = self.papers_path
+        self.decisions_path = self.papers_path
+        self.enrichment_db_path = self.papers_path
         self.manual_overrides_path = self.papers_path
-        self.fulltext_db_path    = self.papers_path
+        self.fulltext_db_path = self.papers_path
 
         self._papers_map = None
-        self._state      = None
-        self._meta       = None
+        self._state = None
+        self._meta = None
 
     def dec_path(self, p):
         return self.papers_path
-
 
     def _get_papers_map(self):
         if self._papers_map is None:
             papers = read_jsonl(self.papers_path)
             self._papers_map = {p["id"]: p for p in papers}
 
-
-            migrated = False
             dossier_file = self.dir / "dossiers.jsonl"
             if dossier_file.exists() and dossier_file != self.papers_path:
                 for d in read_jsonl(dossier_file):
@@ -140,7 +140,6 @@ class Run:
                         for k, v in d.items():
                             if k not in p:
                                 p[k] = v
-                                migrated = True
 
             enrich_file = self.dir / "enrichment.db.jsonl"
             if enrich_file.exists() and enrich_file != self.papers_path:
@@ -149,7 +148,6 @@ class Run:
                     if pid in self._papers_map:
                         if "enrichment" not in self._papers_map[pid]:
                             self._papers_map[pid]["enrichment"] = e
-                            migrated = True
 
             manual_file = self.dir / "manual-overrides.jsonl"
             if manual_file.exists() and manual_file != self.papers_path:
@@ -158,7 +156,6 @@ class Run:
                     if pid in self._papers_map:
                         if "manual" not in self._papers_map[pid]:
                             self._papers_map[pid]["manual"] = m
-                            migrated = True
 
             decisions_file = self.dir / "decisions.jsonl"
             if decisions_file.exists() and decisions_file != self.papers_path:
@@ -169,7 +166,6 @@ class Run:
                         p_decs = self._papers_map[pid].setdefault("decisions", {})
                         if pass_name not in p_decs:
                             p_decs[pass_name] = dec
-                            migrated = True
 
             final_file = self.dir / "final.jsonl"
             if final_file.exists() and final_file != self.papers_path:
@@ -178,16 +174,17 @@ class Run:
                     if pid in self._papers_map:
                         if "final" not in self._papers_map[pid]:
                             self._papers_map[pid]["final"] = fin
-                            migrated = True
 
             fulltext_file = self.dir / "fulltext.db.jsonl"
             if fulltext_file.exists() and fulltext_file != self.papers_path:
                 for ft in read_jsonl(fulltext_file):
                     pid = ft.get("id")
-                    if pid in self._papers_map and "fulltext" not in self._papers_map[pid]:
+                    if (
+                        pid in self._papers_map
+                        and "fulltext" not in self._papers_map[pid]
+                    ):
                         self._papers_map[pid]["fulltext"] = ft.get("text", "")
                         self._papers_map[pid]["fulltext_source"] = ft.get("source", "")
-                        migrated = True
 
         return self._papers_map
 
@@ -204,7 +201,6 @@ class Run:
         if self._papers_map is not None:
             write_jsonl(self.papers_path, list(self._papers_map.values()))
 
-
     def get_enrichment(self, paper_id):
         p = self.get_paper(paper_id)
         return p.get("enrichment") if p else None
@@ -217,7 +213,6 @@ class Run:
                 data["ts"] = now()
             p["enrichment"] = data
 
-
     def get_manual_override(self, paper_id):
         p = self.get_paper(paper_id)
         return p.get("manual", {}) if p else {}
@@ -228,7 +223,6 @@ class Run:
             data["id"] = paper_id
             p["manual"] = data
             self.save_papers()
-
 
     def get_fulltext(self, paper_id):
         p = self.get_paper(paper_id)
@@ -241,7 +235,6 @@ class Run:
             p["fulltext_source"] = source
             p["fulltext_ts"] = now()
             self.save_papers()
-
 
     def decisions(self, p=None):
         res = {}
@@ -266,7 +259,11 @@ class Run:
             self.save_papers()
 
     def final_decisions(self):
-        return {pid: paper["final"] for pid, paper in self._get_papers_map().items() if "final" in paper}
+        return {
+            pid: paper["final"]
+            for pid, paper in self._get_papers_map().items()
+            if "final" in paper
+        }
 
     def save_final(self, final_records):
         if isinstance(final_records, list):
@@ -280,7 +277,6 @@ class Run:
                 if p is not None:
                     p["final"] = r
         self.save_papers()
-
 
     def state(self):
         if self._state is None:
@@ -325,15 +321,17 @@ class Run:
                 "pass_c_screening": {"status": "not_started"},
                 "reconciliation": {"status": "not_started"},
                 "validation": {"status": "not_started"},
-                "export": {"status": "not_started"}
+                "export": {"status": "not_started"},
             },
             "passes": {
                 "A": {"planned": None, "completed": 0},
                 "B": {"planned": None, "completed": 0},
                 "C": {"planned": None, "completed": 0},
-                "F": {"planned": None, "completed": 0}
-            }
+                "F": {"planned": None, "completed": 0},
+            },
         }
 
     def eligible(self):
-        return [p["id"] for p in self.papers() if p.get("in_range") and not p.get("dup_of")]
+        return [
+            p["id"] for p in self.papers() if p.get("in_range") and not p.get("dup_of")
+        ]
