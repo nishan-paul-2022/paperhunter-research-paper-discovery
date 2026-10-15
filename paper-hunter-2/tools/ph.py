@@ -24,7 +24,6 @@ Every sub-command is resumable: all state lives in runs/<csv-stem>/ as plain fil
   reconcile     merge passes, find disagreements, build the adjudication queue
   validate      consistency checks on the final verdicts
   export        write the filtered CSV (+ borderline CSV, audit CSV, short report)
-  selftest      offline smoke test — verifies the full pipeline in < 5 s, no network
 """
 import argparse, csv as _csv, json, math, random, re, shutil, sys, textwrap, time
 import unicodedata
@@ -817,173 +816,6 @@ def cmd_export(a):
 
 # ── selftest (Change 2) ───────────────────────────────────────────────────────
 
-def cmd_selftest(a):
-    """
-    Offline smoke test — validates schema, queue, validator, and export
-    in < 5 seconds without any network access. Uses only the first 12 rows
-    of the real CSV to keep it fast.
-
-    What it checks:
-      1. init: CSV loads cleanly and papers.jsonl is written
-      2. signals: compute_signals runs without error
-      3. validator: correctly rejects a baseline missing all four criteria
-      4. validator: correctly accepts a well-formed baseline decision
-      5. reconcile: final.jsonl is produced
-      6. validate: validation gate passes on a well-formed final
-      7. export: filtered CSV is created
-    On success prints "selftest: OK". On failure prints the error and exits 1.
-    """
-    import tempfile, traceback, csv as _csv2
-
-    src = Path(a.csv).expanduser()
-    if not src.exists():
-        die("selftest: CSV not found: %s" % src)
-
-    # ── build a tiny temp CSV (12 rows) ──────────────────────────────────────
-    with open(src, encoding="utf-8-sig", errors="replace") as f:
-        rows = list(_csv2.DictReader(f))
-    rows = rows[:12]
-    tmp_csv = Path(tempfile.mktemp(suffix=".csv"))
-    with open(tmp_csv, "w", newline="", encoding="utf-8") as f:
-        w = _csv2.DictWriter(f, fieldnames=list(rows[0]))
-        w.writeheader()
-        w.writerows(rows)
-
-    # Sentinel defaults so finally can always access these even on early failure
-    _actual_run_dir = None
-    out_dir  = None
-    run_name = ""
-    ok = False
-    try:
-        # 1. init — cmd_init writes the run name into RUNS_DIR/.current
-        out_dir = Path(tempfile.mkdtemp(prefix="ph_selftest_out_"))  # now set before any failure
-        ns = argparse.Namespace(csv=str(tmp_csv), fresh=True, min_year=2000, max_year=2030,
-                                output_dir=str(out_dir),
-                                publication_policy="strict", run=None)
-        cmd_init(ns)
-        run_name = (RUNS_DIR / ".current").read_text().strip()
-        _actual_run_dir = RUNS_DIR / run_name
-        run = Run(run_name)
-
-        # 2. signals (no network — build dossiers from title only)
-        build_dossiers(run, embed="off")
-
-        papers = run.papers()
-        ids    = [p["id"] for p in papers]
-        dos    = run.dossiers()
-
-        # 3. validator rejects a bad baseline (missing evidence, wrong criteria)
-        bad_decision = [{"id": ids[0], "verdict": "accept",
-                         "roles": ["baseline"], "primary_role": "baseline",
-                         "primary_contribution": "agent_system",
-                         "subject_scope": "core",
-                         "criteria": {"llm_agent": "yes", "offensive_security": "yes",
-                                      "black_box": "partial", "long_horizon": "yes"},
-                         "publication_status": "published",
-                         "fulltext_read": True,
-                         "evidence_source": "abstract",
-                         "evidence": "this is a fake quote that will not match",
-                         "reason": "Fake reason for selftest baseline.",
-                         "confidence": 0.9, "abstract_source": "none",
-                         "needs_deep_dive": False}]
-        errs = validate_record(run, dict(bad_decision[0]), "A", "strict", dos=dos)
-        assert any("baseline requires ALL FOUR criteria" in e or
-                   "evidence quote NOT found" in e for e in errs), \
-            "validator did not catch bad baseline: errs=%s" % errs
-
-        # 4. build a clean reject + a valid non-baseline accept for all other ids
-        #    (so reconcile can produce a final.jsonl)
-        good_decisions = []
-        for pid in ids:
-            if pid == ids[0]:
-                good_decisions.append({
-                    "id": pid, "verdict": "accept",
-                    "roles": ["evaluation"], "primary_role": "evaluation",
-                    "primary_contribution": "evaluation_study",
-                    "subject_scope": "core",
-                    "criteria": {"llm_agent": "yes", "offensive_security": "yes",
-                                 "black_box": "yes", "long_horizon": "yes"},
-                    "publication_status": "published",
-                    "fulltext_read": False,
-                    "evidence_source": "title",
-                    "evidence": " ".join(dos[pid]["title"].split()[:12]) or "paper title stub text",
-                    "reason": "Selftest: accepted as evaluation for smoke-test purposes.",
-                    "confidence": 0.85, "abstract_source": "none",
-                    "needs_deep_dive": False,
-                })
-            else:
-                good_decisions.append({
-                    "id": pid, "verdict": "reject",
-                    "reject_class": "off_domain",
-                    "roles": [],
-                    "primary_contribution": "other",
-                    "subject_scope": "none",
-                    "criteria": {"llm_agent": "no", "offensive_security": "no",
-                                 "black_box": "no", "long_horizon": "no"},
-                    "publication_status": "unknown",
-                    "fulltext_read": False,
-                    "evidence_source": "title",
-                    "evidence": " ".join(dos[pid]["title"].split()[:12]) or "paper off domain stub text",
-                    "reason": "Selftest: off-domain paper.",
-                    "confidence": 0.95, "abstract_source": "none",
-                    "needs_deep_dive": False,
-                })
-
-        for r in good_decisions:
-            errs = validate_record(run, r, "A", "strict", dos=dos)
-            assert not errs, "validator rejected good decision for %s: %s" % (r["id"], errs)
-            r["pass"], r["ts"] = "A", now()
-            if r["verdict"] == "reject":
-                r["roles"] = []
-            append_jsonl(run.dec_path("A"), r)
-
-        # 5. freeze plan B, plan C, run reconcile
-        ensure_plan_B(run, force=False)
-        ensure_plan_C(run)
-        # Pass B decisions (same as A for simplicity)
-        B_ids = run.plans().get("B", [])
-        for pid in B_ids:
-            src_r = next(r for r in good_decisions if r["id"] == pid)
-            r2 = dict(src_r); r2["pass"] = "B"; r2["ts"] = now()
-            append_jsonl(run.dec_path("B"), r2)
-        # Pass C decisions (same)
-        C_ids = run.plans().get("C", [])
-        for pid in C_ids:
-            src_r = next(r for r in good_decisions if r["id"] == pid)
-            r2 = dict(src_r); r2["pass"] = "C"; r2["ts"] = now()
-            append_jsonl(run.dec_path("C"), r2)
-        cmd_reconcile(argparse.Namespace(run=run.name))
-
-        # 6. validate
-        cmd_validate(argparse.Namespace(run=run.name))
-
-        # 7. export
-        cmd_export(argparse.Namespace(run=run.name, out_dir=str(out_dir), force=False))
-        assert list(out_dir.glob("*_filtered.csv")), \
-            "selftest: filtered CSV not produced"
-
-        ok = True
-        print("selftest: OK")
-    except Exception:
-        traceback.print_exc()
-        sys.exit(1)
-    finally:
-        if _actual_run_dir and _actual_run_dir.exists():
-            shutil.rmtree(_actual_run_dir, ignore_errors=True)
-        if out_dir and out_dir.exists():
-            shutil.rmtree(out_dir, ignore_errors=True)
-        tmp_csv.unlink(missing_ok=True)
-        # Clear .current only if it still points to our temp run
-        cur = RUNS_DIR / ".current"
-        try:
-            if run_name and cur.exists() and cur.read_text().strip() == run_name:
-                cur.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-
-# ── main ──────────────────────────────────────────────────────────────────────
-
 def main():
     ap = argparse.ArgumentParser(prog="ph.py", description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1067,11 +899,6 @@ def main():
     s.add_argument("--no-network", action="store_true",
                    help="skip arXiv link lookup (not needed; arXiv is fetched at Stage 0)")
     s.set_defaults(f=cmd_export)
-
-    s = sub.add_parser("selftest",
-                        help="offline smoke test — validates the full pipeline in < 5 s")
-    s.add_argument("csv", help="path to any real input CSV (only first 12 rows are used)")
-    s.set_defaults(f=cmd_selftest)
 
     a = ap.parse_args()
     a.f(a)
