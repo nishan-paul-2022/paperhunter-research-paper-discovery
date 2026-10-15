@@ -8,7 +8,7 @@ from pathlib import Path
 
 TOOLS_DIR  = Path(__file__).resolve().parent          # paper-hunter/
 ROOT       = TOOLS_DIR.parent                          # paperhunter-research-paper-discovery/
-RUNS_DIR   = ROOT / "paper-dump"
+RUNS_DIR   = ROOT / "paper-supplement"
 DEFAULT_OUTPUT = ROOT / "paper-reference"
 
 MIN_ABSTRACT = 120

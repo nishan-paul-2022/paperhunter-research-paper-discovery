@@ -3,7 +3,7 @@
 """
 a_cli.py — paper-hunter CLI dispatcher. Python 3.8+, standard library only.
 
-All run state is consolidated into two flat files in paper-dump/<csv-stem>/:
+All run state is consolidated into two flat files in paper-supplement/<csv-stem>/:
   - papers.jsonl (the unified per-paper store: metadata, enrichment, signals, overrides, decisions, final)
   - state.json   (run metadata, stage tracking, pass plans)
 

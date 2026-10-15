@@ -1,7 +1,7 @@
 {
  "version": "3.0",
  "meta": {
-  "csv": "/home/nishan/Documents/paperhunter-research-paper-discovery/paper-list/sample.csv",
+  "csv": "/home/nishan/Documents/paperhunter-research-paper-discovery/paper-inventory/sample.csv",
   "sha1": "9c6fba7e7018d50dc86baa963662b272412a7f08",
   "created": "2026-10-15T10:18:49+00:00",
   "n_rows": 30,

@@ -11,7 +11,7 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 XML_PATH = REPO_ROOT / "paper-database" / "dblp.xml"
-OUTPUT_DIR = REPO_ROOT / "paper-list"
+OUTPUT_DIR = REPO_ROOT / "paper-inventory"
 JOURNAL_LIST = REPO_ROOT / "journal-context" / "list-of-journals.csv"
 CONF_LIST = REPO_ROOT / "conference-context" / "list-of-conferences.csv"
 YEARS = [2023, 2024, 2025, 2026]
@@ -168,7 +168,7 @@ def main():
     papers = scan_xml(XML_PATH, journal_index, conf_index)
     write_papers(papers, OUTPUT_DIR)
     print("━" * 70)
-    print("  Done! Papers extracted to paper-list/ directory.")
+    print("  Done! Papers extracted to paper-inventory/ directory.")
     print("━" * 70)
     print()
 if __name__ == '__main__':

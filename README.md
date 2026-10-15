@@ -43,7 +43,7 @@ Provide `conference-context/conference-matching-guide.md` to AI.
 cd database && python3 extract.py
 ```
 
-**Output:** `paper-list/*.csv` (32 files organized by ranking and year)
+**Output:** `paper-inventory/*.csv` (32 files organized by ranking and year)
 
 ### 7. Build Reference List
 
