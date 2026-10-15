@@ -14,7 +14,7 @@ from c_schema import (
     quote_in,
     validate_record,
 )
-from f_signals import G_AGENT, G_STRUCT, SEEDS
+from f_signals import G_AGENT, G_STRUCT, RX_AGENT, SEEDS
 
 
 def _evidence_level(has_abstract, fulltext_read=False, landing_checked=False):
@@ -80,14 +80,15 @@ def judge_paper(d, pass_name="A"):
     has_exploit = bool(RX_EXPLOIT.search(full_text))
     has_ctf = bool(RX_CTF.search(full_text))
     is_offensive = has_pentest or has_exploit or has_ctf
-    has_agent = any(p.search(full_text) for p in G_AGENT)
+    has_agent = any(p.search(full_text) for p in RX_AGENT)
     has_llm = bool(
         re.search(
-            r"\b(llms?|large language models?|gpt[- ]?\w*|chatgpt|language models?|foundation models?|claude|gemini|llama|deepseek|qwen)\b",
+            r"\b(llms?|large language models?|gpt[- ]?\w*|chatgpt|language models?|foundation models?|claude|gemini|llama|deepseek|qwen|codex)\b",
             full_text,
             re.IGNORECASE,
         )
         or is_seed
+        or (has_agent and re.search(r"\b(prompt|prompts|prompting)\b", full_text, re.IGNORECASE))
     )
     has_llm_agent = has_agent and has_llm
 
@@ -107,7 +108,7 @@ def judge_paper(d, pass_name="A"):
         )
     )
     is_survey = bool(
-        G_STRUCT["survey"][0].search(title)
+        any(p.search(title) for p in G_STRUCT["survey"])
         or (has_abstract and any(p.search(abstract[:200]) for p in G_STRUCT["survey"]))
     )
     is_benchmark = bool(

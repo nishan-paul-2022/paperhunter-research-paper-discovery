@@ -447,7 +447,14 @@ class Run:
         return list(self._get_papers_map().values())
 
     def get_paper(self, paper_id):
-        return self._get_papers_map().get(paper_id)
+        if self._papers_map is not None:
+            return self._papers_map.get(paper_id)
+        cur = self._db().execute("SELECT * FROM papers WHERE id=?", (paper_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        cols = [d[0] for d in cur.description]
+        return _row_to_paper(dict(zip(cols, row)))
 
     def dossiers(self):
         return self._get_papers_map()

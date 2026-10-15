@@ -1,5 +1,6 @@
 import bisect
 import difflib
+import functools
 import math
 import os
 import re
@@ -31,6 +32,21 @@ G_AGENT = rx(
     r"retrieval[- ]augmented|\\brag\\b",
     r"\breflection\b",
     r"self[- ]correction",
+)
+RX_AGENT = rx(
+    r"\bautonomous\s+agent(s|ic)?\b",
+    r"\bmulti-?agent\b",
+    r"\bagentic\b",
+    r"\bagent\s+(framework|system|architecture|construction|pipeline|loop|scaffold)\b",
+    r"\b(llm|ai|lm|language\s+model|frontier\s+model|computer[- ]use)\s+agent(s)?\b",
+    r"\bagents?\s+for\s+(automated\s+)?(penetration|pentest|red\s+team|exploit|hacking)\b",
+    r"\b(red\s+team(ing)?|penetration|pentest|exploit|attack)\s+agents?\b",
+    r"\bteams?\s+of\s+(llm\s+)?agents\b",
+    r"\btool[- ](use|using|augmented|calling)\b",
+    r"\breact\b",
+    r"\baction[- ]loop\b",
+    r"\bplanning\s+agent\b",
+    r"\b(incalmo|pentestllmagent|penforge|artemis|hackworld|pentestgpt|autoattacker|hacksynth|vulnbot|pwnagent|penligent)\b",
 )
 G_OFFENSE = rx(
     r"penetration[- ]test|pen[- ]?test|pentest",
@@ -148,7 +164,7 @@ SEEDS = rx(
     r"autopenbench",
     r"nyu ctf",
     r"intercode-ctf",
-    r"enigma",
+    r"\benigma:\s*interactive tools|\benigma.*finding security vulnerabilities",
     r"d-cipher",
     r"pentesteval",
     r"\bhptsa\b",
@@ -398,10 +414,26 @@ def _tok_text(s):
     return re.sub(r"\s+", " ", s).strip()
 
 
+_TOK_SEEDS = None
+
+
+def _get_tok_seeds():
+    global _TOK_SEEDS
+    if _TOK_SEEDS is None:
+        _TOK_SEEDS = [(_tok_text(s), s) for s in SEED_TITLES]
+    return _TOK_SEEDS
+
+
 def fuzzy_seed(title_tok):
     best, which = 0.0, ""
-    for s in SEED_TITLES:
-        r = difflib.SequenceMatcher(None, title_tok, _tok_text(s)).ratio()
+    matcher = difflib.SequenceMatcher(None, title_tok, "")
+    for s_tok, s in _get_tok_seeds():
+        matcher.set_seq2(s_tok)
+        if matcher.real_quick_ratio() <= best:
+            continue
+        if matcher.quick_ratio() <= best:
+            continue
+        r = matcher.ratio()
         if r > best:
             best, which = r, s
     return best, which
@@ -417,15 +449,23 @@ _KEY_VOCAB = sorted(
     }
     | {"agentic", "autonomous", "pentesting"}
 )
+_KEY_VOCAB_SET = set(_KEY_VOCAB)
+
+
+@functools.lru_cache(maxsize=100000)
+def _typo_word_match(w):
+    if w in _KEY_VOCAB_SET:
+        return None
+    m = difflib.get_close_matches(w, _KEY_VOCAB, n=1, cutoff=0.9)
+    return "%s~%s" % (w, m[0]) if m else None
 
 
 def typo_hits(text):
     hits = set()
     for w in set(re.findall(r"[a-z]{8,}", text.lower())):
-        if w not in _KEY_VOCAB:
-            m = difflib.get_close_matches(w, _KEY_VOCAB, n=1, cutoff=0.9)
-            if m:
-                hits.add("%s~%s" % (w, m[0]))
+        hit = _typo_word_match(w)
+        if hit:
+            hits.add(hit)
     return sorted(hits)
 
 
