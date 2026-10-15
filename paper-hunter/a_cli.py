@@ -154,7 +154,7 @@ def cmd_init(a):
             seen_title[nt] = pid
         papers.append(p)
 
-    run = Run(name)
+    run = Run(name, create=True)
     run.init_papers(papers)
 
     meta = {

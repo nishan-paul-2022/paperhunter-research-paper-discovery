@@ -295,7 +295,7 @@ def read_json(path, default=None):
 
 
 class Run:
-    def __init__(self, name=None):
+    def __init__(self, name=None, create=False):
         if not name:
             cur = TOOLS_DIR / ".current"
             if not cur.exists():
@@ -321,7 +321,7 @@ class Run:
             elif legacy_papers.exists():
                 shutil.move(str(legacy_papers), str(self.db_path))
 
-        if not self.db_path.exists() and not self.dir.exists():
+        if not create and not self.db_path.exists() and not self.dir.exists():
             raise SystemExit("ERROR: run %s does not exist" % name)
 
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
