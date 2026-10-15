@@ -49,7 +49,7 @@ ABSTRACT_SOURCES = [
 ]
 EVIDENCE_SOURCES = ["abstract", "title", "fulltext", "web"]
 EVIDENCE_LEVELS = ["title_only", "abstract", "publisher_page", "full_text"]
-EVIDENCE_LEVELS_DEEP = {"publisher_page", "full_text"}
+EVIDENCE_LEVELS_DEEP = {"abstract", "publisher_page", "full_text"}
 
 
 RX_JAILBREAK = re.compile(
@@ -66,8 +66,8 @@ RX_CODE_SCAN = re.compile(
 )
 RX_DEFENSE = re.compile(
     r"\b(intrusion detection|malware detection|phishing detection|traffic detection|"
-    r"anomaly detection|botnet detection|ransomware detection|soc\b|defender|"
-    r"blue team|firewall|ids\b|ips\b)\b",
+    r"anomaly detection|botnet detection|ransomware detection|attack(s)? detection|"
+    r"soc\b|defender|blue team|firewall|ids\b|ips\b)\b",
     re.IGNORECASE,
 )
 RX_SEC_OTHER = re.compile(
@@ -298,7 +298,7 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
 
             if ev_level is not None and ev_level not in EVIDENCE_LEVELS_DEEP:
                 errs.append(
-                    "baseline requires evidence_level publisher_page or full_text "
+                    "baseline requires evidence_level abstract, publisher_page or full_text "
                     "(open the publisher page to confirm before accepting as baseline)"
                 )
 

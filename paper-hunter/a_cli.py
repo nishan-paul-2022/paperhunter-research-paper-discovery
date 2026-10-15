@@ -1284,7 +1284,11 @@ def cmd_export(a):
             "venue": row["venue"],
             "ee": row["ee"],
             "url": paper_url.get(row["paper_id"], ""),
-            "Role": row["primary_role"],
+            "Role": (
+                "baseline"
+                if row["primary_role"] in ("baseline", "baseline_candidate")
+                else row["primary_role"]
+            ),
         }
         for row in accepted
     ]

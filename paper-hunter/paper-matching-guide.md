@@ -144,7 +144,7 @@ Ask first: **"Is the headline contribution a system that attacks, or a thing use
 - Non-LLM automated pentesting
 - Empirical study only with no new agent design
 
-**Baseline requires `evidence_level: publisher_page` or `full_text`** before accepting. Open the DOI/publisher page to confirm.
+**Baseline requires `evidence_level: abstract`, `publisher_page` or `full_text`** before accepting. Open the DOI/publisher page if abstract is absent or inconclusive.
 
 ### 3.1b `baseline_candidate` — likely baseline but criteria 3 or 4 unclear
 *Use when criteria 1 and 2 are clearly `yes` (agent system performing offensive ops) but criteria 3 (`black_box`) or 4 (`long_horizon`) are `partial` or `unknown` after reading the abstract.*
@@ -414,4 +414,4 @@ No subdirectories. No `input.csv`. No `.md` files generated. No additional CSV f
 
 ## 12. Final message
 
-When stage 7 is finished, reply with at most five short lines: the path of the audit-all CSV, total papers, and the counts of accepted papers by role (`baseline`, `baseline_candidate`, `benchmark`, `evaluation`, `survey`).
+When stage 7 is finished, reply with at most five short lines: the path of the audit-all CSV, total papers, and the counts of accepted papers by role (`baseline`, `benchmark`, `evaluation`, `survey`).
