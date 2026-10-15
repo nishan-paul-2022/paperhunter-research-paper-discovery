@@ -5,7 +5,7 @@ import csv, hashlib, html, io, json, os, re, unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
-TOOLS_DIR  = Path(__file__).resolve().parent          # paper-hunter-2/
+TOOLS_DIR  = Path(__file__).resolve().parent          # paper-hunter/
 ROOT       = TOOLS_DIR.parent                          # paperhunter-research-paper-discovery/
 RUNS_DIR   = ROOT / "paper-dump"
 DEFAULT_OUTPUT = ROOT / "paper-reference"
@@ -98,7 +98,7 @@ def write_csv(path, cols, rows):
 class Run:
     def __init__(self, name=None):
         if not name:
-            # Read CSV path from .current file in paper-hunter-2/
+            # Read CSV path from .current file in paper-hunter/
             cur = TOOLS_DIR / ".current"
             if not cur.exists():
                 raise SystemExit(

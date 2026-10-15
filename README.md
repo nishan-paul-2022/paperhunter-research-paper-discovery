@@ -47,6 +47,6 @@ cd database && python3 extract.py
 
 ### 7. Build Reference List
 
-Provide `paper-hunter/prompt.md` to AI.
+Provide `paper-hunter/paper-matching-guide.md` to AI.
 
 **Output:** `paper-reference/a-star-2026.csv`
