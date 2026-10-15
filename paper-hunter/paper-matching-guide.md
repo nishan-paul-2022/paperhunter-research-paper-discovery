@@ -264,37 +264,22 @@ All commands run from the `paper-hunter/` directory.
 This is the canonical, end-to-end execution sequence for filtering **any** CSV file through the pipeline. An autonomous agent must execute this exact standard sequence without generating ad-hoc scratch scripts or custom command lines:
 
 ```bash
-# Stage 0: Diagnostics, Initialization, and Signal Profiling
 python3 a_cli.py doctor
-python3 a_cli.py init --csv "<PATH_TO_CSV>"
+python3 a_cli.py init
 python3 a_cli.py signals --embed off
-
-# Fast High-Signal Batch Enrichment (Lanes A & B via OpenAlex 50-DOI chunks)
 python3 a_cli.py enrich --lanes A,B --batch-only
 python3 a_cli.py signals --embed off
 python3 a_cli.py status
-
-# Stage 1: Pass A Screening (Breadth screening across all eligible papers)
 python3 g_passa.py
-
-# Stage 2: Pass B Verification (Shortlist & high-signal candidates)
 python3 a_cli.py batch --pass B --n 1
 python3 h_passbc.py B
-
-# Stage 3: Pass C Blind Independent Audit (Anti-bias blind review)
 python3 a_cli.py batch --pass C --n 1
 python3 h_passbc.py C
 python3 a_cli.py sweep
-
-# Stage 4: Reconciliation and Pass F Adjudication
 python3 a_cli.py reconcile
 python3 h_passbc.py F
 python3 a_cli.py reconcile
-
-# Stage 5: Schema Validation (Asserts 100% compliance: 0 errors)
 python3 a_cli.py validate
-
-# Stage 6: Deliverable Export (Generates *-audit-all.csv)
 python3 a_cli.py export
 python3 a_cli.py status
 ```
@@ -304,9 +289,9 @@ python3 a_cli.py status
 ### Detailed Stage Descriptions
 
 ### Stage 0 — Setup and enrichment
-1. CSV path is configured in `.current`. Run `status` to verify, or initialise with:
+1. CSV path is configured in `.current`. Run `init` to set up or resume the run:
    ```bash
-   python3 a_cli.py init --csv "<PATH>"
+   python3 a_cli.py init
    ```
 2. `doctor` — checks connectivity to metadata services (`crossref`, `openalex`, `semanticscholar`).
 3. Batch enrichment: run `python3 a_cli.py enrich --lanes A,B --batch-only` to rapidly retrieve OpenAlex metadata for high-signal papers without per-paper rate limits.

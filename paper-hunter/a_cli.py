@@ -68,7 +68,15 @@ def cmd_init(a):
     import hashlib
     import io as _io
 
-    src = Path(a.csv).expanduser()
+    cur = TOOLS_DIR / ".current"
+    csv_str = (
+        a.csv
+        if getattr(a, "csv", None)
+        else (cur.read_text().strip() if cur.exists() else "")
+    )
+    if not csv_str:
+        die("No CSV specified and .current file does not exist or is empty")
+    src = Path(csv_str).expanduser()
     if not src.exists():
         die("CSV not found: %s" % src)
     raw = src.read_bytes()
@@ -1316,7 +1324,9 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("init")
-    s.add_argument("--csv", required=True)
+    s.add_argument(
+        "--csv", default=None, help="path to CSV file (default: path in .current)"
+    )
     s.add_argument("--min-year", type=int, default=2023)
     s.add_argument("--max-year", type=int, default=2026)
     s.add_argument("--output-dir", default=None)
@@ -1417,7 +1427,9 @@ def main():
     s.set_defaults(f=cmd_validate)
 
     s = sub.add_parser("prep", help="combined init + enrich + signals in one call")
-    s.add_argument("--csv", required=True)
+    s.add_argument(
+        "--csv", default=None, help="path to CSV file (default: path in .current)"
+    )
     s.add_argument("--min-year", type=int, default=2023)
     s.add_argument("--max-year", type=int, default=2026)
     s.add_argument("--output-dir", default=None)

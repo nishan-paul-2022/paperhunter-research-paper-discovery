@@ -33,7 +33,6 @@ def run_pass(pass_name, run_name=None):
             run, rec, pass_name, "strict", dos=dossiers, lane=d.get("lane", "C")
         )
         if errs:
-            # Self-healing fallback to publisher-page metadata
             lane = d.get("lane", "C")
             eurl = d.get("ee") or (
                 ("https://doi.org/" + d["doi"])
