@@ -1,5 +1,5 @@
 """
-ph/schema.py — constants, validator, and shared enumerations for paper-hunter.
+c_schema.py — constants, validator, and shared enumerations for paper-hunter.
 """
 import re, unicodedata, difflib
 from collections import defaultdict

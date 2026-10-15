@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ph.py — paper-hunter CLI dispatcher.  Python 3.8+, standard library only.
+a_cli.py — paper-hunter CLI dispatcher.  Python 3.8+, standard library only.
 
-The AI agent driving the pipeline (see ../prompt.md) calls this; humans never need to.
-All logic lives in the ph/ package — this file is a thin router.
+The AI agent driving the pipeline (see prompt.md) calls this; humans never need to.
+All logic is in the co-located Python files (b_io.py, c_schema.py, etc.).
 Every sub-command is resumable: all state lives in runs/<csv-stem>/ as plain files.
 
   init          load + normalise the CSV, assign stable ids
@@ -30,18 +30,17 @@ import unicodedata
 from collections import Counter
 from pathlib import Path
 
-# ── package imports ───────────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ph.io      import (Run, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
+# ── package imports (relative path removed, direct imports) ───────────────────
+from b_io      import (Run, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
                          append_jsonl, read_json, write_json, write_csv, norm, clean_title)
-from ph.schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNU, SCOPES,
+from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNU, SCOPES,
                          PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES, BORDER_REASONS,
                          ABSTRACT_SOURCES, EVIDENCE_SOURCES, validate_record)
-from ph.network import (http, p_crossref, p_openalex, p_landing, p_arxiv,
+from d_network import (http, p_crossref, p_openalex, p_landing, p_arxiv,
                          s2_batch, BROWSER_UA, title_sim, URL_S2, URL_CROSSREF,
                          URL_OPENALEX, URL_ARXIV)
-from ph.enrich  import (run_enrich, build_dossiers, coverage_report, enrich_one)
-from ph.signals import compute_signals, SWEEP_QUERIES
+from e_enrich  import (run_enrich, build_dossiers, coverage_report, enrich_one)
+from f_signals import compute_signals, SWEEP_QUERIES
 
 import urllib.parse
 

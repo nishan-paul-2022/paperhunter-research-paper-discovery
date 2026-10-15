@@ -22,9 +22,7 @@ pip install lxml
 
 ### 3. Download DBLP Database
 ```bash
-cd database
-python3 download.py
-cd ..
+cd database && python3 download.py
 ```
 
 ### 4. Build Journal List
@@ -42,8 +40,13 @@ Provide `conference-context/conference-matching-guide.md` to AI.
 ### 6. Extract Papers
 
 ```bash
-cd paper-hunter
-python a_extract.py
+cd database && python3 extract.py
 ```
 
 **Output:** `paper-list/*.csv` (32 files organized by ranking and year)
+
+### 7. Build Reference List
+
+Provide `paper-hunter/prompt.md` to AI.
+
+**Output:** `paper-reference/a-star-2026.csv`

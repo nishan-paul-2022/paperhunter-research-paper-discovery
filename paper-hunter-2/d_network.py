@@ -9,7 +9,7 @@ from pathlib import Path
 
 import urllib.error, urllib.parse, urllib.request
 
-from .io import MIN_ABSTRACT, strip_tags, now, read_json, write_json, norm
+from b_io import MIN_ABSTRACT, strip_tags, now, read_json, write_json, norm
 
 UA         = "paper-hunter/1.0 (literature screening; mailto:%s)" % os.environ.get("PH_MAILTO", "unknown@example.org")
 BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "

@@ -1,5 +1,5 @@
 """
-screen_pass_a.py — Automated Pass A screening engine for paper-hunter.
+g_passa.py — Automated Pass A screening engine.
 Applies domain rules from prompt.md sections 2-6 across all dossiers.
 Generates fully validated, verbatim-evidence decision records.
 """
@@ -7,9 +7,9 @@ import json, re, time
 from pathlib import Path
 from collections import Counter
 
-from ph.io import Run, now, append_jsonl, read_jsonl, write_jsonl
-from ph.schema import validate_record, quote_in
-from ph.signals import G_AGENT, G_OFFENSE, G_STRUCT, SEEDS, G_NEG
+from b_io import Run, now, append_jsonl, read_jsonl, write_jsonl
+from c_schema import validate_record, quote_in
+from f_signals import G_AGENT, G_OFFENSE, G_STRUCT, SEEDS, G_NEG
 
 # Specialized patterns
 RX_JAILBREAK = re.compile(r"\b(jailbreak|jailbreaking|prompt injection|prompt leak|safety alignment|safety guardrail|toxic|toxicity|hallucination|adversarial prompt|unlearning|watermark|copyright)\b", re.I)
@@ -404,3 +404,6 @@ def run_pass_a(run):
 if __name__ == "__main__":
     run = Run("a-star-2026")
     run_pass_a(run)
+
+
+# ============================================================================

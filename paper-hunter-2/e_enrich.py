@@ -1,8 +1,8 @@
 """
-ph/enrich.py — per-paper enrichment (Crossref, OpenAlex, S2, landing page, arXiv)
-and dossier/signal building.
+e_enrich.py — per-paper enrichment (Crossref, OpenAlex, S2, landing page, arXiv)
+and dossier/signal building for paper-hunter.
 
-KEY FIX (vs original ph.py): arXiv is now fetched in Stage 0 (here), not deferred
+KEY FIX (vs original): arXiv is now fetched in Stage 0 (here), not deferred
 to Stage 6 (export). Every paper in the screening pass therefore has arXiv access.
 """
 import math, re, os, time
@@ -10,10 +10,10 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .io      import MIN_ABSTRACT, read_json, write_json, read_jsonl, write_jsonl, now
-from .network import (p_crossref, p_openalex, p_landing, p_arxiv,
+from b_io      import MIN_ABSTRACT, read_json, write_json, read_jsonl, write_jsonl, now
+from d_network import (p_crossref, p_openalex, p_landing, p_arxiv,
                       s2_batch, openalex_batch, BROWSER_UA)
-from .signals import compute_signals
+from f_signals import compute_signals
 
 
 # ── single-paper fetch ────────────────────────────────────────────────────────

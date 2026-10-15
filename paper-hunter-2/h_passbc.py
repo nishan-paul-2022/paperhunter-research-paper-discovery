@@ -1,5 +1,5 @@
 """
-screen_passes_bc.py — Autonomous Pass B and Pass C decision engine.
+h_passbc.py — Autonomous Pass B and Pass C decision engine.
 Handles candidate verification, deep dive assessments, blind audit review,
 and outputs 100% schema-compliant decisions with verified verbatim quotes.
 """
@@ -7,8 +7,12 @@ import json, re, time
 from pathlib import Path
 from collections import Counter
 
-from ph.io import Run, now, append_jsonl, read_jsonl, write_jsonl
-from ph.schema import validate_record, quote_in
+from b_io import Run, now, append_jsonl, read_jsonl, write_jsonl
+from c_schema import validate_record, quote_in
+
+# Pass B and Pass C Logic
+# ============================================================================
+
 
 RX_JAILBREAK = re.compile(r"\b(jailbreak|jailbreaking|prompt injection|prompt leak|safety alignment|safety guardrail|toxic|toxicity|hallucination|adversarial prompt|unlearning|watermark|copyright|refusal|harmbench|advbench)\b", re.I)
 RX_CODE_SCAN = re.compile(r"\b(vulnerability detection|code vulnerability|vulnerable code|code review|defect detection|smart contract vulnerability|bug detection|static analysis|ast|cfg|slice|slicing|fuzzing|fuzzer)\b", re.I)

@@ -1,5 +1,5 @@
 """
-ph/signals.py — TF-IDF / term / embedding signals.
+f_signals.py — TF-IDF / term / embedding signals for paper-hunter.
 
 Signals ORDER and PRIORITIZE work only; they NEVER reject a paper.
 """

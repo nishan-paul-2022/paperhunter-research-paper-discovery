@@ -1,0 +1,9 @@
+# Current structure -> New structure
+tools/ph.py              -> a_cli.py           (main CLI dispatcher)
+tools/ph/io.py           -> b_io.py            (I/O operations)
+tools/ph/schema.py       -> c_schema.py        (validation & schema)
+tools/ph/network.py      -> d_network.py       (network/API calls)
+tools/ph/enrich.py       -> e_enrich.py        (enrichment logic)
+tools/ph/signals.py      -> f_signals.py       (signal computation)
+tools/ph/screen_pass_a.py    -> g_screen.py   (if needed, combine)
+tools/ph/screen_passes_bc.py -> g_screen.py   (if needed, combine)

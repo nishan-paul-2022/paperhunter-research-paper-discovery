@@ -1,12 +1,12 @@
 """
-ph/io.py — file helpers and the Run context object.
+b_io.py — file helpers and the Run context object for paper-hunter.
 """
 import csv, hashlib, html, io, json, os, re, unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
-TOOLS_DIR  = Path(__file__).resolve().parent.parent   # tools/
-ROOT       = TOOLS_DIR.parent                          # paper-hunter-2/
+TOOLS_DIR  = Path(__file__).resolve().parent          # paper-hunter-2/
+ROOT       = TOOLS_DIR                                 # paper-hunter-2/
 RUNS_DIR   = ROOT / "runs"
 DEFAULT_OUTPUT = ROOT / "output"
 
