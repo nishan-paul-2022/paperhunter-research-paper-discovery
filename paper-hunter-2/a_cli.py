@@ -31,7 +31,7 @@ from collections import Counter
 from pathlib import Path
 
 # ── package imports (relative path removed, direct imports) ───────────────────
-from b_io      import (Run, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
+from b_io      import (Run, ROOT, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
                          append_jsonl, read_json, write_json, write_csv, norm, clean_title)
 from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNU, SCOPES,
                          PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES, BORDER_REASONS,
@@ -84,7 +84,7 @@ def cmd_init(a):
     run_dir = RUNS_DIR / name
     if run_dir.exists() and not a.fresh:
         print("run %s already exists - resuming it (use --fresh to wipe)" % name)
-        (RUNS_DIR / ".current").write_text(name)
+        (ROOT / ".current").write_text(str(src.resolve()))
         return cmd_status(argparse.Namespace(run=name))
     if run_dir.exists() and a.fresh:
         shutil.rmtree(run_dir)
@@ -131,7 +131,7 @@ def cmd_init(a):
             "output_dir": str(Path(a.output_dir).expanduser().resolve()) if a.output_dir else str(DEFAULT_OUTPUT),
             "publication_policy": a.publication_policy}
     write_json(run_dir / "meta.json", meta)
-    (RUNS_DIR / ".current").write_text(name)
+    (ROOT / ".current").write_text(str(src.resolve()))
     n_dup = sum(1 for p in papers if p.get("dup_of"))
     n_oor = sum(1 for p in papers if not p["in_range"])
     n_doi = sum(1 for p in papers if p["doi"])
@@ -761,56 +761,43 @@ def cmd_export(a):
             die("fix validation errors first (or use --force)")
     fin = {r["id"]: r for r in read_jsonl(run.dir / "final.jsonl")}
     dos = run.dossiers()
-    # Note: arXiv links are already populated at Stage 0 (enrich). No late fetch needed.
-    out  = Path(a.out_dir or run.meta.get("output_dir") or DEFAULT_OUTPUT)
-    out.mkdir(parents=True, exist_ok=True)
-    stem = run.name
+    
+    # Output directory: paper-reference/
+    out_dir = ROOT.parent / "paper-reference"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Get original CSV filename
+    csv_path = Path(run.meta.get("csv", ""))
+    output_filename = csv_path.name if csv_path.exists() else f"{run.name}.csv"
+    output_path = out_dir / output_filename
+    
+    # Get accepted papers only
     order = {r: n for n, r in enumerate(ROLES)}
-    acc  = [_row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "accept"]
+    acc = [_row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "accept"]
     acc.sort(key=lambda x: (order.get(x["primary_role"], 9),
                              -float(x["confidence"] or 0), x["title"]))
-    bor  = []
-    for i, r in fin.items():
-        if r["verdict"] == "borderline":
-            row = _row_out(dos[i], r)
-            row["reason"] = "[%s] %s" % (r.get("borderline_reason"), r.get("reason"))
-            bor.append(row)
-    bor.sort(key=lambda x: -float(x["confidence"] or 0))
-    f_main  = out / ("%s_filtered.csv"  % stem)
-    f_bord  = out / ("%s_borderline.csv" % stem)
-    f_audit = out / ("%s_audit_all.csv" % stem)
-    write_csv(f_main,  CSV_COLS, acc)
-    write_csv(f_bord,  CSV_COLS, bor)
-    audit = []
-    for p in run.papers():
-        r = fin[p["id"]]
-        d = dos[p["id"]]
-        audit.append({"paper_id": p["id"], "dblp_key": p["dblp_key"],
-                      "title": p["title"], "year": p["year"], "venue": p["venue"],
-                      "tier": r["verdict"], "roles": ";".join(r.get("roles", [])),
-                      "reject_class": r.get("reject_class", ""),
-                      "borderline_reason": r.get("borderline_reason", ""),
-                      "confidence": r.get("confidence", ""),
-                      "review_passes": "".join(r.get("passes", [])),
-                      "signal_score": d.get("signal_score"),
-                      "abstract_source": d.get("abstract_source"),
-                      "reason": r.get("reason", "")})
-    write_csv(f_audit, ["paper_id", "dblp_key", "title", "year", "venue", "tier",
-                         "roles", "reject_class", "borderline_reason", "confidence",
-                         "review_passes", "signal_score", "abstract_source", "reason"], audit)
-    cnt = Counter(r["primary_role"] for r in acc)
-    rep = ["# paper-hunter run report: %s" % stem, "",
-           "- input CSV: `%s`" % run.meta.get("csv"),
-           "- papers: %d | accepted: %d | borderline: %d | rejected: %d"
-           % (len(fin), len(acc), len(bor), len(fin) - len(acc) - len(bor)),
-           "- accepted by primary role: %s" % dict(cnt),
-           "- abstracts found: %s" % dict(Counter(d.get("abstract_source") for d in dos.values())),
-           "- passes: A=%d B=%d C=%d F=%d decisions"
-           % tuple(len(run.decisions(x)) for x in "ABCF"), ""]
-    (out / ("%s_report.md" % stem)).write_text("\n".join(rep), encoding="utf-8")
-    print("wrote:\n  %s  (%d accepted)\n  %s  (%d borderline)\n  %s\n  %s"
-          % (f_main, len(acc), f_bord, len(bor), f_audit,
-             out / ("%s_report.md" % stem)))
+    
+    # Prepare output rows with original CSV columns + Role
+    output_rows = []
+    for row in acc:
+        # Keep original CSV columns + add Role
+        output_row = {
+            "dblp_key": row["dblp_key"],
+            "title": row["title"],
+            "authors": row["authors"],
+            "year": row["year"],
+            "venue": row["venue"],
+            "ee": row["ee"],
+            "url": row["url"],
+            "Role": row["primary_role"]  # Add Role column
+        }
+        output_rows.append(output_row)
+    
+    # Write filtered CSV with Role column
+    cols = ["dblp_key", "title", "authors", "year", "venue", "ee", "url", "Role"]
+    write_csv(output_path, cols, output_rows)
+    
+    print("Wrote filtered CSV with %d papers to: %s" % (len(output_rows), output_path))
 
 
 # ── selftest (Change 2) ───────────────────────────────────────────────────────

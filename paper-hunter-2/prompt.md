@@ -2,21 +2,7 @@
 
 You are a senior security-research librarian and reviewer. You will filter ONE CSV of papers down to the papers that matter for our research, by reading and judging **every paper individually** with as much evidence as you can gather. Time and tokens are not a concern. Filtering quality is the only objective.
 
----
-
-## 0. RUN SETTINGS (the only lines a human edits)
-
-```
-INPUT_CSV           = <<PUT THE CSV PATH HERE>>
-OUTPUT_DIR          = paper-hunter/output
-YEAR_MIN            = 2023
-YEAR_MAX            = 2026
-PUBLICATION_POLICY  = strict        # strict | relaxed   (see section 5)
-```
-
-If the human's message contains a CSV path, that path overrides `INPUT_CSV`. If no readable CSV path is available, stop and answer with one line saying so.
-
-**Use only `INPUT_CSV`.** Never open, list, merge or think about any other CSV in the folder tree. Other files named `*.csv`, old `work/` folders or earlier outputs do not exist for you.
+The CSV path is configured in the `.current` file. The filtered output will be written to `paper-reference/` with the same filename as the input CSV, plus a "Role" column showing the paper type (baseline, benchmark, evaluation, survey).
 
 Working directory: the folder that contains this `prompt.md` (it also contains `a_cli.py`). Run every command from there.
 
@@ -161,7 +147,7 @@ Evidence quote: 4-45 words, **verbatim** from `abstract`, `title`, or `fulltext`
 All commands: `python3 a_cli.py <command>`.
 
 ### Stage 0 — Setup and enrichment (deterministic; you run it)
-1. `init --csv "<INPUT_CSV>" --min-year <YEAR_MIN> --max-year <YEAR_MAX> --output-dir "<OUTPUT_DIR>" --publication-policy <PUBLICATION_POLICY>` (resumes automatically if the run already exists).
+1. The CSV path is already configured in `.current` file. Run `status` to verify the current run, or `init --csv "<CSV_PATH>"` to start a new run (it will update `.current` automatically).
 2. `doctor` — shows which metadata services are reachable. If none are, rely on your own web tools for abstracts (stage 0.4) and tell nobody; just do the work.
 3. `enrich` — fetches abstracts and metadata for **every** paper (Crossref, OpenAlex, Semantic Scholar, publisher landing page, arXiv), builds dossiers, computes fuzzy/term/TF-IDF (and, if `sentence-transformers` is installed, embedding) signals. It is resumable: re-run it if it was interrupted. Optional: `pip install sentence-transformers` before it for an embedding signal (ignore failures).
 4. **Close the abstract gaps.** `enrich` prints the ids with no abstract (also in `runs/<stem>/missing_abstracts.txt`). Work through **all** of them with your own web search/fetch, saving each with `fill`. For papers that still have none after a serious attempt, continue; they will be handled with the doubt rules.
@@ -201,16 +187,18 @@ Loop until `PASS A COMPLETE`:
 
 ---
 
-## 9. Deliverables (written by `export` into `OUTPUT_DIR`)
+## 9. Deliverables (written by `export` to `paper-reference/`)
 
-| File | Content |
-|---|---|
-| `<csv-stem>_filtered.csv` | **The answer.** Accepted papers only. Original CSV columns (`dblp_key,title,authors,year,venue,ee,url`) plus `paper_id, doi, arxiv_url, tier, primary_role, roles, primary_contribution, subject_scope, llm_agent, offensive_security, black_box, long_horizon, publication_status, system_or_artifact_name, attack_surfaces, confidence, review_passes, full_text_read, abstract_source, evidence_quote, reason, abstract`. Sorted by role (baseline, benchmark, evaluation, survey), then confidence. |
-| `<csv-stem>_borderline.csv` | Same columns; papers needing a human look, `reason` starts with the borderline reason. |
-| `<csv-stem>_audit_all.csv` | Every paper with its tier, reject/borderline class, passes and reason (the audit trail). |
-| `<csv-stem>_report.md` | Counts and coverage. |
+**Output:** A single filtered CSV file with the same filename as the input CSV.
 
-Create no other deliverables. `runs/` is working state.
+**Location:** `paper-reference/<csv-filename>`
+
+**Columns:** Original CSV columns (`dblp_key, title, authors, year, venue, ee, url`) plus one additional column:
+- `Role` — The primary role of the paper: `baseline`, `benchmark`, `evaluation`, or `survey`
+
+**Content:** Only accepted papers, sorted by role (baseline, benchmark, evaluation, survey), then by confidence.
+
+All intermediate files and detailed decisions are stored in `runs/<csv-stem>/` for reference but are not part of the final output.
 
 ---
 
@@ -261,4 +249,4 @@ Create no other deliverables. `runs/` is working state.
 
 ## 12. Final message
 
-When (and only when) stage 7 is finished, reply with at most five short lines: the path of `*_filtered.csv`, and the counts of accepted (by role), borderline and total papers. No preamble, no commentary.
+When (and only when) stage 7 is finished, reply with at most five short lines: the path of the filtered CSV in `paper-reference/`, and the counts of accepted papers by role (baseline, benchmark, evaluation, survey). No preamble, no commentary.

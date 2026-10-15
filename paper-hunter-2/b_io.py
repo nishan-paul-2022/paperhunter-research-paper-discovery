@@ -98,11 +98,17 @@ def write_csv(path, cols, rows):
 class Run:
     def __init__(self, name=None):
         if not name:
-            cur = RUNS_DIR / ".current"
+            # Read CSV path from .current file in root
+            cur = ROOT / ".current"
             if not cur.exists():
                 raise SystemExit(
-                    "ERROR: no active run. Start with: python3 tools/ph.py init --csv <path>")
-            name = cur.read_text().strip()
+                    "ERROR: no active run. Create .current file with CSV path")
+            csv_path = cur.read_text().strip()
+            if not csv_path or not Path(csv_path).exists():
+                raise SystemExit(
+                    "ERROR: CSV path in .current does not exist: %s" % csv_path)
+            # Derive run name from CSV filename
+            name = Path(csv_path).stem
         self.name = name
         self.dir  = RUNS_DIR / name
         if not self.dir.exists():
