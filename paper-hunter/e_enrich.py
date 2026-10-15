@@ -179,7 +179,7 @@ def coverage_report(run):
     print("papers WITHOUT abstract: %d" % len(miss))
     if miss:
         print("  -> you must look these up yourself (web search / fetch the DOI page) "
-              "and store with `ph.py fill`.")
+              "and store with `a_cli.py fill`.")
         print("  ids: " + " ".join(miss[:400]) + (" ..." if len(miss) > 400 else ""))
 
 

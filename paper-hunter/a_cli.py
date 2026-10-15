@@ -16,6 +16,7 @@ Sub-commands:
   prep          combined init + enrich + signals in one call
   enrich        fetch abstracts + metadata for EVERY paper
   signals       recompute signals only
+  fill          manually supply an abstract / URL / notes for one paper
   show          print one full dossier
   search        local fuzzy + TF-IDF search over the dossiers
   status        progress of every pass
@@ -44,7 +45,7 @@ from d_network import (http, p_crossref, p_openalex, p_landing, p_arxiv,
                           s2_batch, BROWSER_UA, title_sim, URL_S2, URL_CROSSREF,
                           URL_OPENALEX, URL_ARXIV)
 from e_enrich  import (run_enrich, build_dossiers, coverage_report, enrich_one)
-from f_signals import compute_signals, SWEEP_QUERIES
+from f_signals import compute_signals
 from h_passbc  import lane_batch_size, run_sweep
 
 SEED = 20261014
@@ -167,7 +168,7 @@ def cmd_doctor(a):
     reachable = [k for k in ("crossref", "openalex", "semanticscholar") if res[k] == "ok"]
     if not reachable:
         print("\nNO metadata API reachable. Use your own web-search / web-fetch tools to find "
-              "abstracts (store each with `ph.py fill`). Do NOT skip papers.")
+              "abstracts (store each with `a_cli.py fill`). Do NOT skip papers.")
 
 
 # ── enrich / signals / fill ───────────────────────────────────────────────────
@@ -244,7 +245,7 @@ def render_dossier(d, run=None, with_prior=None):
         L += ["ABSTRACT [%s, %d chars]:" % (d.get("abstract_source"), len(ab)),
               wrap(ab, 118, "  ")]
     else:
-        L.append("ABSTRACT: *** NONE FOUND *** (web search / fetch DOI page, then `ph.py fill`)")
+        L.append("ABSTRACT: *** NONE FOUND *** (web search / fetch DOI page, then `a_cli.py fill`)")
         if d.get("abstract_snippet"):
             L.append("  short snippet only: " + d["abstract_snippet"][:400])
     for k, lbl in (("keywords", "KEYWORDS"), ("topics", "TOPICS")):
@@ -415,7 +416,7 @@ def ensure_plan_C(run):
     lst  = sorted(C)
     random.Random(SEED + 1).shuffle(lst)
     pl["C"] = lst
-    pl["C_audit_sample"] = top + samp + extra
+    pl["C_audit_sample"] = list(dict.fromkeys(top + samp + extra))
     run.save_plans(pl)
     print("plan C frozen: %d papers (blind audit, %d extra from richer selection: %d fuzzy, %d lane-A, %d low-conf)"
           % (len(lst), len(extra), len(fuzzy_nm), len(lane_a_rej), len(low_conf)))
@@ -437,7 +438,7 @@ def cmd_batch(a):
     elif p == "F":
         ids = run.plans().get("F")
         if ids is None:
-            die("no adjudication queue yet - run `ph.py reconcile` after pass C")
+            die("no adjudication queue yet - run `a_cli.py reconcile` after pass C")
     else:
         die("pass must be A, B, C or F")
     dec  = run.decisions(p)
@@ -671,7 +672,7 @@ def cmd_expand_audit(a):
 
 def cmd_sweep(a):
     run = Run(a.run)
-    run_sweep(run.name)
+    run_sweep(run.name, top=a.top, min_score=a.min_score)
 
 
 # ── reconcile ─────────────────────────────────────────────────────────────────
@@ -756,6 +757,19 @@ def cmd_reconcile(a):
 
     run.save_final(final)
     print("final verdicts recorded in papers.jsonl: %s" % dict(Counter(r["verdict"] for r in final)))
+    try:
+        stages = run.state().get("stages", {})
+        stages["reconciliation"] = {
+            "status": "completed",
+            "completed_at": now(),
+            "final_verdicts": len(final)
+        }
+        run.update_state(
+            current_stage="reconciled",
+            stages=stages
+        )
+    except Exception:
+        pass
 
 
 # ── validate ──────────────────────────────────────────────────────────────────
@@ -784,6 +798,16 @@ def cmd_validate(a):
         sys.exit(1)
     print("validation OK: %d papers, every eligible paper has a verified final verdict"
           % len(fin))
+    try:
+        stages = run.state().get("stages", {})
+        stages["validation"] = {
+            "status": "completed",
+            "completed_at": now(),
+            "errors": 0
+        }
+        run.update_state(stages=stages)
+    except Exception:
+        pass
 
 
 # ── export ────────────────────────────────────────────────────────────────────
@@ -927,6 +951,20 @@ def cmd_export(a):
         for row in ref_rows:
             role_dist[row["Role"]] = role_dist.get(row["Role"], 0) + 1
         print("  Role distribution: %s" % role_dist)
+    try:
+        stages = run.state().get("stages", {})
+        stages["export"] = {
+            "status": "completed",
+            "completed_at": now(),
+            "accepted": len(ref_rows),
+            "total": len(audit)
+        }
+        run.update_state(
+            current_stage="export_complete",
+            stages=stages
+        )
+    except Exception:
+        pass
 
 
 # ── main CLI dispatcher ───────────────────────────────────────────────────────
@@ -1002,8 +1040,8 @@ def main():
     s.set_defaults(f=cmd_expand_audit)
 
     s = sub.add_parser("sweep")
-    s.add_argument("--top",       type=int,   default=10)
-    s.add_argument("--min-score", type=float, default=0.02)
+    s.add_argument("--top",       type=int,   default=None, help="limit sweep to top N candidates by signal score")
+    s.add_argument("--min-score", type=float, default=None, help="minimum signal score to consider in sweep")
     s.set_defaults(f=cmd_sweep)
 
     s = sub.add_parser("reconcile"); s.set_defaults(f=cmd_reconcile)

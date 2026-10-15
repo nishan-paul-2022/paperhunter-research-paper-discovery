@@ -342,6 +342,7 @@ def run_pass_a(run):
             rec["evidence"] = extract_quote(d["title"], max_words=45, min_words=4)
             rec["evidence_source"] = "title"
             rec["evidence_level"] = "title_only"
+            rec["flags"] = ["title_only_offtopic"]
             rec["reason"] = "Off-domain paper evaluated and determined to fall outside autonomous offensive security."
             rec.pop("borderline_reason", None)
 
@@ -358,6 +359,25 @@ def run_pass_a(run):
 
     run.save_papers()
     print("Pass A complete! All %d decisions recorded in consolidated papers.jsonl" % len(order))
+
+    try:
+        passes = run.state().get("passes", {})
+        passes["A"] = {"planned": len(order), "completed": len(order)}
+        stages = run.state().get("stages", {})
+        stages["pass_a_screening"] = {
+            "status": "completed",
+            "completed_at": now(),
+            "papers_screened": len(order),
+            "accepts": accepts,
+            "rejects": rejects
+        }
+        run.update_state(
+            current_stage="pass_a_complete",
+            stages=stages,
+            passes=passes
+        )
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

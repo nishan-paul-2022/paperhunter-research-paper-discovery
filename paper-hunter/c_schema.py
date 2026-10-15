@@ -78,7 +78,7 @@ EVIDENCE_LEVELS_DEEP = {"publisher_page", "full_text"}  # required for baseline
 #   # Raw provider payloads (caching expensive network lookups)
 #   "enrichment": dict,             # {crossref, openalex, s2, landing, arxiv, done, fetched_at}
 #
-#   # Manual overrides (from ph.py fill)
+#   # Manual overrides (from a_cli.py fill)
 #   "manual": dict,                 # {abstract, source, arxiv_id, pdf, notes, url}
 #
 #   # Full text
@@ -232,12 +232,18 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
     if ev_level == "title_only" or r.get("evidence_source") == "title":
         # Use lane from signal record if not passed directly
         _lane = lane or d.get("lane", "C")
-        if _lane in ("A", "B"):
-            errs.append(
-                "lane %s papers cannot be rejected on title alone; "
-                "obtain an abstract via DOI or web before deciding" % _lane)
+        flags = r.get("flags") or []
+        if "frontmatter" in flags:
+            pass  # frontmatter is always allowed to be rejected on title alone
+        elif _lane in ("A", "B"):
+            if not r.get("needs_deep_dive"):
+                errs.append(
+                    "lane %s papers cannot be rejected on title alone; "
+                    "obtain an abstract via DOI or web before deciding" % _lane)
+            elif (r.get("confidence") or 0) > 0.60:
+                errs.append(
+                    "lane %s title_only reject requires confidence <= 0.60 and needs_deep_dive=true" % _lane)
         elif v == "reject":
-            flags = r.get("flags") or []
             if "title_only_offtopic" not in flags:
                 errs.append(
                     "title_only reject requires flag 'title_only_offtopic' "
@@ -256,7 +262,7 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
     elif not quote_in(ev, _hay_for(run, d, es)):
         errs.append(
             "evidence quote NOT found verbatim in the %s text of %s "
-            "- copy it exactly (or use ph.py fulltext first)" % (es, pid))
+            "- copy it exactly (or use a_cli.py fulltext first)" % (es, pid))
     if es == "fulltext" and r.get("fulltext_read") is False:
         errs.append("evidence_source=fulltext but fulltext_read=false")
 

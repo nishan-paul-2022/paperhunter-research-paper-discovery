@@ -55,8 +55,27 @@ def run_pass(pass_name, run_name=None):
     print("Pass %s complete: %d decisions saved to consolidated papers.jsonl (errors: %d)"
           % (pass_name, len(ids), errors))
 
+    try:
+        passes = run.state().get("passes", {})
+        passes[pass_name] = {"planned": len(ids), "completed": len(ids)}
+        stages = run.state().get("stages", {})
+        stage_key = "pass_%s_screening" % pass_name.lower()
+        stages[stage_key] = {
+            "status": "completed",
+            "completed_at": now(),
+            "papers_screened": len(ids),
+            "errors": errors
+        }
+        run.update_state(
+            current_stage="pass_%s_complete" % pass_name.lower(),
+            stages=stages,
+            passes=passes
+        )
+    except Exception:
+        pass
 
-def run_sweep(run_name=None):
+
+def run_sweep(run_name=None, top=None, min_score=None):
     """
     Sweep pass — recall safety net.
     Re-screens every final reject with fresh eyes to catch anything missed.
@@ -71,6 +90,10 @@ def run_sweep(run_name=None):
         return
 
     rejects = [pid for pid, r in fin.items() if r.get("verdict") == "reject"]
+    if min_score is not None:
+        rejects = [pid for pid in rejects if dossiers.get(pid, {}).get("signal_score", 0) >= min_score]
+    if top is not None:
+        rejects = sorted(rejects, key=lambda pid: dossiers.get(pid, {}).get("signal_score", 0), reverse=True)[:top]
     print("Sweep pass: re-screening %d rejects for recall..." % len(rejects))
 
     rescued = []

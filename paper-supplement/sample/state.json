@@ -75,14 +75,12 @@
    "p0010",
    "p0012",
    "p0003",
-   "p0005",
-   "p0005",
-   "p0010"
+   "p0005"
   ],
   "F": [],
   "F_why": {}
  },
- "current_stage": "enrichment_complete",
+ "current_stage": "export_complete",
  "stages": {
   "enrichment": {
    "status": "completed",
@@ -90,39 +88,58 @@
    "papers_enriched": 30
   },
   "pass_a_screening": {
-   "status": "not_started"
+   "status": "completed",
+   "completed_at": "2026-10-15T10:22:46+00:00",
+   "papers_screened": 30,
+   "accepts": 6,
+   "rejects": 24
   },
   "pass_b_screening": {
-   "status": "not_started"
+   "status": "completed",
+   "completed_at": "2026-10-15T10:23:42+00:00",
+   "papers_screened": 11,
+   "accepts": 6,
+   "rejects": 5
   },
   "pass_c_screening": {
-   "status": "not_started"
+   "status": "completed",
+   "completed_at": "2026-10-15T10:23:58+00:00",
+   "papers_screened": 30,
+   "accepts": 6,
+   "rejects": 24
   },
   "reconciliation": {
-   "status": "not_started"
+   "status": "completed",
+   "completed_at": "2026-10-15T11:16:53+00:00",
+   "final_verdicts": 30
   },
   "validation": {
-   "status": "not_started"
+   "status": "completed",
+   "completed_at": "2026-10-15T11:17:02+00:00",
+   "errors": 0
   },
   "export": {
-   "status": "not_started"
+   "status": "completed",
+   "completed_at": "2026-10-15T11:17:02+00:00",
+   "accepted": 6,
+   "total": 30
   }
  },
  "passes": {
   "A": {
-   "planned": null,
-   "completed": 0
+   "planned": 30,
+   "completed": 30
   },
   "B": {
-   "planned": null,
-   "completed": 0
+   "planned": 11,
+   "completed": 11
   },
   "C": {
-   "planned": null,
-   "completed": 0
+   "planned": 30,
+   "completed": 30
   },
   "F": {
-   "planned": null,
+   "planned": 0,
    "completed": 0
   }
  }
