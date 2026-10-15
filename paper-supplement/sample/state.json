@@ -3,7 +3,7 @@
  "meta": {
   "csv": "/home/nishan/Documents/paperhunter-research-paper-discovery/paper-inventory/sample.csv",
   "sha1": "9c6fba7e7018d50dc86baa963662b272412a7f08",
-  "created": "2026-10-15T10:18:49+00:00",
+  "created": "2026-10-15T11:20:48+00:00",
   "n_rows": 30,
   "min_year": 2023,
   "max_year": 2026,
@@ -84,43 +84,41 @@
  "stages": {
   "enrichment": {
    "status": "completed",
-   "completed_at": "2026-10-15T10:19:11+00:00",
+   "completed_at": "2026-10-15T11:21:04+00:00",
    "papers_enriched": 30
   },
   "pass_a_screening": {
    "status": "completed",
-   "completed_at": "2026-10-15T10:22:46+00:00",
+   "completed_at": "2026-10-15T11:21:37+00:00",
    "papers_screened": 30,
    "accepts": 6,
    "rejects": 24
   },
   "pass_b_screening": {
    "status": "completed",
-   "completed_at": "2026-10-15T10:23:42+00:00",
+   "completed_at": "2026-10-15T11:22:25+00:00",
    "papers_screened": 11,
-   "accepts": 6,
-   "rejects": 5
+   "errors": 0
   },
   "pass_c_screening": {
    "status": "completed",
-   "completed_at": "2026-10-15T10:23:58+00:00",
+   "completed_at": "2026-10-15T11:22:33+00:00",
    "papers_screened": 30,
-   "accepts": 6,
-   "rejects": 24
+   "errors": 0
   },
   "reconciliation": {
    "status": "completed",
-   "completed_at": "2026-10-15T11:16:53+00:00",
+   "completed_at": "2026-10-15T11:22:40+00:00",
    "final_verdicts": 30
   },
   "validation": {
    "status": "completed",
-   "completed_at": "2026-10-15T11:17:02+00:00",
+   "completed_at": "2026-10-15T11:23:24+00:00",
    "errors": 0
   },
   "export": {
    "status": "completed",
-   "completed_at": "2026-10-15T11:17:02+00:00",
+   "completed_at": "2026-10-15T11:22:49+00:00",
    "accepted": 6,
    "total": 30
   }
@@ -139,7 +137,7 @@
    "completed": 30
   },
   "F": {
-   "planned": 0,
+   "planned": null,
    "completed": 0
   }
  }
