@@ -220,14 +220,32 @@ _PROBE_N = 6
 
 
 def run_enrich(
-    run, workers=8, limit=0, all_years=False, skip_s2=False, embed="auto", deep=True
+    run,
+    workers=8,
+    limit=0,
+    all_years=False,
+    skip_s2=False,
+    embed="auto",
+    deep=True,
+    lanes=None,
+    batch_only=False,
 ):
     papers = [p for p in run.papers() if p.get("in_range") or all_years]
+    if lanes:
+        lanes_set = set(lanes)
+        papers = [p for p in papers if p.get("lane") in lanes_set]
     if limit:
         papers = papers[:limit]
 
     todo = [p for p in papers if not (p.get("enrichment") or {}).get("done")]
-    print("enrich: %d papers, %d still to fetch" % (len(papers), len(todo)))
+    print(
+        "enrich: %d papers%s, %d still to fetch"
+        % (
+            len(papers),
+            (" (lanes: %s)" % ",".join(sorted(lanes))) if lanes else "",
+            len(todo),
+        )
+    )
 
     dois = sorted({p["doi"] for p in todo if p.get("doi")})
     oamap = {}
@@ -240,6 +258,44 @@ def run_enrich(
         print("semantic scholar batch pre-pass for %d DOIs ..." % len(dois))
         s2map = s2_batch(dois)
         print("  matched %d" % len(s2map))
+
+    if batch_only:
+        updated = 0
+        for p in todo:
+            doi = p.get("doi")
+            rec_oa = oamap.get(doi) if doi else None
+            rec_s2 = s2map.get(doi) if doi else None
+            enrichment = p.setdefault("enrichment", {})
+            if rec_oa:
+                enrichment["openalex"] = rec_oa
+            if rec_s2:
+                enrichment["s2"] = rec_s2
+            enrichment["done"] = True
+            enrichment["fetched_at"] = now()
+            m = p.get("manual") or {}
+            _merge_one(p, enrichment, m)
+            run.save_enrichment(p["id"], enrichment)
+            if rec_oa or rec_s2:
+                updated += 1
+        print("batch-only enrichment: updated %d papers from batch metadata" % updated)
+        run.save_papers()
+        build_dossiers(run, embed=embed)
+        coverage_report(run)
+        try:
+            run.update_state(
+                current_stage="enrichment_complete",
+                stages={
+                    **run.state().get("stages", {}),
+                    "enrichment": {
+                        "status": "completed",
+                        "completed_at": now(),
+                        "papers_enriched": len(papers),
+                    },
+                },
+            )
+        except Exception:
+            pass
+        return
 
     if todo and not (s2map or oamap):
         probe_ok = 0

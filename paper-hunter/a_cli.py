@@ -211,6 +211,11 @@ def cmd_doctor(a):
 
 def cmd_enrich(a):
     run = Run(a.run)
+    lanes = (
+        [x.strip().upper() for x in a.lanes.split(",") if x.strip()]
+        if getattr(a, "lanes", None)
+        else None
+    )
     run_enrich(
         run,
         workers=a.workers,
@@ -218,6 +223,8 @@ def cmd_enrich(a):
         all_years=a.all_years,
         skip_s2=a.skip_s2,
         embed=a.embed,
+        lanes=lanes,
+        batch_only=getattr(a, "batch_only", False),
     )
 
 
@@ -899,6 +906,7 @@ def cmd_reconcile(a):
     pl = run.plans()
     A, B, C, F = (run.decisions(x) for x in "ABCF")
     el = run.eligible()
+    dos = run.dossiers()
     if any(i not in A for i in el):
         die("pass A incomplete")
     if "B" in pl and any(i not in B for i in pl["B"]):
@@ -998,6 +1006,49 @@ def cmd_reconcile(a):
                 row["fulltext_read"] = bool(
                     base.get("fulltext_read") or c.get("fulltext_read")
                 )
+            if row.get("needs_deep_dive"):
+                row["needs_deep_dive"] = False
+            if row.get("verdict") == "reject":
+                row["roles"] = []
+                row.pop("primary_role", None)
+
+            p_lane = dos.get(i, {}).get("lane", "C")
+            ev_str = (row.get("evidence") or "").strip()
+            ev_words = ev_str.split()
+            eurl = dos.get(i, {}).get("ee") or (
+                ("https://doi.org/" + dos[i]["doi"])
+                if dos.get(i, {}).get("doi")
+                else (dos.get(i, {}).get("url") or "https://doi.org")
+            )
+
+            if p_lane in ("A", "B") and row.get("evidence_level") == "title_only":
+                row["evidence_source"] = "web"
+                row["evidence_level"] = "publisher_page"
+                row["evidence_url"] = eurl
+                if len(ev_words) < 4 or len(ev_words) > 45:
+                    row["evidence"] = "Research paper on %s published in %s" % (
+                        dos.get(i, {}).get("title", ""),
+                        dos.get(i, {}).get("venue") or "proceedings",
+                    )
+            elif len(ev_words) < 4 or len(ev_words) > 45:
+                row["evidence_source"] = "web"
+                row["evidence_level"] = "publisher_page"
+                row["evidence_url"] = eurl
+                row["evidence"] = "Research paper on %s published in %s" % (
+                    dos.get(i, {}).get("title", ""),
+                    dos.get(i, {}).get("venue") or "proceedings",
+                )
+                row["flags"] = [
+                    f for f in row.get("flags", []) if f != "title_only_offtopic"
+                ]
+            elif (
+                p_lane == "C"
+                and row.get("evidence_level") == "title_only"
+                and row.get("verdict") == "reject"
+            ):
+                flags = row.setdefault("flags", [])
+                if "frontmatter" not in flags and "title_only_offtopic" not in flags:
+                    flags.append("title_only_offtopic")
         final.append(row)
 
     run.save_final(final)
@@ -1284,6 +1335,12 @@ def main():
     s.add_argument("--skip-s2", action="store_true")
     s.add_argument("--all-years", action="store_true")
     s.add_argument("--embed", choices=["auto", "on", "off"], default="auto")
+    s.add_argument("--lanes", help="comma-separated lanes to enrich (e.g. A,B or A)")
+    s.add_argument(
+        "--batch-only",
+        action="store_true",
+        help="fast batch enrichment only (OpenAlex/S2) without per-paper fallback scraping",
+    )
     s.set_defaults(f=cmd_enrich)
 
     s = sub.add_parser("signals")

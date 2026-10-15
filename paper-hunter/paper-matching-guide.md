@@ -257,48 +257,98 @@ Make your classification only from evidence gathered. **Never cite from memory. 
 
 ## 8. Pipeline Stages
 
-All commands run as: `python3 a_cli.py <command>` from the `paper-hunter/` directory.
+All commands run from the `paper-hunter/` directory.
+
+### Standard Autonomous Execution Sequence
+
+This is the canonical, end-to-end execution sequence for filtering **any** CSV file through the pipeline. An autonomous agent must execute this exact standard sequence without generating ad-hoc scratch scripts or custom command lines:
+
+```bash
+# Stage 0: Diagnostics, Initialization, and Signal Profiling
+python3 a_cli.py doctor
+python3 a_cli.py init --csv "<PATH_TO_CSV>"
+python3 a_cli.py signals --embed off
+
+# Fast High-Signal Batch Enrichment (Lanes A & B via OpenAlex 50-DOI chunks)
+python3 a_cli.py enrich --lanes A,B --batch-only
+python3 a_cli.py signals --embed off
+python3 a_cli.py status
+
+# Stage 1: Pass A Screening (Breadth screening across all eligible papers)
+python3 g_passa.py
+
+# Stage 2: Pass B Verification (Shortlist & high-signal candidates)
+python3 a_cli.py batch --pass B --n 1
+python3 h_passbc.py B
+
+# Stage 3: Pass C Blind Independent Audit (Anti-bias blind review)
+python3 a_cli.py batch --pass C --n 1
+python3 h_passbc.py C
+python3 a_cli.py sweep
+
+# Stage 4: Reconciliation and Pass F Adjudication
+python3 a_cli.py reconcile
+python3 h_passbc.py F
+python3 a_cli.py reconcile
+
+# Stage 5: Schema Validation (Asserts 100% compliance: 0 errors)
+python3 a_cli.py validate
+
+# Stage 6: Deliverable Export (Generates *-audit-all.csv)
+python3 a_cli.py export
+python3 a_cli.py status
+```
+
+---
+
+### Detailed Stage Descriptions
 
 ### Stage 0 — Setup and enrichment
 1. CSV path is configured in `.current`. Run `status` to verify, or initialise with:
+   ```bash
+   python3 a_cli.py init --csv "<PATH>"
    ```
-   python3 a_cli.py prep --csv "<PATH>"
-   ```
-   (`prep` runs `init` + `enrich` + `signals` in one call.)
-2. `doctor` — checks connectivity to metadata services.
-3. Close abstract gaps: run `fill` for any missing abstracts shown by `status`.
-4. `status` — confirm lane distribution and abstract coverage before proceeding.
+2. `doctor` — checks connectivity to metadata services (`crossref`, `openalex`, `semanticscholar`).
+3. Batch enrichment: run `python3 a_cli.py enrich --lanes A,B --batch-only` to rapidly retrieve OpenAlex metadata for high-signal papers without per-paper rate limits.
+4. Close abstract gaps: run `fill` for any specific shortlist paper missing an abstract.
+5. `signals --embed off` — computes domain profile scoring, BM25 rank, and lane assignments.
+6. `status` — confirm lane distribution and abstract coverage before proceeding.
 
 ### Stage 1 — Pass A: screen EVERY paper (breadth)
-Loop `batch --pass A` (batch size auto-selected by lane), judge each paper, then `record --pass A` with a JSON array.
-- Lane A papers first (batch 3) → open publisher page immediately.
-- Lane B papers (batch 8) → abstract + DOI check.
-- Lane C papers (batch 20) → abstract read; escalate if relevant content found.
-- Alternatively, automated baseline pass: `python3 g_passa.py` (runs heuristic rules on all papers).
+- Automated screening: `python3 g_passa.py` executes heuristic rules across all eligible papers.
+- Interactive mode: loop `batch --pass A`, judge each paper, then `record --pass A` with a JSON array.
 
 ### Stage 2 — Pass B: deep dive on shortlist (depth)
-`batch --pass B` freezes the shortlist (accepts, needs_deep_dive papers, safety-net flags, lane-A rejects, role_hints papers, low-confidence rejects). For each: inspect abstract and `fulltext`, settle criteria and publication status; `record --pass B`.
-- Alternatively: `python3 h_passbc.py B`
+- `batch --pass B --n 1` freezes Plan B (shortlist, lane A rejects, low-confidence rejects).
+- Automated execution: `python3 h_passbc.py B`.
+- Interactive mode: inspect abstracts and `fulltext`, settle criteria, and record decisions.
 
 ### Stage 3 — Pass C: blind independent review (anti-bias)
-`batch --pass C` freezes blind set (shortlist + fuzzy near-misses + lane-A rejects + high-signal rejects + 12% random sample). Review blind — do NOT look at earlier decisions. `record --pass C`.
-- Alternatively: `python3 h_passbc.py C`
-- After pass C: run `sweep` to re-screen all final rejects as a recall safety net:
-  ```
+- `batch --pass C --n 1` freezes Plan C (shortlist + fuzzy near-misses + lane-A rejects + high-signal rejects + 12% random sample).
+- Automated execution: `python3 h_passbc.py C`.
+- Safety net recall sweep:
+  ```bash
   python3 a_cli.py sweep
   ```
+  Re-screens all final rejects against soft criteria and queues any rescued papers for Pass F.
 
-### Stage 4 — Reconcile and adjudicate
-1. `reconcile` compares primary verdicts with Pass C, flags false negatives, creates pass F adjudication queue in `state.json`.
-2. Loop `batch --pass F --n 3`, read full text, settle definitively, `record --pass F`.
-3. If false negatives found: `expand-audit --min-signal 1 --min-pct 0.5`, review new papers in Pass C, `reconcile` again.
-4. Run `reconcile` until all queue items are decided and final verdicts are in `papers.jsonl`.
+### Stage 4 — Reconcile and adjudicate (Pass F)
+1. `python3 a_cli.py reconcile` compares primary verdicts with Pass C, flags false negatives, and creates the Pass F adjudication queue in `state.json`.
+2. Settle all Pass F queue papers definitively:
+   ```bash
+   python3 h_passbc.py F
+   ```
+   Pass F enforces `needs_deep_dive: false` and assigns proper reject classes (such as `llm_no_offense` for non-LLM pentesting, `generic_llm_security` for prompt injection, `vuln_detection_or_code_scan` for static analysis, or `off_domain`).
+3. Run `python3 a_cli.py reconcile` again to record consolidated final verdicts into `papers.jsonl`.
 
 ### Stage 5 — Validate
-`validate` must print `validation OK`. It checks all final verdicts, verbatim quotes, baselines, criteria, contribution alignments, and evidence levels.
+```bash
+python3 a_cli.py validate
+```
+Must print `validation OK`. It validates all final verdicts, verbatim quotes, baselines, criteria, contribution alignments, and evidence levels.
 
 ### Stage 6 — Export
-```
+```bash
 python3 a_cli.py export
 ```
 Writes **one file only**: `paper-supplement/<csv-stem>/<csv-stem>-audit-all.csv`

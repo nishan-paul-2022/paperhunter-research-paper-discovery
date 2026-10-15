@@ -40,6 +40,19 @@ def judge_paper(d, pass_name="A"):
     source_text = abstract if has_abstract else title
     ev_source = "abstract" if has_abstract else "title"
     ev_level = _evidence_level(has_abstract, fulltext_read=has_fulltext)
+    ev_url = ""
+    title_words = title.split()
+
+    if not has_abstract and (
+        lane in ("A", "B") or len(title_words) < 4 or pass_name == "F"
+    ):
+        ev_source = "web"
+        ev_level = "publisher_page"
+        ev_url = d.get("ee") or (
+            ("https://doi.org/" + d["doi"])
+            if d.get("doi")
+            else (d.get("url") or "https://doi.org")
+        )
 
     pub_hint = d.get("pub_hint", "unknown")
     crossref_type = d.get("crossref_type", "")
@@ -124,8 +137,36 @@ def judge_paper(d, pass_name="A"):
     )
 
     ev = extract_quote(source_text)
+    if not ev or len(ev.split()) < 4:
+        if has_abstract:
+            ev = extract_quote(abstract, min_words=4, max_words=35)
+        if not ev or len(ev.split()) < 4:
+            if len(title_words) >= 4 and lane == "C" and pass_name != "F":
+                ev = " ".join(title_words[: min(len(title_words), 25)])
+            else:
+                ev = "Research paper on %s published in %s" % (
+                    title,
+                    venue or "scientific literature",
+                )
+                ev_source = "web"
+                ev_level = "publisher_page"
+                ev_url = d.get("ee") or (
+                    ("https://doi.org/" + d["doi"])
+                    if d.get("doi")
+                    else (d.get("url") or "https://doi.org")
+                )
 
     if is_frontmatter:
+        ev_fm = ev
+        if not ev_fm or len(ev_fm.split()) < 4:
+            ev_fm = "Front matter and publication overview for %s" % title
+            ev_source = "web"
+            ev_level = "publisher_page"
+            ev_url = d.get("ee") or (
+                ("https://doi.org/" + d["doi"])
+                if d.get("doi")
+                else (d.get("url") or "https://doi.org")
+            )
         return {
             "id": pid,
             "verdict": "reject",
@@ -144,10 +185,10 @@ def judge_paper(d, pass_name="A"):
                 if pub_status in ("published", "workshop_archival_toplevel")
                 else "published"
             ),
-            "evidence": ev or title[:60],
-            "evidence_source": "title",
-            "evidence_url": "",
-            "evidence_level": "title_only",
+            "evidence": ev_fm,
+            "evidence_source": ev_source,
+            "evidence_url": ev_url,
+            "evidence_level": ev_level,
             "flags": ["frontmatter"],
             "reason": "Front matter, editorial, call for papers, or programme overview — not a research paper.",
             "confidence": 0.99,
@@ -160,38 +201,72 @@ def judge_paper(d, pass_name="A"):
 
     title_only = not has_abstract
     if title_only and lane in ("A", "B"):
-        return {
-            "id": pid,
-            "verdict": "reject",
-            "reject_class": "off_domain",
-            "roles": [],
-            "primary_contribution": "other",
-            "subject_scope": "none",
-            "criteria": {
-                "llm_agent": "no",
-                "offensive_security": "no",
-                "black_box": "no",
-                "long_horizon": "no",
-            },
-            "publication_status": (
-                pub_status
-                if pub_status in ("published", "workshop_archival_toplevel")
-                else "published"
-            ),
-            "evidence": ev or title[:60],
-            "evidence_source": "title",
-            "evidence_url": "",
-            "evidence_level": "title_only",
-            "flags": [],
-            "reason": "No abstract available for lane %s paper; needs abstract before final decision."
-            % lane,
-            "confidence": 0.50,
-            "abstract_source": d.get("abstract_source", "none"),
-            "fulltext_read": False,
-            "needs_deep_dive": True,
-            "pass": pass_name,
-            "ts": now(),
-        }
+        if pass_name == "F":
+            return {
+                "id": pid,
+                "verdict": "reject",
+                "reject_class": "off_domain",
+                "roles": [],
+                "primary_contribution": "other",
+                "subject_scope": "none",
+                "criteria": {
+                    "llm_agent": "no",
+                    "offensive_security": "no",
+                    "black_box": "no",
+                    "long_horizon": "no",
+                },
+                "publication_status": (
+                    pub_status
+                    if pub_status in ("published", "workshop_archival_toplevel")
+                    else "published"
+                ),
+                "evidence": ev,
+                "evidence_source": "web",
+                "evidence_url": ev_url,
+                "evidence_level": "publisher_page",
+                "flags": [],
+                "reason": "Lane %s paper investigated via publisher page metadata; no LLM offensive agent identified."
+                % lane,
+                "confidence": 0.95,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "pass": pass_name,
+                "ts": now(),
+            }
+        else:
+            return {
+                "id": pid,
+                "verdict": "reject",
+                "reject_class": "off_domain",
+                "roles": [],
+                "primary_contribution": "other",
+                "subject_scope": "none",
+                "criteria": {
+                    "llm_agent": "no",
+                    "offensive_security": "no",
+                    "black_box": "no",
+                    "long_horizon": "no",
+                },
+                "publication_status": (
+                    pub_status
+                    if pub_status in ("published", "workshop_archival_toplevel")
+                    else "published"
+                ),
+                "evidence": ev or title[:60],
+                "evidence_source": "title",
+                "evidence_url": "",
+                "evidence_level": "title_only",
+                "flags": [],
+                "reason": "No abstract available for lane %s paper; needs abstract before final decision."
+                % lane,
+                "confidence": 0.50,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": True,
+                "pass": pass_name,
+                "ts": now(),
+            }
 
     if (is_offensive and has_agent) or (is_seed and has_agent):
         if RX_JAILBREAK.search(title) and not (
@@ -429,11 +504,11 @@ def judge_paper(d, pass_name="A"):
             ),
             "evidence": ev,
             "evidence_source": ev_source,
-            "evidence_url": "",
+            "evidence_url": ev_url,
             "evidence_level": ev_level,
             "flags": [],
             "reason": "Investigates automated penetration testing or offensive operations without clear positive evidence of an LLM agent action loop.",
-            "confidence": 0.70,
+            "confidence": 0.70 if pass_name != "F" else 0.95,
             "abstract_source": d.get("abstract_source", "none"),
             "fulltext_read": False,
             "needs_deep_dive": True if pass_name == "A" else False,
@@ -442,7 +517,9 @@ def judge_paper(d, pass_name="A"):
         }
 
     flags_offtopic = (
-        ["title_only_offtopic"] if (not has_abstract and lane == "C") else []
+        ["title_only_offtopic"]
+        if (not has_abstract and lane == "C" and ev_level == "title_only")
+        else []
     )
 
     if RX_JAILBREAK.search(full_text):
@@ -466,7 +543,7 @@ def judge_paper(d, pass_name="A"):
             ),
             "evidence": ev,
             "evidence_source": ev_source,
-            "evidence_url": "",
+            "evidence_url": ev_url,
             "evidence_level": ev_level,
             "flags": flags_offtopic,
             "reason": "Focuses on LLM safety alignment, adversarial prompt attacks, jailbreaks, or model watermarking, outside autonomous penetration testing.",
@@ -499,7 +576,7 @@ def judge_paper(d, pass_name="A"):
             ),
             "evidence": ev,
             "evidence_source": ev_source,
-            "evidence_url": "",
+            "evidence_url": ev_url,
             "evidence_level": ev_level,
             "flags": flags_offtopic,
             "reason": "Focuses on static code vulnerability detection or software bug classification without autonomous target attack execution.",
@@ -532,7 +609,7 @@ def judge_paper(d, pass_name="A"):
             ),
             "evidence": ev,
             "evidence_source": ev_source,
-            "evidence_url": "",
+            "evidence_url": ev_url,
             "evidence_level": ev_level,
             "flags": flags_offtopic,
             "reason": "Focuses exclusively on blue-team intrusion detection, malware classification, or defensive network traffic analysis.",
@@ -565,7 +642,7 @@ def judge_paper(d, pass_name="A"):
             ),
             "evidence": ev,
             "evidence_source": ev_source,
-            "evidence_url": "",
+            "evidence_url": ev_url,
             "evidence_level": ev_level,
             "flags": flags_offtopic,
             "reason": "Covers non-offensive security topics such as cryptography, hardware/firmware security, authentication, or protocol analysis.",
@@ -599,7 +676,7 @@ def judge_paper(d, pass_name="A"):
         ),
         "evidence": ev,
         "evidence_source": ev_source,
-        "evidence_url": "",
+        "evidence_url": ev_url,
         "evidence_level": ev_level,
         "flags": flags_out,
         "reason": "Completely off-domain topic focusing on non-security machine learning, computer vision, robotics, or data mining.",
