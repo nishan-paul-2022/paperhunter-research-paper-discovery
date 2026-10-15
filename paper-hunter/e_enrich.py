@@ -48,7 +48,14 @@ def enrich_one(run, p, s2rec, oarec=None):
         else:
             c["landing"] = None
 
+        # KEY FIX: arXiv is now fetched in Stage 0 (enrichment), not deferred to Stage 6 (export)
+        # Try to fetch arXiv if we don't have a good abstract yet, or if title suggests it might be on arXiv
         c["arxiv"] = None
+        if not have or "arxiv" in landing_url.lower():
+            arxiv_result = p_arxiv(title)
+            if arxiv_result:
+                c["arxiv"] = arxiv_result
+                have = have or len((arxiv_result or {}).get("abstract", "")) >= MIN_ABSTRACT
 
     except Exception as e:
         c["errors"].append("%s: %s" % (type(e).__name__, e))

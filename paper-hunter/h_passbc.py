@@ -19,116 +19,10 @@ RX_CODE_SCAN = re.compile(r"\b(vulnerability detection|code vulnerability|vulner
 RX_DEFENSE   = re.compile(r"\b(intrusion detection|malware detection|phishing detection|traffic detection|anomaly detection|botnet detection|ransomware detection|soc\b|defender|blue team|firewall|ids\b|ips\b)\b", re.I)
 RX_SEC_OTHER = re.compile(r"\b(cryptography|encryption|zero-knowledge proof|post-quantum|steganography|watermarking|authentication|biometric|hardware security|side-channel|pufl|differential privacy|rowhammer|kubernetes|firmware|supply chain)\b", re.I)
 
-CORE_CANDIDATES = {
-    "p13976": {
-        "verdict": "accept",
-        "roles": ["baseline", "benchmark"],
-        "primary_role": "baseline",
-        "primary_contribution": "agent_system",
-        "subject_scope": "core",
-        "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
-        "publication_status": "published",
-        "evidence": "Security operators use red teams to simulate real attackers and proactively find defense gaps.",
-        "evidence_source": "abstract",
-        "evidence_url": "",
-        "reason": "Headline contribution is an autonomous LLM agent framework executing red teaming and multi-step attack operations over multi-host networks.",
-        "confidence": 0.95,
-        "abstract_source": "openalex",
-        "fulltext_read": True,
-        "system_name": "Incalmo",
-        "attack_surfaces": ["network", "cve", "web"]
-    },
-    "p19375": {
-        "verdict": "accept",
-        "roles": ["baseline", "benchmark"],
-        "primary_role": "baseline",
-        "primary_contribution": "agent_system",
-        "subject_scope": "core",
-        "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
-        "publication_status": "published",
-        "evidence": "Fully autonomous IP-to-Root penetration testing remains challenging for LLM agents.",
-        "evidence_source": "abstract",
-        "evidence_url": "",
-        "reason": "Proposes PentestLLMAgent, a task-dependency graph planning-based multi-agent framework for automated IP-to-Root penetration testing, and AutoPentest-Bench.",
-        "confidence": 0.95,
-        "abstract_source": "openalex",
-        "fulltext_read": True,
-        "system_name": "PentestLLMAgent",
-        "attack_surfaces": ["network", "ctf", "web"]
-    },
-    "p31009": {
-        "verdict": "accept",
-        "roles": ["evaluation", "benchmark"],
-        "primary_role": "evaluation",
-        "primary_contribution": "evaluation_study",
-        "subject_scope": "core",
-        "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
-        "publication_status": "published",
-        "evidence": "We evaluate ten cybersecurity professionals alongside six existing AI agents and ARTEMIS, our new agent scaffold, on a large university network consisting of ~8,000 hosts",
-        "evidence_source": "abstract",
-        "evidence_url": "",
-        "reason": "Presents a comprehensive evaluation of AI agents (including ARTEMIS scaffold) against human cybersecurity professionals in live enterprise network penetration testing.",
-        "confidence": 0.95,
-        "abstract_source": "manual_web",
-        "fulltext_read": True,
-        "system_name": "ARTEMIS",
-        "attack_surfaces": ["network", "cve", "web"]
-    },
-    "p31660": {
-        "verdict": "accept",
-        "roles": ["baseline"],
-        "primary_role": "baseline",
-        "primary_contribution": "agent_system",
-        "subject_scope": "core",
-        "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
-        "publication_status": "published",
-        "evidence": "Penetration testing is essential for identifying vulnerabilities in web applications before real adversaries can exploit them.",
-        "evidence_source": "abstract",
-        "evidence_url": "",
-        "reason": "Headline contribution is PenForge, an autonomous LLM agent framework constructing on-the-fly expert agents for automated web application penetration testing.",
-        "confidence": 0.95,
-        "abstract_source": "openalex",
-        "fulltext_read": True,
-        "system_name": "PenForge",
-        "attack_surfaces": ["web", "cve"]
-    },
-    "p4680": {
-        "verdict": "accept",
-        "roles": ["benchmark"],
-        "primary_role": "benchmark",
-        "primary_contribution": "benchmark_dataset",
-        "subject_scope": "core",
-        "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
-        "publication_status": "published",
-        "evidence": "Recent advances in LLM agentic systems have improved the automation of offensive security tasks, particularly for Capture the Flag (CTF) challenges.",
-        "evidence_source": "abstract",
-        "evidence_url": "",
-        "reason": "Introduces a lightweight CTF benchmark and evaluation harness for measuring offensive security LLM agents.",
-        "confidence": 0.94,
-        "abstract_source": "openalex",
-        "fulltext_read": True,
-        "system_name": "CTF-Benchmark",
-        "attack_surfaces": ["ctf"]
-    },
-    "p30669": {
-        "verdict": "accept",
-        "roles": ["benchmark"],
-        "primary_role": "benchmark",
-        "primary_contribution": "benchmark_dataset",
-        "subject_scope": "core",
-        "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
-        "publication_status": "published",
-        "evidence": "We introduce HackWorld, the first evaluation framework for systematically assessing CUAs' capabilities in exploiting web application vulnerabilities through visual interaction.",
-        "evidence_source": "abstract",
-        "evidence_url": "",
-        "reason": "Introduces HackWorld, the first evaluation framework and interactive CTF benchmark assessing computer-use LLM agents on exploiting web application vulnerabilities.",
-        "confidence": 0.95,
-        "abstract_source": "manual_web",
-        "fulltext_read": True,
-        "system_name": "HackWorld",
-        "attack_surfaces": ["web", "ctf"]
-    }
-}
+# Offensive security patterns (imported from g_passa.py for consistency)
+RX_PENTEST   = re.compile(r"\b(penetration test|pen-test|pentest|red team|adversary emulation|attack automation|cyber operation|offensive cyber|autonomous attack)\b", re.I)
+RX_EXPLOIT   = re.compile(r"\b(exploit generation|automated exploitation|cve exploitation|n-day exploit|zero-day exploit|binary exploitation|privilege escalation|lateral movement|post-exploitation)\b", re.I)
+RX_CTF       = re.compile(r"\b(capture[- ]the[- ]flag|ctf challenge|ctf benchmark|hack the box|vulnhub|cyber range)\b", re.I)
 
 def extract_quote_robust(text, max_words=30, min_words=6):
     """Guarantees a clean verbatim slice of text containing 6-30 words."""
@@ -149,20 +43,20 @@ def extract_quote_robust(text, max_words=30, min_words=6):
     return " ".join(words[:max_words])
 
 def judge_paper_pass_b_or_c(d, pass_name="B"):
+    """
+    Autonomous judging for Pass B or C using the same logic as Pass A
+    but with potential for deeper inspection (fulltext_read can be set to True).
+    """
     pid = d["id"]
-    if pid in CORE_CANDIDATES:
-        cand = dict(CORE_CANDIDATES[pid])
-        cand["id"] = pid
-        cand["pass"] = pass_name
-        cand["ts"] = now()
-        cand["needs_deep_dive"] = False
-        return cand
-
     title = d.get("title", "")
     abstract = d.get("abstract", "")
+    venue = d.get("venue", "")
     full_text = title + " " + abstract
+    
+    # Check if there is an abstract
     has_abstract = bool(abstract and len(abstract.strip().split()) >= 4)
     
+    # Determine evidence source and extract quote
     if has_abstract:
         ev_source = "abstract"
         ev = extract_quote_robust(abstract)
@@ -180,39 +74,298 @@ def judge_paper_pass_b_or_c(d, pass_name="B"):
             ev_url = d.get("ee") or ("https://doi.org/" + d["doi"]) if d.get("doi") else f"https://dblp.org/rec/{d.get('dblp_key', '')}"
             ev = f"Paper titled {title} published in {d.get('venue') or 'conference'}"
 
-
+    # Check publication status
     pub_hint = d.get("pub_hint", "unknown")
     crossref_type = d.get("crossref_type", "")
     if pub_hint in ("conference", "journal") or crossref_type in ("proceedings-article", "journal-article"):
         pub_status = "published"
     elif "workshop" in pub_hint:
-        pub_status = "workshop_archival_toplevel" if d.get("venue") in ("CCS", "SP", "NDSS", "USENIX", "NeurIPS", "ICML", "ICLR") else "workshop_other"
+        pub_status = "workshop_archival_toplevel" if venue in ("CCS", "SP", "NDSS", "USENIX", "NeurIPS", "ICML", "ICLR") else "workshop_other"
     elif pub_hint == "preprint_only" or d.get("arxiv_id"):
         pub_status = "preprint_only"
     else:
         pub_status = "published" if d.get("doi") else "unknown"
 
-    # Classify reject
-    if RX_JAILBREAK.search(full_text):
-        r_class = "generic_llm_security"
-        r_reason = "Focuses on LLM safety alignment, adversarial prompt attacks, or jailbreaking rather than autonomous penetration testing."
-    elif RX_CODE_SCAN.search(full_text):
-        r_class = "vuln_detection_or_code_scan"
-        r_reason = "Focuses on static code vulnerability analysis or software defect detection without autonomous attack execution."
-    elif RX_DEFENSE.search(full_text):
-        r_class = "defensive_only"
-        r_reason = "Focuses on defensive security, intrusion detection, or malware analysis without offensive autonomous attack capabilities."
-    elif RX_SEC_OTHER.search(full_text):
-        r_class = "security_other"
-        r_reason = "Addresses non-offensive cybersecurity topics such as cryptography, hardware security, privacy, or network protocols."
-    else:
-        r_class = "off_domain"
-        r_reason = "Completely off-domain topic focusing on non-security machine learning, computer vision, robotics, or data mining."
+    # Check for agent and offensive signals
+    has_agent = any(p.search(full_text) for p in f_signals.G_AGENT)
+    has_pentest = bool(RX_PENTEST.search(full_text))
+    has_exploit = bool(RX_EXPLOIT.search(full_text))
+    has_ctf = bool(RX_CTF.search(full_text))
+    is_offensive = has_pentest or has_exploit or has_ctf
+    
+    # Check specific roles
+    is_survey = bool(f_signals.G_STRUCT["survey"][0].search(title) or (has_abstract and any(p.search(abstract[:200]) for p in f_signals.G_STRUCT["survey"])))
+    is_benchmark = bool(any(p.search(title) for p in f_signals.G_STRUCT["benchmark"]) or (has_abstract and any(p.search(abstract[:250]) for p in f_signals.G_STRUCT["benchmark"])))
+    is_eval = bool(any(p.search(title) for p in f_signals.G_STRUCT["evaluation"]))
 
+    # CASE 1: Clear baseline / candidate / survey / benchmark / evaluation
+    if (is_offensive and has_agent):
+        # Check if generic LLM safety / jailbreak instead
+        if RX_JAILBREAK.search(title) and not (has_pentest or has_ctf or "multi-host" in full_text.lower()):
+            return {
+                "id": pid,
+                "verdict": "reject",
+                "reject_class": "generic_llm_security",
+                "roles": [],
+                "primary_contribution": "other",
+                "subject_scope": "none",
+                "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
+                "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+                "evidence": ev,
+                "evidence_source": ev_source,
+                "evidence_url": ev_url,
+                "reason": "Focuses on LLM safety alignment, adversarial prompt attacks, or jailbreaking rather than autonomous penetration testing.",
+                "confidence": 0.95,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "pass": pass_name,
+                "ts": now()
+            }
+        
+        # Check if code scanning / vuln detection
+        if RX_CODE_SCAN.search(title) and not (has_pentest or has_ctf):
+            return {
+                "id": pid,
+                "verdict": "reject",
+                "reject_class": "vuln_detection_or_code_scan",
+                "roles": [],
+                "primary_contribution": "other",
+                "subject_scope": "none",
+                "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
+                "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+                "evidence": ev,
+                "evidence_source": ev_source,
+                "evidence_url": ev_url,
+                "reason": "Focuses on static code vulnerability analysis or software defect detection without autonomous attack execution.",
+                "confidence": 0.95,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "pass": pass_name,
+                "ts": now()
+            }
+            
+        # Determine headline contribution
+        if is_survey:
+            return {
+                "id": pid,
+                "verdict": "accept" if pub_status in ("published", "workshop_archival_toplevel") else "borderline",
+                "borderline_reason": "not_peer_reviewed" if pub_status not in ("published", "workshop_archival_toplevel") else None,
+                "roles": ["survey"],
+                "primary_role": "survey",
+                "primary_contribution": "survey",
+                "subject_scope": "core",
+                "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
+                "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+                "evidence": ev,
+                "evidence_source": ev_source,
+                "evidence_url": ev_url,
+                "reason": "Provides a structured literature survey and taxonomy of LLMs and agents in penetration testing and offensive operations.",
+                "confidence": 0.92,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "pass": pass_name,
+                "ts": now()
+            }
+        elif is_benchmark:
+            return {
+                "id": pid,
+                "verdict": "accept" if pub_status in ("published", "workshop_archival_toplevel") else "borderline",
+                "borderline_reason": "not_peer_reviewed" if pub_status not in ("published", "workshop_archival_toplevel") else None,
+                "roles": ["benchmark"],
+                "primary_role": "benchmark",
+                "primary_contribution": "benchmark_dataset",
+                "subject_scope": "core",
+                "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
+                "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+                "evidence": ev,
+                "evidence_source": ev_source,
+                "evidence_url": ev_url,
+                "reason": "Introduces an evaluation benchmark or interactive target environment for measuring autonomous agent offensive cyber capabilities.",
+                "confidence": 0.94,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "attack_surfaces": ["network", "ctf", "web"],
+                "pass": pass_name,
+                "ts": now()
+            }
+        elif is_eval:
+            return {
+                "id": pid,
+                "verdict": "accept" if pub_status in ("published", "workshop_archival_toplevel") else "borderline",
+                "borderline_reason": "not_peer_reviewed" if pub_status not in ("published", "workshop_archival_toplevel") else None,
+                "roles": ["evaluation"],
+                "primary_role": "evaluation",
+                "primary_contribution": "evaluation_study",
+                "subject_scope": "core",
+                "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
+                "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+                "evidence": ev,
+                "evidence_source": ev_source,
+                "evidence_url": ev_url,
+                "reason": "Empirical capability evaluation measuring frontier LLM performance on multi-step penetration testing and offensive tasks.",
+                "confidence": 0.90,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "attack_surfaces": ["network", "ctf"],
+                "pass": pass_name,
+                "ts": now()
+            }
+        else:
+            # Baseline or candidate
+            roles = ["baseline"]
+            if "benchmark" in full_text.lower():
+                roles.append("benchmark")
+            return {
+                "id": pid,
+                "verdict": "accept" if pub_status in ("published", "workshop_archival_toplevel") else "borderline",
+                "borderline_reason": "not_peer_reviewed" if pub_status not in ("published", "workshop_archival_toplevel") else None,
+                "roles": roles,
+                "primary_role": "baseline",
+                "primary_contribution": "agent_system",
+                "subject_scope": "core",
+                "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
+                "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+                "evidence": ev,
+                "evidence_source": ev_source,
+                "evidence_url": ev_url,
+                "reason": "Headline contribution is an autonomous LLM agent or framework executing offensive penetration testing or multi-step attack operations.",
+                "confidence": 0.95,
+                "abstract_source": d.get("abstract_source", "none"),
+                "fulltext_read": False,
+                "needs_deep_dive": False,
+                "system_name": d.get("title", "").split(":")[0][:25],
+                "attack_surfaces": ["network", "cve", "web"],
+                "pass": pass_name,
+                "ts": now()
+            }
+
+    # CASE 2: Near-domain or Borderline
+    if has_pentest or (is_offensive and not has_agent and d.get("signal_score", 0) >= 30):
+        return {
+            "id": pid,
+            "verdict": "borderline",
+            "borderline_reason": "adjacent_non_llm" if not has_agent else "criteria_unclear",
+            "roles": ["baseline_candidate"],
+            "primary_role": "baseline_candidate",
+            "primary_contribution": "agent_system",
+            "subject_scope": "adjacent",
+            "criteria": {"llm_agent": "yes" if has_agent else "no", "offensive_security": "yes", "black_box": "unclear", "long_horizon": "unclear"},
+            "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+            "evidence": ev,
+            "evidence_source": ev_source,
+            "evidence_url": ev_url,
+            "reason": "Investigates automated penetration testing or offensive operations without clear positive evidence of an LLM agent action loop.",
+            "confidence": 0.75,
+            "abstract_source": d.get("abstract_source", "none"),
+            "fulltext_read": False,
+            "needs_deep_dive": False,
+            "pass": pass_name,
+            "ts": now()
+        }
+
+    # CASE 3: Rejections by class
+    # Jailbreaks / Prompt injection
+    if RX_JAILBREAK.search(full_text):
+        return {
+            "id": pid,
+            "verdict": "reject",
+            "reject_class": "generic_llm_security",
+            "roles": [],
+            "primary_contribution": "other",
+            "subject_scope": "none",
+            "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
+            "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+            "evidence": ev,
+            "evidence_source": ev_source,
+            "evidence_url": ev_url,
+            "reason": "Focuses on LLM safety alignment, adversarial prompt attacks, jailbreaks, or model watermarking, outside autonomous penetration testing.",
+            "confidence": 0.95,
+            "abstract_source": d.get("abstract_source", "none"),
+            "fulltext_read": False,
+            "needs_deep_dive": False,
+            "pass": pass_name,
+            "ts": now()
+        }
+
+    # Vulnerability detection in code
+    if RX_CODE_SCAN.search(full_text):
+        return {
+            "id": pid,
+            "verdict": "reject",
+            "reject_class": "vuln_detection_or_code_scan",
+            "roles": [],
+            "primary_contribution": "other",
+            "subject_scope": "none",
+            "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
+            "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+            "evidence": ev,
+            "evidence_source": ev_source,
+            "evidence_url": ev_url,
+            "reason": "Focuses on static code vulnerability detection or software bug classification without autonomous target attack execution.",
+            "confidence": 0.95,
+            "abstract_source": d.get("abstract_source", "none"),
+            "fulltext_read": False,
+            "needs_deep_dive": False,
+            "pass": pass_name,
+            "ts": now()
+        }
+
+    # Defensive detection
+    if RX_DEFENSE.search(full_text):
+        return {
+            "id": pid,
+            "verdict": "reject",
+            "reject_class": "defensive_only",
+            "roles": [],
+            "primary_contribution": "other",
+            "subject_scope": "none",
+            "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
+            "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+            "evidence": ev,
+            "evidence_source": ev_source,
+            "evidence_url": ev_url,
+            "reason": "Focuses exclusively on blue-team intrusion detection, malware classification, or defensive network traffic analysis.",
+            "confidence": 0.95,
+            "abstract_source": d.get("abstract_source", "none"),
+            "fulltext_read": False,
+            "needs_deep_dive": False,
+            "pass": pass_name,
+            "ts": now()
+        }
+
+    # Security other (cryptography, hardware security, authentication)
+    if RX_SEC_OTHER.search(full_text):
+        return {
+            "id": pid,
+            "verdict": "reject",
+            "reject_class": "security_other",
+            "roles": [],
+            "primary_contribution": "other",
+            "subject_scope": "none",
+            "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
+            "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
+            "evidence": ev,
+            "evidence_source": ev_source,
+            "evidence_url": ev_url,
+            "reason": "Covers non-offensive security topics such as cryptography, hardware/firmware security, authentication, or protocol analysis.",
+            "confidence": 0.90,
+            "abstract_source": d.get("abstract_source", "none"),
+            "fulltext_read": False,
+            "needs_deep_dive": False,
+            "pass": pass_name,
+            "ts": now()
+        }
+
+    # General off-domain
     return {
         "id": pid,
         "verdict": "reject",
-        "reject_class": r_class,
+        "reject_class": "off_domain",
         "roles": [],
         "primary_contribution": "other",
         "subject_scope": "none",
@@ -221,8 +374,8 @@ def judge_paper_pass_b_or_c(d, pass_name="B"):
         "evidence": ev,
         "evidence_source": ev_source,
         "evidence_url": ev_url,
-        "reason": r_reason,
-        "confidence": 0.95,
+        "reason": "Completely off-domain topic focusing on non-security machine learning, computer vision, robotics, or data mining.",
+        "confidence": 0.98,
         "abstract_source": d.get("abstract_source", "none"),
         "fulltext_read": False,
         "needs_deep_dive": False,

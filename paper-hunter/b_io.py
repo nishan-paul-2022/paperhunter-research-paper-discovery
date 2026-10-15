@@ -115,15 +115,12 @@ class Run:
             raise SystemExit("ERROR: run directory %s does not exist" % self.dir)
         self.papers_path  = self.dir / "papers.jsonl"
         self.dossier_path = self.dir / "dossiers.jsonl"
-        # New unified files
+        # Unified files (no legacy subdirectories)
         self.enrichment_db_path = self.dir / "enrichment.db.jsonl"
         self.decisions_path = self.dir / "decisions.jsonl"
         self.state_path = self.dir / "state.json"
         self.manual_overrides_path = self.dir / "manual-overrides.jsonl"
-        # Legacy
-        self.cache_dir = self.dir / "cache"
-        self.manual_dir = self.dir / "manual"
-        self.fulltext_dir = self.dir / "full-text"
+        self.fulltext_db_path = self.dir / "fulltext.db.jsonl"
         self._dos         = None
         self._enrichment_index = None
         self._state = None
@@ -146,17 +143,9 @@ class Run:
         """Lazy-load enrichment index into memory for fast lookups"""
         if self._enrichment_index is None:
             self._enrichment_index = {}
-            # Try new unified DB first
             if self.enrichment_db_path.exists():
                 for record in read_jsonl(self.enrichment_db_path):
                     self._enrichment_index[record["id"]] = record
-            # Fall back to legacy cache dir
-            elif self.cache_dir.exists():
-                for cache_file in self.cache_dir.glob("*.json"):
-                    paper_id = cache_file.stem
-                    data = read_json(cache_file, {})
-                    if data:
-                        self._enrichment_index[paper_id] = data
         return self._enrichment_index
 
     def get_enrichment(self, paper_id):
@@ -213,10 +202,6 @@ class Run:
     def get_manual_override(self, paper_id):
         """Get manual override data for a paper"""
         if not self.manual_overrides_path.exists():
-            # Try legacy folder
-            legacy_file = self.manual_dir / f"{paper_id}.json"
-            if legacy_file.exists():
-                return read_json(legacy_file, {})
             return {}
         
         for record in read_jsonl(self.manual_overrides_path):
@@ -242,10 +227,6 @@ class Run:
     def get_fulltext(self, paper_id):
         """Get fulltext for a paper"""
         if not self.fulltext_db_path.exists():
-            # Try legacy folder
-            legacy_file = self.fulltext_dir / f"{paper_id}.txt"
-            if legacy_file.exists():
-                return legacy_file.read_text(encoding="utf-8", errors="replace")
             return None
         
         for record in read_jsonl(self.fulltext_db_path):
@@ -274,6 +255,7 @@ class Run:
 
     def _default_state(self):
         """Default state structure"""
+        # Try to load legacy meta.json and plans.json for migration
         meta_file = self.dir / "meta.json"
         meta = read_json(meta_file, {}) if meta_file.exists() else {}
         plans_file = self.dir / "plans.json"
