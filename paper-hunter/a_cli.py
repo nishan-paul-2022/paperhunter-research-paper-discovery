@@ -885,10 +885,48 @@ def cmd_export(a):
     ]
     audit_path = out_dir / ("%s-audit-all.csv" % output_filename)
     write_csv(audit_path, audit_cols, audit)
-    print("Wrote audit-all CSV (%d papers) to: %s" % (len(audit), audit_path))
     accepts = sum(1 for r in audit if r["verdict"] == "accept")
     rejects = sum(1 for r in audit if r["verdict"] == "reject")
-    print("  accept: %d | reject: %d" % (accepts, rejects))
+    print("Wrote audit-all CSV (%d papers, accept: %d, reject: %d) to: %s"
+          % (len(audit), accepts, rejects, audit_path))
+
+    # ── Filtered deliverable: paper-reference/<stem>.csv ─────────────────────
+    # Accepted papers only. Columns: dblp_key, title, authors, year, venue,
+    # ee, url, Role  — same filename as input CSV, same format as sample-2.csv.
+    paper_url = {p["id"]: p.get("url", "") for p in run.papers()}
+    role_order = {"baseline": 0, "baseline_candidate": 1,
+                  "benchmark": 2, "evaluation": 3, "survey": 4}
+    accepted = sorted(
+        [row for row in audit if row["verdict"] == "accept"],
+        key=lambda x: (role_order.get(x["primary_role"], 9),
+                       -float(x["confidence"] or 0), x["title"])
+    )
+    ref_rows = [
+        {
+            "dblp_key": row["dblp_key"],
+            "title":    row["title"],
+            "authors":  row["authors"],
+            "year":     row["year"],
+            "venue":    row["venue"],
+            "ee":       row["ee"],
+            "url":      paper_url.get(row["paper_id"], ""),
+            "Role":     row["primary_role"],
+        }
+        for row in accepted
+    ]
+    ref_dir = DEFAULT_OUTPUT
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    ref_path = ref_dir / ("%s.csv" % output_filename)
+    write_csv(ref_path,
+              ["dblp_key", "title", "authors", "year", "venue", "ee", "url", "Role"],
+              ref_rows)
+    print("Wrote filtered deliverable (%d accepted papers) to: %s"
+          % (len(ref_rows), ref_path))
+    if ref_rows:
+        role_dist = {}
+        for row in ref_rows:
+            role_dist[row["Role"]] = role_dist.get(row["Role"], 0) + 1
+        print("  Role distribution: %s" % role_dist)
 
 
 # ── main CLI dispatcher ───────────────────────────────────────────────────────
