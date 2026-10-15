@@ -37,9 +37,10 @@ def judge_paper(d, pass_name="A"):
     lane = d.get("lane", "C")
 
     has_abstract = bool(abstract and len(abstract.strip()) >= 50)
+    has_fulltext = bool(d.get("fulltext"))
     source_text = abstract if has_abstract else title
     ev_source = "abstract" if has_abstract else "title"
-    ev_level = _evidence_level(has_abstract)
+    ev_level = _evidence_level(has_abstract, fulltext_read=has_fulltext)
 
     pub_hint = d.get("pub_hint", "unknown")
     crossref_type = d.get("crossref_type", "")
@@ -169,7 +170,7 @@ def judge_paper(d, pass_name="A"):
                 "evidence_level": ev_level, "flags": [],
                 "reason": "Introduces an evaluation benchmark or interactive target environment for measuring autonomous agent offensive cyber capabilities.",
                 "confidence": 0.94, "abstract_source": d.get("abstract_source", "none"),
-                "fulltext_read": False, "needs_deep_dive": True if pass_name == "A" else False,
+                "fulltext_read": has_fulltext, "needs_deep_dive": True if pass_name == "A" else False,
                 "attack_surfaces": ["network", "ctf", "web"], "pass": pass_name, "ts": now()
             }
         elif is_eval:
@@ -183,16 +184,20 @@ def judge_paper(d, pass_name="A"):
                 "evidence_level": ev_level, "flags": [],
                 "reason": "Empirical capability evaluation measuring frontier LLM performance on multi-step penetration testing and offensive tasks.",
                 "confidence": 0.90, "abstract_source": d.get("abstract_source", "none"),
-                "fulltext_read": False, "needs_deep_dive": True if pass_name == "A" else False,
+                "fulltext_read": has_fulltext, "needs_deep_dive": True if pass_name == "A" else False,
                 "attack_surfaces": ["network", "ctf"], "pass": pass_name, "ts": now()
             }
         else:
             roles = ["baseline"]
             if re.search(r"\b(introduce|present|propose|develop|release|build|curate|create)\b.*?\b(benchmark|dataset|testbed|suite)\b", full_text, re.I):
                 roles.append("benchmark")
+            primary_role = "baseline"
+            if ev_level not in ("publisher_page", "full_text"):
+                primary_role = "baseline_candidate"
+                roles = ["baseline_candidate"] + [r for r in roles if r != "baseline"]
             return {
                 "id": pid, "verdict": "accept",
-                "roles": roles, "primary_role": "baseline", "primary_contribution": "agent_system",
+                "roles": roles, "primary_role": primary_role, "primary_contribution": "agent_system",
                 "subject_scope": "core",
                 "criteria": {"llm_agent": "yes", "offensive_security": "yes", "black_box": "yes", "long_horizon": "yes"},
                 "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
@@ -200,7 +205,7 @@ def judge_paper(d, pass_name="A"):
                 "evidence_level": ev_level, "flags": [],
                 "reason": "Headline contribution is an autonomous LLM agent or framework executing offensive penetration testing or multi-step attack operations.",
                 "confidence": 0.95, "abstract_source": d.get("abstract_source", "none"),
-                "fulltext_read": False, "needs_deep_dive": True if pass_name == "A" else False,
+                "fulltext_read": has_fulltext, "needs_deep_dive": True if pass_name == "A" else False,
                 "system_name": d.get("title", "").split(":")[0][:25],
                 "attack_surfaces": ["network", "cve", "web"], "pass": pass_name, "ts": now()
             }

@@ -188,6 +188,30 @@ def cmd_prep(a):
     cmd_enrich(a)
     cmd_signals(a)
 
+def cmd_fill(a):
+    run = Run(a.run)
+    p = run.get_paper(a.id)
+    if not p:
+        die("unknown id " + a.id)
+    m = run.get_manual_override(a.id)
+    ab = a.abstract
+    if a.abstract_file:
+        ab = Path(a.abstract_file).read_text(encoding="utf-8")
+    if ab:
+        m["abstract"] = re.sub(r"\s+", " ", ab).strip()
+        m["source"]   = a.source
+    if a.arxiv:
+        m["arxiv_id"] = re.sub(r"^.*arxiv\.org/(abs|pdf)/", "", a.arxiv).replace(".pdf", "")
+    if a.pdf:
+        m["pdf"] = a.pdf
+    if a.notes:
+        m["notes"] = a.notes
+    if a.url:
+        m["url"] = a.url
+    run.save_manual_override(a.id, m)
+    build_dossiers(run, embed="off")
+    print("stored for %s (abstract_source=%s)" % (a.id, run.get_paper(a.id).get("abstract_source")))
+
 
 # ── show / search ─────────────────────────────────────────────────────────────
 
