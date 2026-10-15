@@ -7,13 +7,15 @@ All run state is consolidated into two flat files in paper-dump/<csv-stem>/:
   - papers.jsonl (the unified per-paper store: metadata, enrichment, signals, overrides, decisions, final)
   - state.json   (run metadata, stage tracking, pass plans)
 
+Verdict system: accept | reject  (no borderline)
+Only CSV output: <stem>-audit-all.csv  (all papers, all decisions, richer columns)
+
 Sub-commands:
   init          load + normalise the CSV, assign stable ids
   doctor        check network access to metadata providers
-  enrich        fetch abstracts + metadata for EVERY paper (Crossref, OpenAlex, S2,
-                publisher landing page, arXiv)
-  signals       recompute signals only (after manual abstracts were filled in)
-  fill          store an abstract/metadata the agent found by hand for one paper
+  prep          combined init + enrich + signals in one call
+  enrich        fetch abstracts + metadata for EVERY paper
+  signals       recompute signals only
   show          print one full dossier
   search        local fuzzy + TF-IDF search over the dossiers
   status        progress of every pass
@@ -21,10 +23,10 @@ Sub-commands:
   record        validate + store decisions (JSON on stdin or --file)
   fulltext      download + extract open-access full text of one paper
   expand-audit  widen the blind audit pass (recall safety nets)
-  sweep         add high-signal papers to blind pass C
+  sweep         re-screen all final rejects as a recall safety net
   reconcile     merge passes, find disagreements, build the adjudication queue
   validate      consistency checks on the final verdicts
-  export        write the filtered CSV (+ on-demand --borderline or --audit CSVs)
+  export        write the audit-all CSV (only output file)
 """
 import argparse, csv as _csv, json, math, random, re, shutil, sys, textwrap, time
 import unicodedata, urllib.parse
@@ -34,14 +36,16 @@ from pathlib import Path
 # ── package imports ───────────────────────────────────────────────────────────
 from b_io      import (Run, TOOLS_DIR, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
                           read_json, write_json, write_csv, norm, clean_title)
-from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNU, SCOPES,
-                          PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES, BORDER_REASONS,
-                          ABSTRACT_SOURCES, EVIDENCE_SOURCES, validate_record)
+from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNPU, SCOPES,
+                          PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES,
+                          ABSTRACT_SOURCES, EVIDENCE_SOURCES, EVIDENCE_LEVELS,
+                          validate_record)
 from d_network import (http, p_crossref, p_openalex, p_landing, p_arxiv,
                           s2_batch, BROWSER_UA, title_sim, URL_S2, URL_CROSSREF,
                           URL_OPENALEX, URL_ARXIV)
 from e_enrich  import (run_enrich, build_dossiers, coverage_report, enrich_one)
 from f_signals import compute_signals, SWEEP_QUERIES
+from h_passbc  import lane_batch_size, run_sweep
 
 SEED = 20261014
 
@@ -178,29 +182,11 @@ def cmd_signals(a):
     build_dossiers(run, embed=a.embed)
     coverage_report(run)
 
-def cmd_fill(a):
-    run = Run(a.run)
-    p = run.get_paper(a.id)
-    if not p:
-        die("unknown id " + a.id)
-    m = run.get_manual_override(a.id)
-    ab = a.abstract
-    if a.abstract_file:
-        ab = Path(a.abstract_file).read_text(encoding="utf-8")
-    if ab:
-        m["abstract"] = re.sub(r"\s+", " ", ab).strip()
-        m["source"]   = a.source
-    if a.arxiv:
-        m["arxiv_id"] = re.sub(r"^.*arxiv\.org/(abs|pdf)/", "", a.arxiv).replace(".pdf", "")
-    if a.pdf:
-        m["pdf"] = a.pdf
-    if a.notes:
-        m["notes"] = a.notes
-    if a.url:
-        m["url"] = a.url
-    run.save_manual_override(a.id, m)
-    build_dossiers(run, embed="off")
-    print("stored for %s (abstract_source=%s)" % (a.id, run.get_paper(a.id).get("abstract_source")))
+def cmd_prep(a):
+    """Combined init + enrich + signals in one call."""
+    cmd_init(a)
+    cmd_enrich(a)
+    cmd_signals(a)
 
 
 # ── show / search ─────────────────────────────────────────────────────────────
@@ -348,12 +334,23 @@ def ensure_plan_B(run, force=False):
     missing = [i for i in el if i not in A]
     if missing and not force:
         die("pass A incomplete (%d papers left) - finish it first" % len(missing))
+    # Include: accepts, needs_deep_dive, safety_net papers, low-confidence rejects,
+    # lane-A rejects, lane-B low-confidence rejects, papers with role_hints
     B = [i for i in el if (a := A.get(i)) and
-         (a["verdict"] in ("accept", "borderline") or a.get("needs_deep_dive")
+         (a["verdict"] == "accept"
+          or a.get("needs_deep_dive")
           or dos[i].get("safety_net")
           or (dos[i].get("abstract_source") == "none" and a.get("confidence", 1) < 0.9)
-          or a.get("confidence", 1) < 0.6 or dos[i].get("retracted"))]
-    B.sort(key=lambda i: -dos[i].get("signal_score", 0))
+          or a.get("confidence", 1) < 0.6
+          or dos[i].get("retracted")
+          or (dos[i].get("lane") == "A" and a["verdict"] == "reject")
+          or (dos[i].get("lane") == "B" and a["verdict"] == "reject"
+              and a.get("confidence", 1) < 0.8)
+          or bool(dos[i].get("role_hints")))]
+    B.sort(key=lambda i: (
+        {"A": 0, "B": 1, "C": 2}.get(dos[i].get("lane", "C"), 2),
+        -dos[i].get("signal_score", 0)
+    ))
     pl["B"] = B
     run.save_plans(pl)
     print("plan B frozen: %d papers" % len(B))
@@ -366,19 +363,38 @@ def ensure_plan_C(run):
     if "B" not in pl:
         die("plan B not frozen yet (finish pass A, then `batch --pass B`)")
     dos, el = run.dossiers(), run.eligible()
-    C    = set(pl["B"])
+    A   = run.decisions("A")
+    C   = set(pl["B"])
     rest = sorted([i for i in el if i not in C], key=lambda i: -dos[i].get("signal_score", 0))
     top, tail = rest[:40], rest[40:]
     rnd  = random.Random(SEED)
     k    = min(len(tail), max(60, math.ceil(0.12 * len(tail))))
     samp = rnd.sample(tail, k) if tail else []
-    C   |= set(top) | set(samp)
+
+    # Richer audit additions:
+    # 1. fuzzy near-misses (seed_fuzzy >= 0.45 but not already in C)
+    fuzzy_nm = [i for i in el if i not in C
+                and dos[i].get("seed_fuzzy", 0) >= 0.45]
+    # 2. lane-A rejects with confidence < 0.85
+    lane_a_rej = [i for i in el if i not in C
+                  and dos[i].get("lane") == "A"
+                  and (A.get(i) or {}).get("verdict") == "reject"
+                  and (A.get(i) or {}).get("confidence", 1) < 0.85]
+    # 3. low-confidence rejects < 0.70 with offense or agent signal
+    low_conf = [i for i in el if i not in C
+                and (A.get(i) or {}).get("verdict") == "reject"
+                and (A.get(i) or {}).get("confidence", 1) < 0.70
+                and bool(set(dos[i].get("signal_flags", [])) & {"agent", "offense", "seed"})]
+
+    extra = sorted(set(fuzzy_nm + lane_a_rej + low_conf))
+    C |= set(top) | set(samp) | set(extra)
     lst  = sorted(C)
     random.Random(SEED + 1).shuffle(lst)
     pl["C"] = lst
-    pl["C_audit_sample"] = top + samp
+    pl["C_audit_sample"] = top + samp + extra
     run.save_plans(pl)
-    print("plan C frozen: %d papers (blind audit)" % len(lst))
+    print("plan C frozen: %d papers (blind audit, %d extra from richer selection: %d fuzzy, %d lane-A, %d low-conf)"
+          % (len(lst), len(extra), len(fuzzy_nm), len(lane_a_rej), len(low_conf)))
     return lst
 
 def cmd_batch(a):
@@ -386,7 +402,10 @@ def cmd_batch(a):
     p   = a.pass_.upper()
     dos = run.dossiers()
     if p == "A":
-        ids = sorted(run.eligible(), key=lambda i: -dos[i].get("signal_score", 0))
+        ids = sorted(run.eligible(), key=lambda i: (
+            {"A": 0, "B": 1, "C": 2}.get(dos[i].get("lane", "C"), 2),
+            -dos[i].get("signal_score", 0)
+        ))
     elif p == "B":
         ids = ensure_plan_B(run, a.force)
     elif p == "C":
@@ -404,7 +423,9 @@ def cmd_batch(a):
     if not todo:
         print("PASS %s COMPLETE (%d/%d)." % (p, len(ids), len(ids)))
         return
-    chunk = todo[:a.n]
+    # Lane-based batch size: use --n if explicitly set, else auto from lane mix
+    n = a.n if a.n else lane_batch_size(todo, dos)
+    chunk = todo[:n]
     print("=" * 100)
     print("PASS %s | batch of %d | %d remaining | %d total in pass"
           % (p, len(chunk), len(todo), len(ids)))
@@ -446,7 +467,10 @@ def cmd_record(a):
     dos    = run.dossiers()
     ok, bad = 0, 0
     for r in data:
-        errs = validate_record(run, r, p, policy, dos=dos)
+        # Strip any borderline fields that might come from old prompts
+        r.pop("borderline_reason", None)
+        errs = validate_record(run, r, p, policy, dos=dos,
+                               lane=dos.get(r.get("id", ""), {}).get("lane", "C"))
         if plan is not None and r.get("id") not in plan and p not in ("A", "F"):
             errs.append("id %s is not part of pass %s" % (r.get("id"), p))
         if errs:
@@ -583,30 +607,47 @@ def cmd_expand_audit(a):
     if "C" not in pl:
         die("plan C does not exist yet")
     dos  = run.dossiers()
+    A    = run.decisions("A")
     cur  = set(pl["C"])
-    cand = [i for i in run.eligible()
-            if i not in cur and (a.all
-                                  or dos[i].get("signal_score", 0) >= a.min_signal
-                                  or dos[i].get("sim_domain_pct", 0) >= a.min_pct)]
-    pl["C"] = pl["C"] + cand
+    el   = run.eligible()
+
+    cand = set()
+    if a.all:
+        cand = set(el) - cur
+    else:
+        # signal/pct threshold
+        for i in el:
+            if i in cur:
+                continue
+            if (dos[i].get("signal_score", 0) >= a.min_signal
+                    or dos[i].get("sim_domain_pct", 0) >= a.min_pct):
+                cand.add(i)
+        # fuzzy near-misses (seed_fuzzy >= 0.45)
+        for i in el:
+            if i not in cur and dos[i].get("seed_fuzzy", 0) >= 0.45:
+                cand.add(i)
+        # lane-A rejects with confidence < 0.85
+        for i in el:
+            if i not in cur and dos[i].get("lane") == "A":
+                r = A.get(i, {})
+                if r.get("verdict") == "reject" and r.get("confidence", 1) < 0.85:
+                    cand.add(i)
+        # low-confidence rejects with agent/offense signal
+        for i in el:
+            if i not in cur:
+                r = A.get(i, {})
+                if (r.get("verdict") == "reject" and r.get("confidence", 1) < 0.70
+                        and bool(set(dos[i].get("signal_flags", [])) & {"agent", "offense", "seed"})):
+                    cand.add(i)
+
+    new = sorted(cand - cur)
+    pl["C"] = pl["C"] + new
     run.save_plans(pl)
-    print("added %d papers to blind pass C (now %d)" % (len(cand), len(pl["C"])))
+    print("added %d papers to blind pass C (now %d)" % (len(new), len(pl["C"])))
 
 def cmd_sweep(a):
     run = Run(a.run)
-    pl  = run.plans()
-    if "C" not in pl:
-        die("plan C does not exist yet")
-    cur, add = set(pl["C"]), []
-    for q in SWEEP_QUERIES:
-        for s, i in search_docs(run, q, a.top):
-            if i not in cur and s >= a.min_score:
-                cur.add(i)
-                add.append(i)
-    pl["C"] = pl["C"] + add
-    run.save_plans(pl)
-    print("recall sweep: %d queries -> %d new papers added to blind pass C (now %d)"
-          % (len(SWEEP_QUERIES), len(add), len(pl["C"])))
+    run_sweep(run.name)
 
 
 # ── reconcile ─────────────────────────────────────────────────────────────────
@@ -647,7 +688,7 @@ def cmd_reconcile(a):
             why[i] = dis
             if i not in queue:
                 queue.append(i)
-        if (A[i]["verdict"] == "reject" and c["verdict"] in ("accept", "borderline")
+        if (A[i]["verdict"] == "reject" and c["verdict"] == "accept"
                 and i in set(pl.get("C_audit_sample", []))):
             fn.append(i)
     pl["F"] = queue
@@ -761,72 +802,69 @@ def cmd_export(a):
     csv_path = Path(run.meta.get("csv", ""))
     output_filename = csv_path.stem if csv_path.exists() else run.name
 
-    order = {r: n for n, r in enumerate(ROLES)}
-    acc = [_row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "accept"]
-    acc.sort(key=lambda x: (order.get(x["primary_role"], 9),
-                             -float(x["confidence"] or 0), x["title"]))
-
-    out_dir = Path(a.out_dir).expanduser().resolve() if a.out_dir else DEFAULT_OUTPUT
+    out_dir = Path(a.out_dir).expanduser().resolve() if a.out_dir else run.dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    output_path = out_dir / f"{output_filename}.csv"
 
-    output_rows = []
-    for row in acc:
-        output_rows.append({
-            "dblp_key": row["dblp_key"],
-            "title": row["title"],
-            "authors": row["authors"],
-            "year": row["year"],
-            "venue": row["venue"],
-            "ee": row["ee"],
-            "url": row["url"],
-            "Role": row["primary_role"]
+    # ── Only output: <stem>-audit-all.csv ────────────────────────────────────
+    audit = []
+    for p in run.papers():
+        pid = p["id"]
+        r = fin.get(pid, {})
+        d = dos.get(pid, p)
+        audit.append({
+            "paper_id":         pid,
+            "dblp_key":         p.get("dblp_key", ""),
+            "title":            p["title"],
+            "authors":          p.get("authors", ""),
+            "year":             p.get("year", ""),
+            "venue":            p.get("venue", ""),
+            "doi":              ("https://doi.org/" + p["doi"]) if p.get("doi") else "",
+            "arxiv_url":        d.get("arxiv_url", ""),
+            "ee":               p.get("ee", ""),
+            "verdict":          r.get("verdict", ""),
+            "reject_class":     r.get("reject_class", ""),
+            "primary_role":     r.get("primary_role", ""),
+            "roles":            ";".join(r.get("roles", [])),
+            "primary_contribution": r.get("primary_contribution", ""),
+            "subject_scope":    r.get("subject_scope", ""),
+            "llm_agent":        (r.get("criteria") or {}).get("llm_agent", ""),
+            "offensive_security": (r.get("criteria") or {}).get("offensive_security", ""),
+            "black_box":        (r.get("criteria") or {}).get("black_box", ""),
+            "long_horizon":     (r.get("criteria") or {}).get("long_horizon", ""),
+            "publication_status": r.get("publication_status", ""),
+            "evidence_level":   r.get("evidence_level", ""),
+            "confidence":       r.get("confidence", ""),
+            "review_passes":    ("".join(r.get("passes", []))
+                                 if r.get("passes") != ["auto"] else "auto"),
+            "signal_score":     d.get("signal_score", ""),
+            "lane":             d.get("lane", ""),
+            "bm25_pct":         d.get("bm25_pct", ""),
+            "seed_fuzzy":       d.get("seed_fuzzy", ""),
+            "abstract_source":  d.get("abstract_source", ""),
+            "signal_flags":     ";".join(d.get("signal_flags") or []),
+            "full_text_read":   "yes" if r.get("fulltext_read") else "no",
+            "evidence_quote":   r.get("evidence", ""),
+            "reason":           r.get("reason", ""),
+            "abstract":         d.get("abstract", ""),
         })
 
-    cols = ["dblp_key", "title", "authors", "year", "venue", "ee", "url", "Role"]
-    write_csv(output_path, cols, output_rows)
-    print("Wrote filtered CSV with %d papers to: %s" % (len(output_rows), output_path))
-
-    # On-demand human-facing views
-    if a.borderline:
-        bor = []
-        for i, r in fin.items():
-            if r["verdict"] == "borderline":
-                row = _row_out(dos[i], r)
-                row["reason"] = "[%s] %s" % (r.get("borderline_reason"), r.get("reason"))
-                bor.append(row)
-        bor.sort(key=lambda x: -float(x["confidence"] or 0))
-        borderline_cols = ["paper_id", "dblp_key", "title", "authors", "year", "venue", "doi", 
-                           "arxiv_url", "ee", "url", "tier", "primary_role", "roles", 
-                           "primary_contribution", "subject_scope", "llm_agent", "offensive_security",
-                           "black_box", "long_horizon", "publication_status", "system_or_artifact_name",
-                           "attack_surfaces", "confidence", "review_passes", "full_text_read",
-                           "abstract_source", "evidence_quote", "reason", "abstract"]
-        bor_path = run.dir / f"{output_filename}-borderline.csv"
-        write_csv(bor_path, borderline_cols, bor)
-        print("Generated on-demand borderline CSV (%d rows) at: %s" % (len(bor), bor_path))
-
-    if a.audit:
-        audit = []
-        for p in run.papers():
-            r = fin[p["id"]]
-            d = dos[p["id"]]
-            audit.append({"paper_id": p["id"], "dblp_key": p["dblp_key"],
-                          "title": p["title"], "year": p["year"], "venue": p["venue"],
-                          "tier": r["verdict"], "roles": ";".join(r.get("roles", [])),
-                          "reject_class": r.get("reject_class", ""),
-                          "borderline_reason": r.get("borderline_reason", ""),
-                          "confidence": r.get("confidence", ""),
-                          "review_passes": "".join(r.get("passes", [])),
-                          "signal_score": d.get("signal_score"),
-                          "abstract_source": d.get("abstract_source"),
-                          "reason": r.get("reason", "")})
-        audit_cols = ["paper_id", "dblp_key", "title", "year", "venue", "tier",
-                      "roles", "reject_class", "borderline_reason", "confidence",
-                      "review_passes", "signal_score", "abstract_source", "reason"]
-        audit_path = run.dir / f"{output_filename}-audit-all.csv"
-        write_csv(audit_path, audit_cols, audit)
-        print("Generated on-demand audit CSV (%d rows) at: %s" % (len(audit), audit_path))
+    audit_cols = [
+        "paper_id", "dblp_key", "title", "authors", "year", "venue",
+        "doi", "arxiv_url", "ee",
+        "verdict", "reject_class", "primary_role", "roles",
+        "primary_contribution", "subject_scope",
+        "llm_agent", "offensive_security", "black_box", "long_horizon",
+        "publication_status", "evidence_level", "confidence",
+        "review_passes", "signal_score", "lane", "bm25_pct", "seed_fuzzy",
+        "abstract_source", "signal_flags", "full_text_read",
+        "evidence_quote", "reason", "abstract",
+    ]
+    audit_path = out_dir / ("%s-audit-all.csv" % output_filename)
+    write_csv(audit_path, audit_cols, audit)
+    print("Wrote audit-all CSV (%d papers) to: %s" % (len(audit), audit_path))
+    accepts = sum(1 for r in audit if r["verdict"] == "accept")
+    rejects = sum(1 for r in audit if r["verdict"] == "reject")
+    print("  accept: %d | reject: %d" % (accepts, rejects))
 
 
 # ── main CLI dispatcher ───────────────────────────────────────────────────────
@@ -909,12 +947,24 @@ def main():
     s = sub.add_parser("reconcile"); s.set_defaults(f=cmd_reconcile)
     s = sub.add_parser("validate");  s.set_defaults(f=cmd_validate)
 
+    s = sub.add_parser("prep",
+        help="combined init + enrich + signals in one call")
+    s.add_argument("--csv", required=True)
+    s.add_argument("--min-year", type=int, default=2023)
+    s.add_argument("--max-year", type=int, default=2026)
+    s.add_argument("--output-dir", default=None)
+    s.add_argument("--publication-policy", choices=["strict", "relaxed"], default="strict")
+    s.add_argument("--fresh", action="store_true")
+    s.add_argument("--workers", type=int, default=6)
+    s.add_argument("--limit",   type=int, default=0)
+    s.add_argument("--skip-s2", action="store_true")
+    s.add_argument("--all-years", action="store_true")
+    s.add_argument("--embed", choices=["auto", "on", "off"], default="auto")
+    s.set_defaults(f=cmd_prep)
+
     s = sub.add_parser("export")
     s.add_argument("--out-dir")
     s.add_argument("--force", action="store_true")
-    s.add_argument("--audit", action="store_true", help="generate on-demand audit CSV")
-    s.add_argument("--borderline", action="store_true", help="generate on-demand borderline CSV")
-    s.add_argument("--no-network", action="store_true")
     s.set_defaults(f=cmd_export)
 
     a = ap.parse_args()

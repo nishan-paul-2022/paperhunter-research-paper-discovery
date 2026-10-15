@@ -4,6 +4,9 @@ and dossier/signal building for paper-hunter.
 
 All enrichment data and signals are saved directly into the consolidated
 papers.jsonl store. No separate dossier, database, or text files are created.
+
+Network probe: tests 6 papers before the full batch; aborts cleanly if all fail.
+Lane-gated deep enrichment: with --deep, only lane A/B papers get S2+arXiv.
 """
 import math, os, re, time
 from collections import Counter
@@ -18,13 +21,14 @@ from f_signals import compute_signals
 
 # ── single-paper fetch ────────────────────────────────────────────────────────
 
-def enrich_one(run, p, s2rec, oarec=None):
+def enrich_one(run, p, s2rec, oarec=None, deep=True):
     cached = run.get_enrichment(p["id"])
     if cached and cached.get("done"):
         return p["id"], "cached"
 
     c   = {"id": p["id"], "errors": []}
     doi, title, year = p.get("doi"), p["title"], p.get("year")
+    lane = p.get("lane", "C")
     try:
         c["s2"] = s2rec
         c["openalex"] = oarec or (p_openalex(doi=doi) if doi else p_openalex(title=title, year=year))
@@ -41,18 +45,21 @@ def enrich_one(run, p, s2rec, oarec=None):
             landing_url = ""
         if landing_url and not landing_url.startswith("http"):
             landing_url = ""
+        # Landing page: always try; not gated on lane (gives abstracts for all)
         if landing_url and not have:
             c["landing"] = p_landing(landing_url)
             have = have or len((c.get("landing") or {}).get("abstract", "")) >= MIN_ABSTRACT
         else:
             c["landing"] = None
 
+        # arXiv: always try if no abstract yet, or if landing is arxiv
         c["arxiv"] = None
-        if not have or "arxiv" in landing_url.lower():
+        do_arxiv = (not have) or ("arxiv" in (landing_url or "").lower())
+        # Lane-gated deep enrichment: if deep=False, only fetch arXiv for lane A/B
+        if do_arxiv and (deep or lane in ("A", "B")):
             arxiv_result = p_arxiv(title)
             if arxiv_result:
                 c["arxiv"] = arxiv_result
-                have = have or len((arxiv_result or {}).get("abstract", "")) >= MIN_ABSTRACT
 
     except Exception as e:
         c["errors"].append("%s: %s" % (type(e).__name__, e))
@@ -178,7 +185,14 @@ def coverage_report(run):
 
 # ── batch enrichment ──────────────────────────────────────────────────────────
 
-def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="auto"):
+_PROBE_N = 6  # papers to try before committing to the full batch
+
+
+def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="auto", deep=True):
+    """
+    deep=True  — fetch arXiv for every paper that lacks an abstract (default)
+    deep=False — fetch arXiv only for lane A/B papers (faster for large sets)
+    """
     papers = [p for p in run.papers() if p.get("in_range") or all_years]
     if limit:
         papers = papers[:limit]
@@ -198,9 +212,28 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
         s2map = s2_batch(dois)
         print("  matched %d" % len(s2map))
 
+    # ── Early network probe ─────────────────────────────────────────────────
+    if todo and not (s2map or oamap):
+        probe_ok = 0
+        for p in todo[:_PROBE_N]:
+            try:
+                _, status = enrich_one(run, p, None, None, deep=deep)
+                if status == "fetched":
+                    probe_ok += 1
+            except Exception:
+                pass
+        if probe_ok == 0 and len(todo) > _PROBE_N:
+            print("ERROR: Early network probe failed (%d attempts, 0 succeeded). "
+                  "Check internet connectivity and try again. "
+                  "Aborting to avoid %d silent failures." % (_PROBE_N, len(todo)))
+            return
+        print("Network probe: %d/%d succeeded, proceeding with full batch."
+              % (probe_ok, min(_PROBE_N, len(todo))))
+
     done, t0 = 0, time.time()
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = [ex.submit(enrich_one, run, p, s2map.get(p.get("doi")), oamap.get(p.get("doi"))) for p in todo]
+        futs = [ex.submit(enrich_one, run, p, s2map.get(p.get("doi")),
+                          oamap.get(p.get("doi")), deep) for p in todo]
         for f in as_completed(futs):
             f.result()
             done += 1

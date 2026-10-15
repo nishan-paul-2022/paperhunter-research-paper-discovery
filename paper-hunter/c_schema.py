@@ -1,6 +1,10 @@
 """
 c_schema.py — constants, validator, schema definition, and shared enumerations for paper-hunter.
 Single source of truth for the paper data structure and review rules.
+
+Verdict system: accept | reject  (no borderline, no needs_manual)
+Criteria values: yes | partial | no | unknown
+Evidence levels: title_only | abstract | publisher_page | full_text
 """
 import difflib, re, unicodedata
 from collections import defaultdict
@@ -10,8 +14,9 @@ ROLE_TO_CONTRIB     = {"baseline": "agent_system", "baseline_candidate": "agent_
                        "benchmark": "benchmark_dataset", "evaluation": "evaluation_study",
                        "survey": "survey"}
 CONTRIBS            = ["agent_system", "benchmark_dataset", "evaluation_study", "survey", "other"]
-VERDICTS            = ["accept", "borderline", "reject"]
-YNU                 = ["yes", "no", "unclear"]
+VERDICTS            = ["accept", "reject"]  # no borderline, no needs_manual
+YNU                 = ["yes", "no", "unclear"]  # legacy compat
+YNPU                = ["yes", "partial", "no", "unknown"]  # full criteria value set
 SCOPES              = ["core", "broad", "adjacent", "none"]
 PUB_STATUS          = ["published", "workshop_archival_toplevel", "workshop_other",
                        "preprint_only", "thesis_or_report", "unknown"]
@@ -20,13 +25,11 @@ REJECT_CLASSES      = ["off_domain", "security_other", "defensive_only",
                        "vuln_detection_or_code_scan", "generic_llm_security",
                        "static_qa_benchmark", "llm_no_offense",
                        "out_of_range", "duplicate", "retracted", "other"]
-BORDER_REASONS      = ["adjacent_non_llm", "adjacent_single_shot", "adjacent_advisory_only",
-                       "adjacent_defensive", "scope_broad", "not_peer_reviewed",
-                       "workshop_unverified", "evidence_insufficient",
-                       "criteria_unclear", "role_unclear", "other"]
 ABSTRACT_SOURCES    = ["crossref", "openalex", "semanticscholar", "landing_page", "arxiv",
                        "manual_web", "fulltext", "none"]
 EVIDENCE_SOURCES    = ["abstract", "title", "fulltext", "web"]
+EVIDENCE_LEVELS     = ["title_only", "abstract", "publisher_page", "full_text"]  # deepest thing read
+EVIDENCE_LEVELS_DEEP = {"publisher_page", "full_text"}  # required for baseline
 
 # ── Consolidated Paper Store Schema ───────────────────────────────────────────
 # Every paper record in papers.jsonl has this unified structure:
@@ -172,7 +175,7 @@ def quote_in(quote, hay):
     return m.size >= 0.92 * len(q)
 
 
-def validate_record(run, r, pass_, policy, dos=None):
+def validate_record(run, r, pass_, policy, dos=None, lane=None):
     """Validate a single decision dict. Returns list of error strings (empty = ok)."""
     errs = []
     if dos is None:
@@ -199,12 +202,13 @@ def validate_record(run, r, pass_, policy, dos=None):
                    "vuln_detection_or_code_scan", "generic_llm_security",
                    "static_qa_benchmark"))
     for k in ("llm_agent", "offensive_security", "black_box", "long_horizon"):
-        if crit.get(k) not in YNU:
+        # Accept both legacy (yes/no/unclear) and new (yes/partial/no/unknown) values
+        if crit.get(k) not in YNPU + ["unclear"]:
             if off_domain and k not in crit:
                 crit[k] = "no"
                 r["criteria"] = crit
             else:
-                errs.append("criteria.%s must be yes|no|unclear" % k)
+                errs.append("criteria.%s must be one of %s" % (k, YNPU))
     if not isinstance(r.get("confidence"), (int, float)) or not (0 <= r["confidence"] <= 1):
         errs.append("confidence must be a number 0..1")
     reason = (r.get("reason") or "").strip()
@@ -218,7 +222,29 @@ def validate_record(run, r, pass_, policy, dos=None):
         errs.append("publication_status must be one of %s" % PUB_STATUS)
     if not isinstance(r.get("fulltext_read"), bool):
         errs.append("fulltext_read must be true/false")
-    # evidence
+
+    # ── evidence_level (new field) ────────────────────────────────────────
+    ev_level = r.get("evidence_level")
+    if ev_level is not None and ev_level not in EVIDENCE_LEVELS:
+        errs.append("evidence_level must be one of %s" % EVIDENCE_LEVELS)
+
+    # ── lane-aware title_only rules ───────────────────────────────────────
+    if ev_level == "title_only" or r.get("evidence_source") == "title":
+        # Use lane from signal record if not passed directly
+        _lane = lane or d.get("lane", "C")
+        if _lane in ("A", "B"):
+            errs.append(
+                "lane %s papers cannot be rejected on title alone; "
+                "obtain an abstract via DOI or web before deciding" % _lane)
+        elif v == "reject":
+            flags = r.get("flags") or []
+            if "title_only_offtopic" not in flags:
+                errs.append(
+                    "title_only reject requires flag 'title_only_offtopic' "
+                    "(only allowed for lane C papers whose title is unambiguously "
+                    "non-security/non-LLM after >=2 source attempts)")
+
+    # evidence quote
     ev, es = (r.get("evidence") or "").strip(), r.get("evidence_source")
     if es not in EVIDENCE_SOURCES:
         errs.append("evidence_source must be one of %s" % EVIDENCE_SOURCES)
@@ -233,15 +259,13 @@ def validate_record(run, r, pass_, policy, dos=None):
             "- copy it exactly (or use ph.py fulltext first)" % (es, pid))
     if es == "fulltext" and r.get("fulltext_read") is False:
         errs.append("evidence_source=fulltext but fulltext_read=false")
+
     # verdict logic
     if v == "reject":
         if r.get("reject_class") not in REJECT_CLASSES:
             errs.append("reject needs reject_class in %s" % REJECT_CLASSES)
         if roles:
             errs.append("reject must have roles=[]")
-    if v == "borderline":
-        if r.get("borderline_reason") not in BORDER_REASONS:
-            errs.append("borderline needs borderline_reason in %s" % BORDER_REASONS)
     if v == "accept":
         if not roles:
             errs.append("accept needs at least one role")
@@ -266,32 +290,31 @@ def validate_record(run, r, pass_, policy, dos=None):
                    for k in ("llm_agent", "offensive_security", "black_box", "long_horizon")):
                 errs.append(
                     "baseline requires ALL FOUR criteria = yes "
-                    "(3 and 4 under their soft definitions, on positive evidence)")
+                    "(3 and 4 under their soft definitions, on positive evidence). "
+                    "If 3/4 are only partial/unknown use role baseline_candidate.")
             if r.get("publication_status") not in PUB_OK_STRICT:
                 errs.append(
                     "baseline requires publication_status published or workshop_archival_toplevel")
+            # evidence_level gate: baseline must be verified on publisher page or full text
+            if ev_level is not None and ev_level not in EVIDENCE_LEVELS_DEEP:
+                errs.append(
+                    "baseline requires evidence_level publisher_page or full_text "
+                    "(open the publisher page to confirm before accepting as baseline)")
         # ── baseline_candidate (partial criteria) ─────────────────────────
         if "baseline_candidate" in roles:
             if r.get("primary_role") not in ("baseline_candidate", "baseline"):
                 errs.append(
                     "baseline_candidate as a role requires primary_role=baseline_candidate "
-                    "(use this when criteria 3 or 4 are only 'partial' or 'unclear')")
+                    "(use this when criteria 3 or 4 are only 'partial' or 'unknown')")
             if pc != "agent_system":
                 errs.append(
-                    "baseline_candidate requires primary_contribution=agent_system "
-                    "(it IS an agent system, just with uncertain setting/horizon evidence)")
+                    "baseline_candidate requires primary_contribution=agent_system")
             if crit.get("llm_agent") != "yes" or crit.get("offensive_security") != "yes":
                 errs.append(
                     "baseline_candidate requires llm_agent=yes AND offensive_security=yes; "
-                    "criteria 3/4 may be partial/unclear")
+                    "criteria 3/4 may be partial/unknown")
         if r.get("subject_scope") not in ("core", "broad"):
             errs.append("accept requires subject_scope core or broad")
-        if (r.get("publication_status") not in PUB_OK_STRICT and policy == "strict"
-                and "baseline" in roles):
-            errs.append(
-                "publication_policy=strict: status %r cannot be a baseline - "
-                "use verdict=borderline, borderline_reason=not_peer_reviewed/workshop_unverified"
-                % r.get("publication_status"))
         if d.get("retracted"):
             errs.append("paper looks retracted")
     if pass_ == "F" and r.get("needs_deep_dive"):
