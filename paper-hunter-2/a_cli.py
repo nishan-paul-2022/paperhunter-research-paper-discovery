@@ -31,7 +31,7 @@ from collections import Counter
 from pathlib import Path
 
 # ── package imports (relative path removed, direct imports) ───────────────────
-from b_io      import (Run, ROOT, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
+from b_io      import (Run, TOOLS_DIR, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
                          append_jsonl, read_json, write_json, write_csv, norm, clean_title)
 from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNU, SCOPES,
                          PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES, BORDER_REASONS,
@@ -84,7 +84,7 @@ def cmd_init(a):
     run_dir = RUNS_DIR / name
     if run_dir.exists() and not a.fresh:
         print("run %s already exists - resuming it (use --fresh to wipe)" % name)
-        (ROOT / ".current").write_text(str(src.resolve()))
+        (TOOLS_DIR / ".current").write_text(str(src.resolve()))
         return cmd_status(argparse.Namespace(run=name))
     if run_dir.exists() and a.fresh:
         shutil.rmtree(run_dir)
@@ -131,7 +131,7 @@ def cmd_init(a):
             "output_dir": str(Path(a.output_dir).expanduser().resolve()) if a.output_dir else str(DEFAULT_OUTPUT),
             "publication_policy": a.publication_policy}
     write_json(run_dir / "meta.json", meta)
-    (ROOT / ".current").write_text(str(src.resolve()))
+    (TOOLS_DIR / ".current").write_text(str(src.resolve()))
     n_dup = sum(1 for p in papers if p.get("dup_of"))
     n_oor = sum(1 for p in papers if not p["in_range"])
     n_doi = sum(1 for p in papers if p["doi"])
@@ -762,25 +762,23 @@ def cmd_export(a):
     fin = {r["id"]: r for r in read_jsonl(run.dir / "final.jsonl")}
     dos = run.dossiers()
     
-    # Output directory: paper-reference/
-    out_dir = ROOT.parent / "paper-reference"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
     # Get original CSV filename
     csv_path = Path(run.meta.get("csv", ""))
-    output_filename = csv_path.name if csv_path.exists() else f"{run.name}.csv"
-    output_path = out_dir / output_filename
+    output_filename = csv_path.stem if csv_path.exists() else run.name
     
-    # Get accepted papers only
+    # Prepare accepted papers for paper-reference
     order = {r: n for n, r in enumerate(ROLES)}
     acc = [_row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "accept"]
     acc.sort(key=lambda x: (order.get(x["primary_role"], 9),
                              -float(x["confidence"] or 0), x["title"]))
     
-    # Prepare output rows with original CSV columns + Role
+    # Output filtered CSV to paper-reference/
+    out_dir = DEFAULT_OUTPUT
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / f"{output_filename}.csv"
+    
     output_rows = []
     for row in acc:
-        # Keep original CSV columns + add Role
         output_row = {
             "dblp_key": row["dblp_key"],
             "title": row["title"],
@@ -789,15 +787,53 @@ def cmd_export(a):
             "venue": row["venue"],
             "ee": row["ee"],
             "url": row["url"],
-            "Role": row["primary_role"]  # Add Role column
+            "Role": row["primary_role"]
         }
         output_rows.append(output_row)
     
-    # Write filtered CSV with Role column
     cols = ["dblp_key", "title", "authors", "year", "venue", "ee", "url", "Role"]
     write_csv(output_path, cols, output_rows)
     
+    # Save borderline and audit CSV to paper-dump (run directory)
+    bor = []
+    for i, r in fin.items():
+        if r["verdict"] == "borderline":
+            row = _row_out(dos[i], r)
+            row["reason"] = "[%s] %s" % (r.get("borderline_reason"), r.get("reason"))
+            bor.append(row)
+    bor.sort(key=lambda x: -float(x["confidence"] or 0))
+    
+    audit = []
+    for p in run.papers():
+        r = fin[p["id"]]
+        d = dos[p["id"]]
+        audit.append({"paper_id": p["id"], "dblp_key": p["dblp_key"],
+                      "title": p["title"], "year": p["year"], "venue": p["venue"],
+                      "tier": r["verdict"], "roles": ";".join(r.get("roles", [])),
+                      "reject_class": r.get("reject_class", ""),
+                      "borderline_reason": r.get("borderline_reason", ""),
+                      "confidence": r.get("confidence", ""),
+                      "review_passes": "".join(r.get("passes", [])),
+                      "signal_score": d.get("signal_score"),
+                      "abstract_source": d.get("abstract_source"),
+                      "reason": r.get("reason", "")})
+    
+    # Write borderline and audit to paper-dump
+    borderline_cols = ["paper_id", "dblp_key", "title", "authors", "year", "venue", "doi", 
+                       "arxiv_url", "ee", "url", "tier", "primary_role", "roles", 
+                       "primary_contribution", "subject_scope", "llm_agent", "offensive_security",
+                       "black_box", "long_horizon", "publication_status", "system_or_artifact_name",
+                       "attack_surfaces", "confidence", "review_passes", "full_text_read",
+                       "abstract_source", "evidence_quote", "reason", "abstract"]
+    
+    write_csv(run.dir / f"{output_filename}-borderline.csv", borderline_cols, bor)
+    write_csv(run.dir / f"{output_filename}-audit-all.csv", 
+              ["paper_id", "dblp_key", "title", "year", "venue", "tier",
+               "roles", "reject_class", "borderline_reason", "confidence",
+               "review_passes", "signal_score", "abstract_source", "reason"], audit)
+    
     print("Wrote filtered CSV with %d papers to: %s" % (len(output_rows), output_path))
+    print("Wrote borderline (%d) and audit (%d) CSVs to: %s" % (len(bor), len(audit), run.dir))
 
 
 # ── selftest (Change 2) ───────────────────────────────────────────────────────

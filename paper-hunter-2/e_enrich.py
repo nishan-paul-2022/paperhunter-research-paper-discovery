@@ -158,9 +158,9 @@ def coverage_report(run):
         print("  -> you must look these up yourself (web search / fetch the DOI page) "
               "and store with `ph.py fill`.")
         print("  ids: " + " ".join(miss[:400]) + (" ..." if len(miss) > 400 else ""))
-        (run.dir / "missing_abstracts.txt").write_text("\n".join(miss))
+        (run.dir / "missing-abstracts.txt").write_text("\n".join(miss))
     else:
-        (run.dir / "missing_abstracts.txt").write_text("")
+        (run.dir / "missing-abstracts.txt").write_text("")
 
 
 # ── batch enrichment ──────────────────────────────────────────────────────────

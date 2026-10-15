@@ -22,7 +22,5 @@ Thumbs.db
 paper-database/dblp.xml
 paper-database/dblp.xml.gz
 
-# Pipeline working directories
-paper-hunter/work/
-paper-hunter/output/
-paper-hunter-2/runs/
+# Data dumps and run caches
+paper-dump/

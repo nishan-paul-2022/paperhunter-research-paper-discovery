@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 TOOLS_DIR  = Path(__file__).resolve().parent          # paper-hunter-2/
-ROOT       = TOOLS_DIR                                 # paper-hunter-2/
-RUNS_DIR   = ROOT / "runs"
-DEFAULT_OUTPUT = ROOT / "output"
+ROOT       = TOOLS_DIR.parent                          # paperhunter-research-paper-discovery/
+RUNS_DIR   = ROOT / "paper-dump"
+DEFAULT_OUTPUT = ROOT / "paper-reference"
 
 MIN_ABSTRACT = 120
 
@@ -98,8 +98,8 @@ def write_csv(path, cols, rows):
 class Run:
     def __init__(self, name=None):
         if not name:
-            # Read CSV path from .current file in root
-            cur = ROOT / ".current"
+            # Read CSV path from .current file in paper-hunter-2/
+            cur = TOOLS_DIR / ".current"
             if not cur.exists():
                 raise SystemExit(
                     "ERROR: no active run. Create .current file with CSV path")
@@ -117,13 +117,13 @@ class Run:
         self.dossier_path = self.dir / "dossiers.jsonl"
         self.cache_dir    = self.dir / "cache"
         self.manual_dir   = self.dir / "manual"
-        self.fulltext_dir = self.dir / "fulltext"
+        self.fulltext_dir = self.dir / "full-text"
         self.plans_path   = self.dir / "plans.json"
         self.meta         = read_json(self.dir / "meta.json", {})
         self._dos         = None
 
     def dec_path(self, p):
-        return self.dir / ("decisions_%s.jsonl" % p)
+        return self.dir / ("decisions-%s.jsonl" % p.lower())
 
     def papers(self):
         return read_jsonl(self.papers_path)
