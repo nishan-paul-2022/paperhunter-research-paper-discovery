@@ -19,10 +19,11 @@ from f_signals import compute_signals
 # ── single-paper fetch ────────────────────────────────────────────────────────
 
 def enrich_one(run, p, s2rec, oarec=None):
-    cpath = run.cache_dir / ("%s.json" % p["id"])
-    c = read_json(cpath, {})
-    if c.get("done"):
+    # Check unified cache first
+    cached = run.get_enrichment(p["id"])
+    if cached and cached.get("done"):
         return p["id"], "cached"
+    
     c   = {"id": p["id"], "errors": []}
     doi, title, year = p.get("doi"), p["title"], p.get("year")
     try:
@@ -53,7 +54,9 @@ def enrich_one(run, p, s2rec, oarec=None):
         c["errors"].append("%s: %s" % (type(e).__name__, e))
     c["done"]       = True
     c["fetched_at"] = now()
-    write_json(cpath, c)
+    
+    # Save to unified cache
+    run.save_enrichment(p["id"], c)
     return p["id"], "fetched"
 
 
@@ -135,9 +138,10 @@ def _merge_one(p, c, manual):
 
 def build_dossiers(run, embed="auto"):
     rows = []
+    enrichment_index = run.enrichment_index()
     for p in run.papers():
-        c = read_json(run.cache_dir / ("%s.json" % p["id"]), {}) or {}
-        m = read_json(run.manual_dir / ("%s.json" % p["id"]), {}) or {}
+        c = enrichment_index.get(p["id"], {})
+        m = run.get_manual_override(p["id"])
         rows.append(_merge_one(p, c, m))
     sig = compute_signals(rows, embed=embed)
     for r, s in zip(rows, sig):
@@ -169,8 +173,11 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
     papers = [p for p in run.papers() if p.get("in_range") or all_years]
     if limit:
         papers = papers[:limit]
-    todo = [p for p in papers
-            if not (read_json(run.cache_dir / ("%s.json" % p["id"]), {}) or {}).get("done")]
+    
+    # Load enrichment index to check what's done
+    enrichment_index = run.enrichment_index()
+    todo = [p for p in papers if not enrichment_index.get(p["id"], {}).get("done")]
+    
     print("enrich: %d papers, %d still to fetch" % (len(papers), len(todo)))
     dois = sorted({p["doi"] for p in todo if p.get("doi")})
     oa_cache_file = run.dir / "openalex_batch.json"
@@ -197,5 +204,19 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
             done += 1
             if done % 200 == 0 or done == len(todo):
                 print("  %d/%d  (%.0fs)" % (done, len(todo), time.time() - t0), flush=True)
+    
     build_dossiers(run, embed=embed)
     coverage_report(run)
+    
+    # Update state tracking
+    try:
+        run.update_state(
+            current_stage="enrichment_complete",
+            stages={**run.state()["stages"], "enrichment": {
+                "status": "completed",
+                "completed_at": now(),
+                "papers_enriched": len(papers)
+            }}
+        )
+    except Exception:
+        pass  # State tracking is optional

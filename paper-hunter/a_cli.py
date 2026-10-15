@@ -182,7 +182,7 @@ def cmd_fill(a):
     run = Run(a.run)
     if a.id not in {p["id"] for p in run.papers()}:
         die("unknown id " + a.id)
-    m  = read_json(run.manual_dir / ("%s.json" % a.id), {}) or {}
+    m  = run.get_manual_override(a.id)
     ab = a.abstract
     if a.abstract_file:
         ab = Path(a.abstract_file).read_text(encoding="utf-8")
@@ -197,7 +197,7 @@ def cmd_fill(a):
         m["notes"] = a.notes
     if a.url:
         m["url"] = a.url
-    write_json(run.manual_dir / ("%s.json" % a.id), m)
+    run.save_manual_override(a.id, m)
     build_dossiers(run, embed="off")
     print("stored for %s (abstract_source=%s)" % (a.id, run.dossiers()[a.id]["abstract_source"]))
 
@@ -462,13 +462,24 @@ def cmd_record(a):
         r["pass"], r["ts"] = p, now()
         if r["verdict"] == "reject":
             r["roles"] = []
-        append_jsonl(run.dec_path(p), r)
+        
+        # Save to unified decision log
+        run.save_decision(r)
         ok += 1
+    
     print("recorded %d, rejected %d (fix the rejected ones and resend only those)"
           % (ok, bad))
     if plan is not None:
         dec = run.decisions(p)
         print("pass %s: %d/%d done" % (p, sum(1 for i in plan if i in dec), len(plan)))
+    
+    # Update state tracking
+    try:
+        passes = run.state()["passes"]
+        passes[p]["completed"] = sum(1 for d in run.decisions(p).values())
+        run.update_state(passes=passes)
+    except Exception:
+        pass  # State tracking is optional
 
 
 # ── fulltext ──────────────────────────────────────────────────────────────────

@@ -119,15 +119,15 @@ class Run:
         self.enrichment_db_path = self.dir / "enrichment.db.jsonl"
         self.decisions_path = self.dir / "decisions.jsonl"
         self.state_path = self.dir / "state.json"
-        # Legacy paths for backward compatibility
-        self.cache_dir    = self.dir / "cache"
-        self.manual_dir   = self.dir / "manual"
+        self.manual_overrides_path = self.dir / "manual-overrides.jsonl"
+        # Legacy
+        self.cache_dir = self.dir / "cache"
+        self.manual_dir = self.dir / "manual"
         self.fulltext_dir = self.dir / "full-text"
-        self.plans_path   = self.dir / "plans.json"
-        self.meta         = read_json(self.dir / "meta.json", {})
         self._dos         = None
         self._enrichment_index = None
         self._state = None
+        self._meta = None
 
     def dec_path(self, p):
         """Legacy method for backward compatibility"""
@@ -175,22 +175,14 @@ class Run:
 
     def decisions(self, p=None):
         """Get decisions, optionally filtered by pass"""
-        # Try new unified log first
-        if self.decisions_path.exists():
-            decisions = {}
-            for record in read_jsonl(self.decisions_path):
-                if p is None or record.get("pass") == p:
-                    # Latest decision wins for each paper
-                    decisions[record["id"]] = record
-            return decisions
-        # Fall back to legacy per-pass files
-        elif p is not None:
-            d = {}
-            for r in read_jsonl(self.dec_path(p)):
-                d[r["id"]] = r
-            return d
-        else:
+        if not self.decisions_path.exists():
             return {}
+        decisions = {}
+        for record in read_jsonl(self.decisions_path):
+            if p is None or record.get("pass") == p:
+                # Latest decision wins for each paper
+                decisions[record["id"]] = record
+        return decisions
 
     def save_decision(self, decision):
         """Append decision to unified log"""
@@ -210,11 +202,86 @@ class Run:
         state.update(kwargs)
         write_json(self.state_path, state)
         self._state = state
+    
+    @property
+    def meta(self):
+        """Get metadata"""
+        if self._meta is None:
+            self._meta = self.state().get("meta", {})
+        return self._meta
+
+    def get_manual_override(self, paper_id):
+        """Get manual override data for a paper"""
+        if not self.manual_overrides_path.exists():
+            # Try legacy folder
+            legacy_file = self.manual_dir / f"{paper_id}.json"
+            if legacy_file.exists():
+                return read_json(legacy_file, {})
+            return {}
+        
+        for record in read_jsonl(self.manual_overrides_path):
+            if record.get("id") == paper_id:
+                return record
+        return {}
+    
+    def save_manual_override(self, paper_id, data):
+        """Save manual override data"""
+        # Read existing overrides
+        existing = {}
+        if self.manual_overrides_path.exists():
+            for record in read_jsonl(self.manual_overrides_path):
+                existing[record["id"]] = record
+        
+        # Update or add
+        data["id"] = paper_id
+        existing[paper_id] = data
+        
+        # Write back
+        write_jsonl(self.manual_overrides_path, list(existing.values()))
+    
+    def get_fulltext(self, paper_id):
+        """Get fulltext for a paper"""
+        if not self.fulltext_db_path.exists():
+            # Try legacy folder
+            legacy_file = self.fulltext_dir / f"{paper_id}.txt"
+            if legacy_file.exists():
+                return legacy_file.read_text(encoding="utf-8", errors="replace")
+            return None
+        
+        for record in read_jsonl(self.fulltext_db_path):
+            if record.get("id") == paper_id:
+                return record.get("text", "")
+        return None
+    
+    def save_fulltext(self, paper_id, text, source=""):
+        """Save fulltext"""
+        # Read existing
+        existing = {}
+        if self.fulltext_db_path.exists():
+            for record in read_jsonl(self.fulltext_db_path):
+                existing[record["id"]] = record
+        
+        # Update or add
+        existing[paper_id] = {
+            "id": paper_id,
+            "text": text,
+            "source": source,
+            "ts": now()
+        }
+        
+        # Write back
+        write_jsonl(self.fulltext_db_path, list(existing.values()))
 
     def _default_state(self):
         """Default state structure"""
+        meta_file = self.dir / "meta.json"
+        meta = read_json(meta_file, {}) if meta_file.exists() else {}
+        plans_file = self.dir / "plans.json"
+        plans = read_json(plans_file, {}) if plans_file.exists() else {}
         return {
             "version": "2.0",
+            "meta": meta,
+            "plans": plans,
             "current_stage": "init",
             "stages": {
                 "enrichment": {"status": "not_started"},
@@ -234,10 +301,13 @@ class Run:
         }
 
     def plans(self):
-        return read_json(self.plans_path, {})
+        return self.state().get("plans", {})
 
     def save_plans(self, pl):
-        write_json(self.plans_path, pl)
+        state = self.state()
+        state["plans"] = pl
+        write_json(self.state_path, state)
+        self._state = state
 
     def eligible(self):
         return [p["id"] for p in self.papers() if p.get("in_range") and not p.get("dup_of")]
