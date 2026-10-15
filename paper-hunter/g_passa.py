@@ -920,7 +920,7 @@ def run_pass_a(run):
 
     run.save_papers()
     print(
-        "Pass A complete! All %d decisions recorded in consolidated papers.jsonl"
+        "Pass A complete! All %d decisions recorded in database"
         % len(order)
     )
 

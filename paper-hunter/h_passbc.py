@@ -65,7 +65,7 @@ def run_pass(pass_name, run_name=None):
 
     run.save_papers()
     print(
-        "Pass %s complete: %d decisions saved to consolidated papers.jsonl (errors: %d)"
+        "Pass %s complete: %d decisions saved to database (errors: %d)"
         % (pass_name, len(ids), errors)
     )
 

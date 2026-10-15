@@ -2,7 +2,7 @@ import difflib
 import re
 import unicodedata
 
-ROLES = ["baseline", "baseline_candidate", "benchmark", "evaluation", "survey"]
+ROLES = ["baseline", "benchmark", "evaluation", "survey"]
 ROLE_TO_CONTRIB = {
     "baseline": "agent_system",
     "baseline_candidate": "agent_system",
@@ -162,6 +162,11 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
     if v not in VERDICTS:
         errs.append("verdict must be one of %s" % VERDICTS)
     roles = r.get("roles", [])
+    if isinstance(roles, list):
+        roles = ["baseline" if x == "baseline_candidate" else x for x in roles]
+        r["roles"] = roles
+    if r.get("primary_role") == "baseline_candidate":
+        r["primary_role"] = "baseline"
     if not isinstance(roles, list) or any(x not in ROLES for x in roles):
         errs.append("roles must be a list drawn from %s" % ROLES)
         roles = []

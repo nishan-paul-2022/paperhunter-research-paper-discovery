@@ -20,7 +20,6 @@ from b_io import (
     norm,
     now,
     write_csv,
-    write_jsonl,
 )
 from c_schema import (
     validate_record,
@@ -93,13 +92,17 @@ def cmd_init(a):
 
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", src.stem)
     run_dir = RUNS_DIR / name
-    if run_dir.exists() and not a.fresh:
+    db_file = RUNS_DIR / f"{name}.db"
+    if (db_file.exists() or run_dir.exists()) and not a.fresh:
         print("run %s already exists - resuming it (use --fresh to wipe)" % name)
         (TOOLS_DIR / ".current").write_text(str(src.resolve()))
         return cmd_status(argparse.Namespace(run=name))
-    if run_dir.exists() and a.fresh:
-        shutil.rmtree(run_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
+    if a.fresh:
+        if db_file.exists():
+            db_file.unlink()
+        if run_dir.exists():
+            shutil.rmtree(run_dir)
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
     papers, seen_doi, seen_title = [], {}, {}
     for i, row in enumerate(rdr, 1):
@@ -150,7 +153,9 @@ def cmd_init(a):
                 seen_doi[doi] = pid
             seen_title[nt] = pid
         papers.append(p)
-    write_jsonl(run_dir / "papers.jsonl", papers)
+
+    run = Run(name)
+    run.init_papers(papers)
 
     meta = {
         "csv": str(src.resolve()),
@@ -166,7 +171,6 @@ def cmd_init(a):
         ),
         "publication_policy": a.publication_policy,
     }
-    run = Run(name)
     run.update_state(meta=meta)
     (TOOLS_DIR / ".current").write_text(str(src.resolve()))
 
@@ -823,7 +827,7 @@ def cmd_fulltext(a):
         )
         return
     print(
-        "FULL TEXT for %s stored in papers.jsonl (%d chars, source: %s)"
+        "FULL TEXT for %s stored in database (%d chars, source: %s)"
         % (a.id, len(text), src)
     )
     heads = [
@@ -1061,7 +1065,7 @@ def cmd_reconcile(a):
 
     run.save_final(final)
     print(
-        "final verdicts recorded in papers.jsonl: %s"
+        "final verdicts recorded in database: %s"
         % dict(Counter(r["verdict"] for r in final))
     )
     try:
@@ -1080,7 +1084,7 @@ def cmd_validate(a):
     run = Run(a.run)
     fin = run.final_decisions()
     if not fin:
-        die("no final decisions in papers.jsonl - run reconcile first")
+        die("no final decisions in database - run reconcile first")
     policy = run.meta.get("publication_policy", "strict")
     errs = []
     for p in run.papers():
@@ -1250,22 +1254,24 @@ def cmd_export(a):
         "reason",
         "abstract",
     ]
-    audit_path = out_dir / ("%s-audit-all.csv" % output_filename)
-    write_csv(audit_path, audit_cols, audit)
+    run.save_audit(audit)
     accepts = sum(1 for r in audit if r["verdict"] == "accept")
     rejects = sum(1 for r in audit if r["verdict"] == "reject")
     print(
-        "Wrote audit-all CSV (%d papers, accept: %d, reject: %d) to: %s"
-        % (len(audit), accepts, rejects, audit_path)
+        "Recorded audit in %s (%d papers, accept: %d, reject: %d)"
+        % (run.db_path.name, len(audit), accepts, rejects)
     )
+    if getattr(a, "out_dir", None):
+        audit_path = Path(a.out_dir).expanduser().resolve() / ("%s-audit-all.csv" % output_filename)
+        write_csv(audit_path, audit_cols, audit)
+        print("Wrote audit-all CSV to: %s" % audit_path)
 
     paper_url = {p["id"]: p.get("url", "") for p in run.papers()}
     role_order = {
         "baseline": 0,
-        "baseline_candidate": 1,
-        "benchmark": 2,
-        "evaluation": 3,
-        "survey": 4,
+        "benchmark": 1,
+        "evaluation": 2,
+        "survey": 3,
     }
     accepted = sorted(
         [row for row in audit if row["verdict"] == "accept"],
