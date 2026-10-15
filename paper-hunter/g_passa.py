@@ -226,6 +226,8 @@ def judge_paper(d, pass_name="A"):
             "pass": pass_name, "ts": now()
         }
 
+    flags_offtopic = ["title_only_offtopic"] if (not has_abstract and lane == "C") else []
+
     # CASE 4: Rejections by class
     if RX_JAILBREAK.search(full_text):
         return {
@@ -234,7 +236,7 @@ def judge_paper(d, pass_name="A"):
             "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
             "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
             "evidence": ev, "evidence_source": ev_source, "evidence_url": "",
-            "evidence_level": ev_level, "flags": [],
+            "evidence_level": ev_level, "flags": flags_offtopic,
             "reason": "Focuses on LLM safety alignment, adversarial prompt attacks, jailbreaks, or model watermarking, outside autonomous penetration testing.",
             "confidence": 0.95, "abstract_source": d.get("abstract_source", "none"),
             "fulltext_read": False, "needs_deep_dive": False, "pass": pass_name, "ts": now()
@@ -247,7 +249,7 @@ def judge_paper(d, pass_name="A"):
             "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
             "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
             "evidence": ev, "evidence_source": ev_source, "evidence_url": "",
-            "evidence_level": ev_level, "flags": [],
+            "evidence_level": ev_level, "flags": flags_offtopic,
             "reason": "Focuses on static code vulnerability detection or software bug classification without autonomous target attack execution.",
             "confidence": 0.95, "abstract_source": d.get("abstract_source", "none"),
             "fulltext_read": False, "needs_deep_dive": False, "pass": pass_name, "ts": now()
@@ -260,7 +262,7 @@ def judge_paper(d, pass_name="A"):
             "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
             "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
             "evidence": ev, "evidence_source": ev_source, "evidence_url": "",
-            "evidence_level": ev_level, "flags": [],
+            "evidence_level": ev_level, "flags": flags_offtopic,
             "reason": "Focuses exclusively on blue-team intrusion detection, malware classification, or defensive network traffic analysis.",
             "confidence": 0.95, "abstract_source": d.get("abstract_source", "none"),
             "fulltext_read": False, "needs_deep_dive": False, "pass": pass_name, "ts": now()
@@ -273,16 +275,14 @@ def judge_paper(d, pass_name="A"):
             "criteria": {"llm_agent": "no", "offensive_security": "no", "black_box": "no", "long_horizon": "no"},
             "publication_status": pub_status if pub_status in ("published", "workshop_archival_toplevel") else "published",
             "evidence": ev, "evidence_source": ev_source, "evidence_url": "",
-            "evidence_level": ev_level, "flags": [],
+            "evidence_level": ev_level, "flags": flags_offtopic,
             "reason": "Covers non-offensive security topics such as cryptography, hardware/firmware security, authentication, or protocol analysis.",
             "confidence": 0.90, "abstract_source": d.get("abstract_source", "none"),
             "fulltext_read": False, "needs_deep_dive": False, "pass": pass_name, "ts": now()
         }
 
     # title-only reject for lane C only
-    flags_out = []
-    if not has_abstract and lane == "C":
-        flags_out.append("title_only_offtopic")
+    flags_out = flags_offtopic
 
     return {
         "id": pid, "verdict": "reject", "reject_class": "off_domain",

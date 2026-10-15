@@ -21,3 +21,5 @@ Thumbs.db
 # DBLP paper-database files
 paper-database/dblp.xml
 paper-database/dblp.xml.gz
+
+paper-supplement/
