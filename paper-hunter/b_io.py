@@ -74,16 +74,43 @@ CREATE INDEX IF NOT EXISTS idx_papers_in_range ON papers(in_range);
 CREATE TABLE IF NOT EXISTS decisions (
     paper_id        TEXT REFERENCES papers(id),
     pass_name       TEXT,
+    verdict         TEXT,
+    reject_class    TEXT,
+    primary_role    TEXT,
+    confidence      REAL,
     blob            TEXT,
     PRIMARY KEY (paper_id, pass_name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_decisions_pass ON decisions(pass_name);
+CREATE INDEX IF NOT EXISTS idx_decisions_pass_verdict ON decisions(pass_name, verdict);
 
 CREATE TABLE IF NOT EXISTS final_decisions (
     paper_id        TEXT PRIMARY KEY REFERENCES papers(id),
+    verdict         TEXT,
+    reject_class    TEXT,
+    primary_role    TEXT,
+    roles           TEXT,
+    primary_contribution TEXT,
+    subject_scope   TEXT,
+    llm_agent       TEXT,
+    offensive_security TEXT,
+    black_box       TEXT,
+    long_horizon    TEXT,
+    publication_status TEXT,
+    evidence_level  TEXT,
+    confidence      REAL,
+    review_passes   TEXT,
+    full_text_read  TEXT,
+    evidence_quote  TEXT,
+    reason          TEXT,
+    system_name     TEXT,
+    attack_surfaces TEXT,
     blob            TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_final_verdict ON final_decisions(verdict);
+CREATE INDEX IF NOT EXISTS idx_final_role ON final_decisions(primary_role);
 
 CREATE TABLE IF NOT EXISTS manual_overrides (
     paper_id        TEXT PRIMARY KEY REFERENCES papers(id),
@@ -95,44 +122,57 @@ CREATE TABLE IF NOT EXISTS pipeline_state (
     value           TEXT
 );
 
-CREATE TABLE IF NOT EXISTS audit (
-    paper_id            TEXT PRIMARY KEY REFERENCES papers(id),
-    dblp_key            TEXT,
-    title               TEXT,
-    authors             TEXT,
-    year                INTEGER,
-    venue               TEXT,
-    doi                 TEXT,
-    arxiv_url           TEXT,
-    ee                  TEXT,
-    verdict             TEXT,
-    reject_class        TEXT,
-    primary_role        TEXT,
-    roles               TEXT,
-    primary_contribution TEXT,
-    subject_scope       TEXT,
-    llm_agent           TEXT,
-    offensive_security  TEXT,
-    black_box           TEXT,
-    long_horizon        TEXT,
-    publication_status  TEXT,
-    evidence_level      TEXT,
-    confidence          REAL,
-    review_passes       TEXT,
-    signal_score        INTEGER,
-    lane                TEXT,
-    bm25_pct            REAL,
-    seed_fuzzy          REAL,
-    abstract_source     TEXT,
-    signal_flags        TEXT,
-    full_text_read      TEXT,
-    evidence_quote      TEXT,
-    reason              TEXT,
-    abstract            TEXT
+CREATE TABLE IF NOT EXISTS pass_queue (
+    paper_id        TEXT NOT NULL,
+    pass_name       TEXT NOT NULL,
+    why             TEXT DEFAULT '',
+    created_at      TEXT,
+    PRIMARY KEY (paper_id, pass_name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_verdict ON audit(verdict);
-CREATE INDEX IF NOT EXISTS idx_audit_role ON audit(primary_role);
+CREATE INDEX IF NOT EXISTS idx_pass_queue_pass ON pass_queue(pass_name);
+
+CREATE VIEW IF NOT EXISTS audit AS
+SELECT
+    p.id AS paper_id,
+    p.dblp_key,
+    p.title,
+    p.authors,
+    p.year,
+    p.venue,
+    case when p.doi != '' and p.doi is not null then 'https://doi.org/' || p.doi else '' end AS doi,
+    p.arxiv_url,
+    p.ee,
+    coalesce(f.verdict, '') AS verdict,
+    coalesce(f.reject_class, '') AS reject_class,
+    coalesce(f.primary_role, '') AS primary_role,
+    coalesce(f.roles, '') AS roles,
+    coalesce(f.primary_contribution, '') AS primary_contribution,
+    coalesce(f.subject_scope, '') AS subject_scope,
+    coalesce(f.llm_agent, '') AS llm_agent,
+    coalesce(f.offensive_security, '') AS offensive_security,
+    coalesce(f.black_box, '') AS black_box,
+    coalesce(f.long_horizon, '') AS long_horizon,
+    coalesce(f.publication_status, '') AS publication_status,
+    coalesce(f.evidence_level, '') AS evidence_level,
+    case when f.confidence is not null then f.confidence else '' end AS confidence,
+    coalesce(f.review_passes, '') AS review_passes,
+    p.signal_score,
+    p.lane,
+    p.bm25_pct,
+    p.seed_fuzzy,
+    p.abstract_source,
+    case when p.signal_flags like '[%]' then (SELECT coalesce(group_concat(value, ';'), '') FROM json_each(p.signal_flags)) else coalesce(p.signal_flags, '') end AS signal_flags,
+    coalesce(f.full_text_read, 'no') AS full_text_read,
+    coalesce(f.evidence_quote, '') AS evidence_quote,
+    coalesce(f.reason, '') AS reason,
+    p.abstract
+FROM papers p
+LEFT JOIN final_decisions f ON p.id = f.paper_id;
+
+CREATE TRIGGER IF NOT EXISTS trg_audit_insert INSTEAD OF INSERT ON audit BEGIN SELECT 1; END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_update INSTEAD OF UPDATE ON audit BEGIN SELECT 1; END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_delete INSTEAD OF DELETE ON audit BEGIN SELECT 1; END;
 """
 
 _AUDIT_COLS = [
@@ -144,6 +184,50 @@ _AUDIT_COLS = [
     "seed_fuzzy", "abstract_source", "signal_flags", "full_text_read",
     "evidence_quote", "reason", "abstract",
 ]
+
+_FINAL_COLS = [
+    "paper_id", "verdict", "reject_class", "primary_role", "roles",
+    "primary_contribution", "subject_scope", "llm_agent", "offensive_security",
+    "black_box", "long_horizon", "publication_status", "evidence_level",
+    "confidence", "review_passes", "full_text_read", "evidence_quote",
+    "reason", "system_name", "attack_surfaces", "blob",
+]
+
+
+def _extract_final_fields(r):
+    crit = r.get("criteria") or {}
+    passes = r.get("passes", [])
+    review_passes = "".join(passes) if passes != ["auto"] else "auto"
+    ft = "yes" if r.get("fulltext_read") else "no"
+    roles = ";".join(r.get("roles", [])) if isinstance(r.get("roles"), list) else (r.get("roles") or "")
+    attack_surfaces = (
+        json.dumps(r.get("attack_surfaces", []), ensure_ascii=False)
+        if isinstance(r.get("attack_surfaces"), list)
+        else (r.get("attack_surfaces") or "")
+    )
+    return {
+        "paper_id": r.get("id") or r.get("paper_id"),
+        "verdict": r.get("verdict"),
+        "reject_class": r.get("reject_class"),
+        "primary_role": r.get("primary_role"),
+        "roles": roles,
+        "primary_contribution": r.get("primary_contribution"),
+        "subject_scope": r.get("subject_scope"),
+        "llm_agent": crit.get("llm_agent"),
+        "offensive_security": crit.get("offensive_security"),
+        "black_box": crit.get("black_box"),
+        "long_horizon": crit.get("long_horizon"),
+        "publication_status": r.get("publication_status"),
+        "evidence_level": r.get("evidence_level"),
+        "confidence": r.get("confidence"),
+        "review_passes": review_passes,
+        "full_text_read": ft,
+        "evidence_quote": r.get("evidence"),
+        "reason": r.get("reason"),
+        "system_name": r.get("system_name"),
+        "attack_surfaces": attack_surfaces,
+        "blob": json.dumps(r, ensure_ascii=False),
+    }
 
 _PAPER_COLS = [
     "id", "row", "dblp_key", "title", "authors", "year", "venue", "ee", "url",
@@ -246,11 +330,178 @@ def _paper_to_row(p):
     return row
 
 
+def _migrate_db(conn):
+    ver = conn.execute("PRAGMA user_version").fetchone()[0]
+    if ver >= 2:
+        return
+    cur = conn.cursor()
+    tables = {r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "papers" not in tables:
+        conn.executescript(_SCHEMA)
+        conn.execute("PRAGMA user_version = 2")
+        return
+
+    # 1. Migrate decisions table
+    dec_cols = {r[1] for r in cur.execute("PRAGMA table_info(decisions)").fetchall()}
+    if "verdict" not in dec_cols:
+        conn.execute("ALTER TABLE decisions ADD COLUMN verdict TEXT")
+        conn.execute("ALTER TABLE decisions ADD COLUMN reject_class TEXT")
+        conn.execute("ALTER TABLE decisions ADD COLUMN primary_role TEXT")
+        conn.execute("ALTER TABLE decisions ADD COLUMN confidence REAL")
+        rows = cur.execute("SELECT paper_id, pass_name, blob FROM decisions WHERE blob IS NOT NULL").fetchall()
+        for r in rows:
+            try:
+                d = json.loads(r[2])
+                conn.execute(
+                    "UPDATE decisions SET verdict=?, reject_class=?, primary_role=?, confidence=? WHERE paper_id=? AND pass_name=?",
+                    (d.get("verdict"), d.get("reject_class"), d.get("primary_role"), d.get("confidence"), r[0], r[1]),
+                )
+            except Exception:
+                pass
+
+    # 2. Migrate final_decisions table
+    fin_cols = {r[1] for r in cur.execute("PRAGMA table_info(final_decisions)").fetchall()}
+    if "verdict" not in fin_cols:
+        new_cols = [
+            ("verdict", "TEXT"), ("reject_class", "TEXT"), ("primary_role", "TEXT"),
+            ("roles", "TEXT"), ("primary_contribution", "TEXT"), ("subject_scope", "TEXT"),
+            ("llm_agent", "TEXT"), ("offensive_security", "TEXT"), ("black_box", "TEXT"),
+            ("long_horizon", "TEXT"), ("publication_status", "TEXT"), ("evidence_level", "TEXT"),
+            ("confidence", "REAL"), ("review_passes", "TEXT"), ("full_text_read", "TEXT"),
+            ("evidence_quote", "TEXT"), ("reason", "TEXT"), ("system_name", "TEXT"),
+            ("attack_surfaces", "TEXT"),
+        ]
+        for col_name, col_type in new_cols:
+            if col_name not in fin_cols:
+                conn.execute(f"ALTER TABLE final_decisions ADD COLUMN {col_name} {col_type}")
+
+        rows = cur.execute("SELECT paper_id, blob FROM final_decisions WHERE blob IS NOT NULL").fetchall()
+        for r in rows:
+            try:
+                pid, b = r[0], r[1]
+                d = json.loads(b)
+                fields = _extract_final_fields(d)
+                conn.execute(
+                    """UPDATE final_decisions SET
+                    verdict=?, reject_class=?, primary_role=?, roles=?, primary_contribution=?,
+                    subject_scope=?, llm_agent=?, offensive_security=?, black_box=?, long_horizon=?,
+                    publication_status=?, evidence_level=?, confidence=?, review_passes=?,
+                    full_text_read=?, evidence_quote=?, reason=?, system_name=?, attack_surfaces=?
+                    WHERE paper_id=?""",
+                    (
+                        fields["verdict"], fields["reject_class"], fields["primary_role"],
+                        fields["roles"], fields["primary_contribution"], fields["subject_scope"],
+                        fields["llm_agent"], fields["offensive_security"], fields["black_box"],
+                        fields["long_horizon"], fields["publication_status"], fields["evidence_level"],
+                        fields["confidence"], fields["review_passes"], fields["full_text_read"],
+                        fields["evidence_quote"], fields["reason"], fields["system_name"],
+                        fields["attack_surfaces"], pid,
+                    ),
+                )
+            except Exception:
+                pass
+
+    # 3. Create pass_queue table and backfill
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS pass_queue (
+        paper_id        TEXT NOT NULL,
+        pass_name       TEXT NOT NULL,
+        why             TEXT DEFAULT '',
+        created_at      TEXT,
+        PRIMARY KEY (paper_id, pass_name)
+    )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pass_queue_pass ON pass_queue(pass_name)")
+
+    pq_count = cur.execute("SELECT COUNT(*) FROM pass_queue").fetchone()[0]
+    if pq_count == 0:
+        row = cur.execute("SELECT value FROM pipeline_state WHERE key='state'").fetchone()
+        if row:
+            try:
+                st = json.loads(row[0])
+                pl = st.get("plans", {})
+                f_why = pl.get("F_why", {})
+                now_ts = now()
+                rows_to_insert = []
+                for pass_name, ids in pl.items():
+                    if pass_name == "F_why" or not isinstance(ids, list):
+                        continue
+                    for pid in ids:
+                        why = f_why.get(pid, "") if pass_name == "F" else ""
+                        rows_to_insert.append((pid, pass_name, why, now_ts))
+                if rows_to_insert:
+                    cur.executemany("INSERT OR IGNORE INTO pass_queue(paper_id, pass_name, why, created_at) VALUES(?,?,?,?)", rows_to_insert)
+                    st["plans"] = {}
+                    cur.execute("UPDATE pipeline_state SET value=? WHERE key='state'", (json.dumps(st, ensure_ascii=False),))
+            except Exception:
+                pass
+
+    # 4. Drop physical audit table if present
+    audit_type = cur.execute("SELECT type FROM sqlite_master WHERE name='audit'").fetchone()
+    if audit_type and audit_type[0] == "table":
+        cur.execute("DROP TABLE audit")
+
+    # 5. Ensure audit view, triggers, and performance indexes exist
+    conn.executescript("""
+    CREATE VIEW IF NOT EXISTS audit AS
+    SELECT
+        p.id AS paper_id,
+        p.dblp_key,
+        p.title,
+        p.authors,
+        p.year,
+        p.venue,
+        case when p.doi != '' and p.doi is not null then 'https://doi.org/' || p.doi else '' end AS doi,
+        p.arxiv_url,
+        p.ee,
+        coalesce(f.verdict, '') AS verdict,
+        coalesce(f.reject_class, '') AS reject_class,
+        coalesce(f.primary_role, '') AS primary_role,
+        coalesce(f.roles, '') AS roles,
+        coalesce(f.primary_contribution, '') AS primary_contribution,
+        coalesce(f.subject_scope, '') AS subject_scope,
+        coalesce(f.llm_agent, '') AS llm_agent,
+        coalesce(f.offensive_security, '') AS offensive_security,
+        coalesce(f.black_box, '') AS black_box,
+        coalesce(f.long_horizon, '') AS long_horizon,
+        coalesce(f.publication_status, '') AS publication_status,
+        coalesce(f.evidence_level, '') AS evidence_level,
+        case when f.confidence is not null then f.confidence else '' end AS confidence,
+        coalesce(f.review_passes, '') AS review_passes,
+        p.signal_score,
+        p.lane,
+        p.bm25_pct,
+        p.seed_fuzzy,
+        p.abstract_source,
+        case when p.signal_flags like '[%]' then (SELECT coalesce(group_concat(value, ';'), '') FROM json_each(p.signal_flags)) else coalesce(p.signal_flags, '') end AS signal_flags,
+        coalesce(f.full_text_read, 'no') AS full_text_read,
+        coalesce(f.evidence_quote, '') AS evidence_quote,
+        coalesce(f.reason, '') AS reason,
+        p.abstract
+    FROM papers p
+    LEFT JOIN final_decisions f ON p.id = f.paper_id;
+
+    CREATE TRIGGER IF NOT EXISTS trg_audit_insert INSTEAD OF INSERT ON audit BEGIN SELECT 1; END;
+    CREATE TRIGGER IF NOT EXISTS trg_audit_update INSTEAD OF UPDATE ON audit BEGIN SELECT 1; END;
+    CREATE TRIGGER IF NOT EXISTS trg_audit_delete INSTEAD OF DELETE ON audit BEGIN SELECT 1; END;
+
+    CREATE INDEX IF NOT EXISTS idx_decisions_pass_verdict ON decisions(pass_name, verdict);
+    CREATE INDEX IF NOT EXISTS idx_final_verdict ON final_decisions(verdict);
+    CREATE INDEX IF NOT EXISTS idx_final_role ON final_decisions(primary_role);
+    """)
+
+    conn.execute("PRAGMA user_version = 2")
+    try:
+        conn.execute("VACUUM")
+    except Exception:
+        pass
+
+
 def _open_db(path):
     conn = sqlite3.connect(str(path), isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
-    conn.executescript(_SCHEMA)
+    _migrate_db(conn)
     return conn
 
 
@@ -354,6 +605,13 @@ class Run:
         if count == 0 and self.papers_path.exists():
             rows = read_jsonl(self.papers_path)
             if rows:
+                cols_fin = _FINAL_COLS
+                placeholders_fin = ", ".join("?" for _ in cols_fin)
+                updates_fin = ", ".join(f"{c}=excluded.{c}" for c in cols_fin if c != "paper_id")
+                sql_final = (
+                    f"INSERT INTO final_decisions ({', '.join(cols_fin)}) VALUES ({placeholders_fin}) "
+                    f"ON CONFLICT(paper_id) DO UPDATE SET {updates_fin}"
+                )
                 db.execute("BEGIN")
                 try:
                     for p in rows:
@@ -361,16 +619,18 @@ class Run:
                         pid = p["id"]
                         for pass_name, dec in p.get("decisions", {}).items():
                             db.execute(
-                                "INSERT INTO decisions(paper_id, pass_name, blob) VALUES(?,?,?) "
-                                "ON CONFLICT(paper_id, pass_name) DO UPDATE SET blob=excluded.blob",
-                                (pid, pass_name, json.dumps(dec, ensure_ascii=False)),
+                                "INSERT INTO decisions(paper_id, pass_name, verdict, reject_class, primary_role, confidence, blob) "
+                                "VALUES(?,?,?,?,?,?,?) "
+                                "ON CONFLICT(paper_id, pass_name) DO UPDATE SET "
+                                "verdict=excluded.verdict, reject_class=excluded.reject_class, "
+                                "primary_role=excluded.primary_role, confidence=excluded.confidence, blob=excluded.blob",
+                                (pid, pass_name, dec.get("verdict"), dec.get("reject_class"),
+                                 dec.get("primary_role"), dec.get("confidence"),
+                                 json.dumps(dec, ensure_ascii=False)),
                             )
                         if "final" in p:
-                            db.execute(
-                                "INSERT INTO final_decisions(paper_id, blob) VALUES(?,?) "
-                                "ON CONFLICT(paper_id) DO UPDATE SET blob=excluded.blob",
-                                (pid, json.dumps(p["final"], ensure_ascii=False)),
-                            )
+                            row_fin = _extract_final_fields(p["final"])
+                            db.execute(sql_final, [row_fin[c] for c in cols_fin])
                         if "manual" in p:
                             db.execute(
                                 "INSERT INTO manual_overrides(paper_id, blob) VALUES(?,?) "
@@ -385,22 +645,13 @@ class Run:
             if self.state_path.exists():
                 st = read_json(self.state_path)
                 if st:
+                    if "plans" in st and st["plans"]:
+                        self.save_plans(st["plans"])
                     db.execute(
                         "INSERT INTO pipeline_state(key, value) VALUES('state', ?) "
                         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                         (json.dumps(st, ensure_ascii=False),),
                     )
-
-            audit_csv = self.dir / f"{self.name}-audit-all.csv"
-            if audit_csv.exists():
-                try:
-                    with open(audit_csv, encoding="utf-8-sig") as f:
-                        rdr = csv.DictReader(f)
-                        audit_rows = list(rdr)
-                        if audit_rows:
-                            self.save_audit(audit_rows)
-                except Exception:
-                    pass
 
     def _load_papers_map(self):
         self._migrate_from_flat_files_if_needed()
@@ -474,6 +725,13 @@ class Run:
         if self._papers_map is None:
             return
         db = self._db()
+        cols_fin = _FINAL_COLS
+        placeholders_fin = ", ".join("?" for _ in cols_fin)
+        updates_fin = ", ".join(f"{c}=excluded.{c}" for c in cols_fin if c != "paper_id")
+        sql_final = (
+            f"INSERT INTO final_decisions ({', '.join(cols_fin)}) VALUES ({placeholders_fin}) "
+            f"ON CONFLICT(paper_id) DO UPDATE SET {updates_fin}"
+        )
         db.execute("BEGIN")
         try:
             for p in self._papers_map.values():
@@ -481,16 +739,18 @@ class Run:
                 pid = p["id"]
                 for pass_name, dec in p.get("decisions", {}).items():
                     db.execute(
-                        "INSERT INTO decisions(paper_id, pass_name, blob) VALUES(?,?,?) "
-                        "ON CONFLICT(paper_id, pass_name) DO UPDATE SET blob=excluded.blob",
-                        (pid, pass_name, json.dumps(dec, ensure_ascii=False)),
+                        "INSERT INTO decisions(paper_id, pass_name, verdict, reject_class, primary_role, confidence, blob) "
+                        "VALUES(?,?,?,?,?,?,?) "
+                        "ON CONFLICT(paper_id, pass_name) DO UPDATE SET "
+                        "verdict=excluded.verdict, reject_class=excluded.reject_class, "
+                        "primary_role=excluded.primary_role, confidence=excluded.confidence, blob=excluded.blob",
+                        (pid, pass_name, dec.get("verdict"), dec.get("reject_class"),
+                         dec.get("primary_role"), dec.get("confidence"),
+                         json.dumps(dec, ensure_ascii=False)),
                     )
                 if "final" in p:
-                    db.execute(
-                        "INSERT INTO final_decisions(paper_id, blob) VALUES(?,?) "
-                        "ON CONFLICT(paper_id) DO UPDATE SET blob=excluded.blob",
-                        (pid, json.dumps(p["final"], ensure_ascii=False)),
-                    )
+                    row_fin = _extract_final_fields(p["final"])
+                    db.execute(sql_final, [row_fin[c] for c in cols_fin])
                 if "manual" in p:
                     db.execute(
                         "INSERT INTO manual_overrides(paper_id, blob) VALUES(?,?) "
@@ -574,9 +834,14 @@ class Run:
             p.setdefault("decisions", {})[pass_name] = decision
             db = self._db()
             db.execute(
-                "INSERT INTO decisions(paper_id, pass_name, blob) VALUES(?,?,?) "
-                "ON CONFLICT(paper_id, pass_name) DO UPDATE SET blob=excluded.blob",
-                (pid, pass_name, json.dumps(decision, ensure_ascii=False)),
+                "INSERT INTO decisions(paper_id, pass_name, verdict, reject_class, primary_role, confidence, blob) "
+                "VALUES(?,?,?,?,?,?,?) "
+                "ON CONFLICT(paper_id, pass_name) DO UPDATE SET "
+                "verdict=excluded.verdict, reject_class=excluded.reject_class, "
+                "primary_role=excluded.primary_role, confidence=excluded.confidence, blob=excluded.blob",
+                (pid, pass_name, decision.get("verdict"), decision.get("reject_class"),
+                 decision.get("primary_role"), decision.get("confidence"),
+                 json.dumps(decision, ensure_ascii=False)),
             )
 
     def final_decisions(self):
@@ -588,26 +853,26 @@ class Run:
 
     def save_final(self, final_records):
         db = self._db()
-        if isinstance(final_records, list):
-            for r in final_records:
+        items = final_records if isinstance(final_records, list) else list(final_records.values())
+        cols_fin = _FINAL_COLS
+        placeholders_fin = ", ".join("?" for _ in cols_fin)
+        updates_fin = ", ".join(f"{c}=excluded.{c}" for c in cols_fin if c != "paper_id")
+        sql_final = (
+            f"INSERT INTO final_decisions ({', '.join(cols_fin)}) VALUES ({placeholders_fin}) "
+            f"ON CONFLICT(paper_id) DO UPDATE SET {updates_fin}"
+        )
+        db.execute("BEGIN")
+        try:
+            for r in items:
                 p = self.get_paper(r["id"])
                 if p is not None:
                     p["final"] = r
-                    db.execute(
-                        "INSERT INTO final_decisions(paper_id, blob) VALUES(?,?) "
-                        "ON CONFLICT(paper_id) DO UPDATE SET blob=excluded.blob",
-                        (r["id"], json.dumps(r, ensure_ascii=False)),
-                    )
-        elif isinstance(final_records, dict):
-            for pid, r in final_records.items():
-                p = self.get_paper(pid)
-                if p is not None:
-                    p["final"] = r
-                    db.execute(
-                        "INSERT INTO final_decisions(paper_id, blob) VALUES(?,?) "
-                        "ON CONFLICT(paper_id) DO UPDATE SET blob=excluded.blob",
-                        (pid, json.dumps(r, ensure_ascii=False)),
-                    )
+                row_fin = _extract_final_fields(r)
+                db.execute(sql_final, [row_fin[c] for c in cols_fin])
+            db.execute("COMMIT")
+        except Exception:
+            db.execute("ROLLBACK")
+            raise
 
     def state(self):
         if self._state is None:
@@ -622,28 +887,16 @@ class Run:
                     self._state = self._default_state()
             else:
                 self._state = self._default_state()
+            if not self._state.get("plans"):
+                self._state["plans"] = self.plans()
         return self._state
 
-    def save_audit(self, rows):
-        db = self._db()
-        db.execute("BEGIN")
-        try:
-            for r in rows:
-                data = dict(r)
-                if "id" in data and "paper_id" not in data:
-                    data["paper_id"] = data["id"]
-                vals = [data.get(c) for c in _AUDIT_COLS]
-                placeholders = ", ".join("?" for _ in _AUDIT_COLS)
-                sql = (
-                    f"INSERT INTO audit ({', '.join(_AUDIT_COLS)}) VALUES ({placeholders}) "
-                    f"ON CONFLICT(paper_id) DO UPDATE SET "
-                    + ", ".join(f"{c}=excluded.{c}" for c in _AUDIT_COLS if c != "paper_id")
-                )
-                db.execute(sql, vals)
-            db.execute("COMMIT")
-        except Exception:
-            db.execute("ROLLBACK")
-            raise
+    def save_audit(self, rows=None):
+        """
+        audit is implemented as a dynamic, zero-overhead SQL VIEW over papers + final_decisions.
+        Calling save_audit is a no-op kept for complete backward compatibility.
+        """
+        pass
 
     def audit(self):
         rows = self._db().execute("SELECT * FROM audit ORDER BY paper_id").fetchall()
@@ -666,17 +919,52 @@ class Run:
         return self._meta
 
     def plans(self):
+        db = self._db()
+        rows = db.execute("SELECT paper_id, pass_name, why FROM pass_queue ORDER BY rowid").fetchall()
+        if rows:
+            pl = {}
+            for r in rows:
+                pname = r["pass_name"]
+                pid = r["paper_id"]
+                why = r["why"]
+                pl.setdefault(pname, []).append(pid)
+                if pname == "F" and why:
+                    pl.setdefault("F_why", {})[pid] = why
+            return pl
         return self.state().get("plans", {})
 
     def save_plans(self, pl):
-        s = self.state()
-        s["plans"] = pl
-        self._db().execute(
-            "INSERT INTO pipeline_state(key, value) VALUES('state', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (json.dumps(s, ensure_ascii=False),),
-        )
-        self._state = s
+        db = self._db()
+        db.execute("BEGIN")
+        try:
+            db.execute("DELETE FROM pass_queue")
+            now_ts = now()
+            f_why = pl.get("F_why", {})
+            rows_to_insert = []
+            for pass_name, ids in pl.items():
+                if pass_name == "F_why" or not isinstance(ids, list):
+                    continue
+                for pid in ids:
+                    why = f_why.get(pid, "") if pass_name == "F" else ""
+                    rows_to_insert.append((pid, pass_name, why, now_ts))
+            if rows_to_insert:
+                db.executemany(
+                    "INSERT INTO pass_queue(paper_id, pass_name, why, created_at) VALUES(?,?,?,?)",
+                    rows_to_insert,
+                )
+            s = self.state()
+            s["plans"] = {}
+            db.execute(
+                "INSERT INTO pipeline_state(key, value) VALUES('state', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (json.dumps(s, ensure_ascii=False),),
+            )
+            s["plans"] = pl
+            self._state = s
+            db.execute("COMMIT")
+        except Exception:
+            db.execute("ROLLBACK")
+            raise
 
     def _default_state(self):
         return {
