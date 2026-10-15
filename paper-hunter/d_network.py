@@ -57,7 +57,9 @@ def throttle_for(key):
 
 
 _fail_count, _fail_lock = defaultdict(int), threading.Lock()
+_fail_time = defaultdict(float)
 DEAD_AFTER = 6
+RESET_AFTER = 60.0
 
 
 def http(
@@ -72,13 +74,17 @@ def http(
     max_bytes=40_000_000,
 ):
     host = urllib.parse.urlparse(url).netloc
-    if _fail_count[host] >= DEAD_AFTER:
-        return (
-            0,
-            b"",
-            url,
-            {"error": "host skipped after repeated network failures: " + host},
-        )
+    with _fail_lock:
+        if _fail_count[host] >= DEAD_AFTER:
+            if time.time() - _fail_time[host] > RESET_AFTER:
+                _fail_count[host] = 0
+            else:
+                return (
+                    0,
+                    b"",
+                    url,
+                    {"error": "host skipped after repeated network failures: " + host},
+                )
     hdrs = {"User-Agent": BROWSER_UA if browser else UA, "Accept": "*/*"}
     if headers:
         hdrs.update(headers)
@@ -88,10 +94,12 @@ def http(
         try:
             req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                _fail_count[host] = 0
+                with _fail_lock:
+                    _fail_count[host] = 0
                 return r.status, r.read(max_bytes), r.geturl(), dict(r.headers)
         except urllib.error.HTTPError as e:
-            _fail_count[host] = 0
+            with _fail_lock:
+                _fail_count[host] = 0
             if e.code in (429, 500, 502, 503, 504):
                 ra = e.headers.get("Retry-After") if e.headers else None
                 delay = (
@@ -111,6 +119,7 @@ def http(
             last = "%s: %s" % (type(e).__name__, e)
             with _fail_lock:
                 _fail_count[host] += 1
+                _fail_time[host] = time.time()
             if _fail_count[host] >= DEAD_AFTER:
                 break
             time.sleep(min(2**attempt, 4))

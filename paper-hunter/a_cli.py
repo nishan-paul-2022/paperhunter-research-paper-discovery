@@ -940,6 +940,14 @@ def cmd_reconcile(a):
             return "primary_role differs"
         if min(float(p.get("confidence", 0)), float(c.get("confidence", 0))) < 0.6:
             return "low confidence"
+        if p.get("reject_class") != c.get("reject_class") and (
+            dos.get(i, {}).get("signal_score", 0) >= 30
+            or dos.get(i, {}).get("lane") in ("A", "B")
+        ):
+            return "reject_class differs (%s vs %s)" % (
+                p.get("reject_class"),
+                c.get("reject_class"),
+            )
         return ""
 
     queue, why, fn = list(pl.get("F", [])), {}, []

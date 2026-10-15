@@ -289,7 +289,9 @@ def judge_paper(d, pass_name="A"):
         title,
         re.IGNORECASE,
     ) and not re.search(
-        r"\b(bypass|evad(e|ing|ion)|adversarial against)\b", title, re.IGNORECASE
+        r"\b(bypass|evad(e|ing|ion)|adversarial against|penetration test(ing)?|pen-test(ing)?|pentest(ing)?|exploit generation|automated exploitation|cve exploitation|red[- ]team(ing)?|ctf challenge)\b",
+        title,
+        re.IGNORECASE,
     ):
         return {
             "id": pid,
@@ -361,7 +363,7 @@ def judge_paper(d, pass_name="A"):
         }
 
     if RX_JAILBREAK.search(title) and not re.search(
-        r"\b(penetration test(ing)?|pentest(ing)?|exploit generation|ctf challenge)\b",
+        r"\b(penetration test(ing)?|pen-test(ing)?|pentest(ing)?|exploit generation|ctf challenge|red[- ]team(ing)?|autonomous agent|multi-agent)\b",
         title,
         re.IGNORECASE,
     ):
@@ -437,7 +439,7 @@ def judge_paper(d, pass_name="A"):
         }
 
     if RX_CODE_SCAN.search(title) and not re.search(
-        r"\b(exploit generation|automated exploitation|penetration test|pentest|ctf)\b",
+        r"\b(exploit generation|automated exploitation|penetration test|pen-test(ing)?|pentest(ing)?|ctf|red[- ]team(ing)?|autonomous agent|multi-agent)\b",
         title,
         re.IGNORECASE,
     ):
@@ -473,7 +475,27 @@ def judge_paper(d, pass_name="A"):
             "ts": now(),
         }
 
-    if (is_offensive and has_llm_agent) or (is_seed and has_llm_agent):
+    is_defensive_system = bool(
+        re.search(
+            r"\b(protect(ing|ion)? (from|against)|defend(ing|er|se|ce)? (against|from)|mitigat(e|ing|ion) of|detection of|incident response agent|soc agent)\b",
+            title,
+            re.IGNORECASE,
+        )
+        or (
+            re.search(
+                r"\b(system for|agent for|framework for)\b.*?\b(defense|defence|defending|intrusion detection|incident response|mitigation)\b",
+                title,
+                re.IGNORECASE,
+            )
+            and not re.search(
+                r"\b(penetration|pentest|red[- ]team|exploit|attack)\b",
+                title,
+                re.IGNORECASE,
+            )
+        )
+    )
+
+    if not is_defensive_system and ((is_offensive and has_llm_agent) or (is_seed and has_llm_agent)):
         if is_survey:
             return {
                 "id": pid,
