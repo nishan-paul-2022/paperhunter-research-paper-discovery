@@ -21,6 +21,3 @@ Thumbs.db
 # DBLP paper-database files
 paper-database/dblp.xml
 paper-database/dblp.xml.gz
-
-# Data dumps and run caches
-paper-dump/

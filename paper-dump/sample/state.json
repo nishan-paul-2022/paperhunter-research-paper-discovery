@@ -1,0 +1,129 @@
+{
+ "version": "3.0",
+ "meta": {
+  "csv": "/home/nishan/Documents/paperhunter-research-paper-discovery/paper-list/sample.csv",
+  "sha1": "9c6fba7e7018d50dc86baa963662b272412a7f08",
+  "created": "2026-10-15T10:18:49+00:00",
+  "n_rows": 30,
+  "min_year": 2023,
+  "max_year": 2026,
+  "output_dir": "/home/nishan/Documents/paperhunter-research-paper-discovery/paper-reference",
+  "publication_policy": "strict"
+ },
+ "plans": {
+  "B": [
+   "p0025",
+   "p0026",
+   "p0027",
+   "p0028",
+   "p0029",
+   "p0030",
+   "p0021",
+   "p0023",
+   "p0015",
+   "p0006",
+   "p0014"
+  ],
+  "C": [
+   "p0024",
+   "p0005",
+   "p0027",
+   "p0021",
+   "p0019",
+   "p0010",
+   "p0006",
+   "p0012",
+   "p0003",
+   "p0009",
+   "p0004",
+   "p0023",
+   "p0011",
+   "p0026",
+   "p0022",
+   "p0008",
+   "p0018",
+   "p0013",
+   "p0014",
+   "p0017",
+   "p0028",
+   "p0020",
+   "p0025",
+   "p0002",
+   "p0001",
+   "p0016",
+   "p0015",
+   "p0029",
+   "p0007",
+   "p0030"
+  ],
+  "C_audit_sample": [
+   "p0002",
+   "p0007",
+   "p0024",
+   "p0019",
+   "p0022",
+   "p0001",
+   "p0013",
+   "p0011",
+   "p0020",
+   "p0008",
+   "p0004",
+   "p0018",
+   "p0009",
+   "p0016",
+   "p0017",
+   "p0010",
+   "p0012",
+   "p0003",
+   "p0005",
+   "p0005",
+   "p0010"
+  ],
+  "F": [],
+  "F_why": {}
+ },
+ "current_stage": "enrichment_complete",
+ "stages": {
+  "enrichment": {
+   "status": "completed",
+   "completed_at": "2026-10-15T10:19:11+00:00",
+   "papers_enriched": 30
+  },
+  "pass_a_screening": {
+   "status": "not_started"
+  },
+  "pass_b_screening": {
+   "status": "not_started"
+  },
+  "pass_c_screening": {
+   "status": "not_started"
+  },
+  "reconciliation": {
+   "status": "not_started"
+  },
+  "validation": {
+   "status": "not_started"
+  },
+  "export": {
+   "status": "not_started"
+  }
+ },
+ "passes": {
+  "A": {
+   "planned": null,
+   "completed": 0
+  },
+  "B": {
+   "planned": null,
+   "completed": 0
+  },
+  "C": {
+   "planned": null,
+   "completed": 0
+  },
+  "F": {
+   "planned": null,
+   "completed": 0
+  }
+ }
+}
