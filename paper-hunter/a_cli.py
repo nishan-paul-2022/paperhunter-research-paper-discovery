@@ -1167,9 +1167,6 @@ def cmd_export(a):
     csv_path = Path(run.meta.get("csv", ""))
     output_filename = csv_path.stem if csv_path.exists() else run.name
 
-    out_dir = Path(a.out_dir).expanduser().resolve() if a.out_dir else run.dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     audit = []
     for p in run.papers():
         pid = p["id"]
@@ -1261,11 +1258,6 @@ def cmd_export(a):
         "Recorded audit in %s (%d papers, accept: %d, reject: %d)"
         % (run.db_path.name, len(audit), accepts, rejects)
     )
-    if getattr(a, "out_dir", None):
-        audit_path = Path(a.out_dir).expanduser().resolve() / ("%s-audit-all.csv" % output_filename)
-        write_csv(audit_path, audit_cols, audit)
-        print("Wrote audit-all CSV to: %s" % audit_path)
-
     paper_url = {p["id"]: p.get("url", "") for p in run.papers()}
     role_order = {
         "baseline": 0,
@@ -1455,7 +1447,6 @@ def main():
     s.set_defaults(f=cmd_prep)
 
     s = sub.add_parser("export")
-    s.add_argument("--out-dir")
     s.add_argument("--force", action="store_true")
     s.set_defaults(f=cmd_export)
 
