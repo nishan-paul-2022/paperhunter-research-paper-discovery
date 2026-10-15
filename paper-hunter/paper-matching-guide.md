@@ -149,7 +149,7 @@ All commands: `python3 a_cli.py <command>`.
 ### Stage 0 — Setup and enrichment (deterministic; you run it)
 1. The CSV path is already configured in `.current` file. Run `status` to verify the current run, or `init --csv "<CSV_PATH>"` to start a new run (it will update `.current` automatically).
 2. `doctor` — shows which metadata services are reachable. If none are, rely on your own web tools for abstracts (stage 0.4) and tell nobody; just do the work.
-3. `enrich` — fetches abstracts and metadata for **every** paper (Crossref, OpenAlex, Semantic Scholar, publisher landing page, arXiv), builds dossiers in `dossiers.jsonl`, computes signals. All API responses are cached in a single `enrichment.db.jsonl` file (not in individual cache files). It is resumable: re-run it if it was interrupted. Optional: `pip install sentence-transformers` before it for an embedding signal (ignore failures).
+3. `enrich` — fetches abstracts and metadata for **every** paper (Crossref, OpenAlex, Semantic Scholar, publisher landing page, arXiv). arXiv is fetched in Stage 0 (not deferred to Stage 6) when abstracts are missing or landing URLs suggest arXiv presence. Builds dossiers in `dossiers.jsonl`, computes signals. All API responses are cached in a single `enrichment.db.jsonl` file. It is resumable: re-run it if it was interrupted. Optional: `pip install sentence-transformers` before it for an embedding signal (ignore failures).
 4. **Close the abstract gaps.** `enrich` prints the ids with no abstract. Work through **all** of them with your own web search/fetch, saving each with `fill`. Manual overrides are stored in `manual-overrides.jsonl`. For papers that still have none after a serious attempt, continue; they will be handled with the doubt rules.
 5. `status` — confirm coverage.
 
@@ -201,15 +201,16 @@ Loop until `PASS A COMPLETE`:
 **Intermediate data structure (in `paper-dump/<csv-stem>/`):**
 - `input.csv` — Original input CSV file
 - `papers.jsonl` — Normalized paper metadata from input CSV
-- `enrichment.db.jsonl` — Unified cache of all API responses (Crossref, OpenAlex, S2, landing pages)
+- `enrichment.db.jsonl` — Unified cache of all API responses (Crossref, OpenAlex, S2, landing pages, arXiv)
 - `dossiers.jsonl` — Enriched paper metadata with signals and computed fields
-- `decisions.jsonl` — Complete decision log across all passes (A, B, C, F)
+- `decisions.jsonl` — Complete decision log across all passes (A, B, C, F) with timestamps
 - `manual-overrides.jsonl` — Manual abstract/metadata corrections
+- `fulltext.db.jsonl` — Fulltext extractions for papers requiring deep inspection
 - `state.json` — Pipeline state, run metadata, and pass planning
 - `final.jsonl` — Final reconciled decisions
 - `*-audit-all.csv`, `*-borderline.csv` — Export outputs for human review
 
-All intermediate files are stored in `paper-dump/<csv-stem>/` for reference but are not part of the final output.
+**All intermediate files use unified JSONL format with no subdirectories.** Legacy cache/, manual/, and fulltext/ subdirectories are no longer used.
 
 ---
 
@@ -252,10 +253,10 @@ All intermediate files are stored in `paper-dump/<csv-stem>/` for reference but 
 ## 11. Troubleshooting (handle yourself)
 
 - A host or API is blocked/rate-limited → the tool skips it automatically; use your own web tools and `fill`. Manual overrides are stored in `manual-overrides.jsonl`. Optional environment variables the tool honours: `PH_MAILTO` (polite-pool email), `S2_API_KEY`.
-- `fulltext` finds nothing → try the publisher page, arXiv, author pages with your own tools; use `--url <direct pdf>` if you find one.
+- `fulltext` finds nothing → try the publisher page, arXiv, author pages with your own tools; use `--url <direct pdf>` if you find one. Fulltext is stored in `fulltext.db.jsonl`.
 - A script bug or an environment limit → edit `a_cli.py` or other Python files and continue; keep the file contracts of sections 9-10.
 - Context or session lost → `status`, then continue at the first incomplete pass.
-- All intermediate data is in flat files (no subdirectories): `enrichment.db.jsonl` (API cache), `decisions.jsonl` (all pass decisions), `manual-overrides.jsonl` (manual corrections), `state.json` (pipeline state + metadata + plans).
+- All intermediate data is in unified JSONL files (no subdirectories): `enrichment.db.jsonl` (API cache), `decisions.jsonl` (all pass decisions), `manual-overrides.jsonl` (manual corrections), `fulltext.db.jsonl` (fulltext extractions), `state.json` (pipeline state + metadata + plans).
 
 ---
 

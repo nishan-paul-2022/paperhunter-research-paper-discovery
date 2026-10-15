@@ -542,7 +542,7 @@ def cmd_fulltext(a):
             urls.append(d["ee"])
         if d.get("doi"):
             urls.append("https://doi.org/" + d["doi"])
-        from ph.network import _MetaParser  # noqa: F401
+        from d_network import _MetaParser
         for u in dict.fromkeys(urls):
             st, body, final, _ = http(u, urllib.parse.urlparse(u).netloc,
                                        browser=True, retries=2, timeout=45)
