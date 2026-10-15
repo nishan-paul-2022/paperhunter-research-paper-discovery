@@ -54,7 +54,7 @@ def main():
             el = "publisher_page"
             eurl = d.get("ee") or (("https://doi.org/" + d["doi"]) if d.get("doi") else (d.get("url") or "https://doi.org"))
 
-        # Determine reject_class and reason
+
         if pid in NEAR_DOMAIN_PIDS:
             rclass = "llm_no_offense"
             reason = NEAR_DOMAIN_PIDS[pid]

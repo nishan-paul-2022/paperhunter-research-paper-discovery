@@ -1,13 +1,9 @@
-"""
-b_io.py — file helpers and the Run context object for paper-hunter.
-Manages the consolidated per-paper store (papers.jsonl) and run state (state.json).
-"""
 import csv, hashlib, html, io, json, os, re, unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
-TOOLS_DIR  = Path(__file__).resolve().parent          # paper-hunter/
-ROOT       = TOOLS_DIR.parent                          # paperhunter-research-paper-discovery/
+TOOLS_DIR  = Path(__file__).resolve().parent
+ROOT       = TOOLS_DIR.parent
 RUNS_DIR   = ROOT / "paper-supplement"
 DEFAULT_OUTPUT = ROOT / "paper-reference"
 
@@ -17,8 +13,6 @@ MIN_ABSTRACT = 120
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-
-# ── JSON-L helpers ────────────────────────────────────────────────────────────
 
 def read_jsonl(path):
     path = Path(path)
@@ -66,8 +60,6 @@ def read_json(path, default=None):
         return default
 
 
-# ── string helpers ────────────────────────────────────────────────────────────
-
 def norm(s):
     s = unicodedata.normalize("NFKD", s or "")
     s = "".join(c for c in s if not unicodedata.combining(c))
@@ -94,12 +86,10 @@ def write_csv(path, cols, rows):
             w.writerow(r)
 
 
-# ── Run context ───────────────────────────────────────────────────────────────
-
 class Run:
     def __init__(self, name=None):
         if not name:
-            # Read CSV path from .current file in paper-hunter/
+
             cur = TOOLS_DIR / ".current"
             if not cur.exists():
                 raise SystemExit(
@@ -108,18 +98,18 @@ class Run:
             if not csv_path or not Path(csv_path).exists():
                 raise SystemExit(
                     "ERROR: CSV path in .current does not exist: %s" % csv_path)
-            # Derive run name from CSV filename
+
             name = Path(csv_path).stem
         self.name = name
         self.dir  = RUNS_DIR / name
         if not self.dir.exists():
             raise SystemExit("ERROR: run directory %s does not exist" % self.dir)
 
-        # The only two persistent files in the redesigned pipeline:
+
         self.papers_path = self.dir / "papers.jsonl"
         self.state_path  = self.dir / "state.json"
 
-        # Compatibility aliases pointing to consolidated store
+
         self.dossier_path        = self.papers_path
         self.decisions_path      = self.papers_path
         self.enrichment_db_path  = self.papers_path
@@ -131,17 +121,15 @@ class Run:
         self._meta       = None
 
     def dec_path(self, p):
-        """Legacy compatibility method returning consolidated papers path"""
         return self.papers_path
 
-    # ── In-memory consolidated paper management ───────────────────────────────
 
     def _get_papers_map(self):
         if self._papers_map is None:
             papers = read_jsonl(self.papers_path)
             self._papers_map = {p["id"]: p for p in papers}
 
-            # Transparent migration: merge legacy files if present
+
             migrated = False
             dossier_file = self.dir / "dossiers.jsonl"
             if dossier_file.exists() and dossier_file != self.papers_path:
@@ -210,15 +198,12 @@ class Run:
         return self._get_papers_map().get(paper_id)
 
     def dossiers(self):
-        """Returns map of paper_id -> paper dict (all dossier fields are in-place)"""
         return self._get_papers_map()
 
     def save_papers(self):
-        """Persist consolidated paper store atomically"""
         if self._papers_map is not None:
             write_jsonl(self.papers_path, list(self._papers_map.values()))
 
-    # ── Enrichment cache ──────────────────────────────────────────────────────
 
     def get_enrichment(self, paper_id):
         p = self.get_paper(paper_id)
@@ -232,7 +217,6 @@ class Run:
                 data["ts"] = now()
             p["enrichment"] = data
 
-    # ── Manual overrides ──────────────────────────────────────────────────────
 
     def get_manual_override(self, paper_id):
         p = self.get_paper(paper_id)
@@ -245,7 +229,6 @@ class Run:
             p["manual"] = data
             self.save_papers()
 
-    # ── Fulltext ──────────────────────────────────────────────────────────────
 
     def get_fulltext(self, paper_id):
         p = self.get_paper(paper_id)
@@ -259,10 +242,8 @@ class Run:
             p["fulltext_ts"] = now()
             self.save_papers()
 
-    # ── Decisions ─────────────────────────────────────────────────────────────
 
     def decisions(self, p=None):
-        """Get latest decisions, optionally filtered by pass"""
         res = {}
         for pid, paper in self._get_papers_map().items():
             paper_decs = paper.get("decisions", {})
@@ -275,7 +256,6 @@ class Run:
         return res
 
     def save_decision(self, decision):
-        """Save decision in-place on paper record"""
         pid = decision.get("id")
         p = self.get_paper(pid)
         if p is not None:
@@ -286,11 +266,9 @@ class Run:
             self.save_papers()
 
     def final_decisions(self):
-        """Get reconciled final decisions"""
         return {pid: paper["final"] for pid, paper in self._get_papers_map().items() if "final" in paper}
 
     def save_final(self, final_records):
-        """Save final reconciled verdicts into paper records"""
         if isinstance(final_records, list):
             for r in final_records:
                 p = self.get_paper(r["id"])
@@ -303,16 +281,13 @@ class Run:
                     p["final"] = r
         self.save_papers()
 
-    # ── State and Plans ───────────────────────────────────────────────────────
 
     def state(self):
-        """Get current run state"""
         if self._state is None:
             self._state = read_json(self.state_path, self._default_state())
         return self._state
 
     def update_state(self, **kwargs):
-        """Update run state"""
         state = self.state()
         state.update(kwargs)
         write_json(self.state_path, state)
@@ -320,7 +295,6 @@ class Run:
 
     @property
     def meta(self):
-        """Get metadata"""
         if self._meta is None:
             self._meta = self.state().get("meta", {})
         return self._meta
@@ -335,7 +309,6 @@ class Run:
         self._state = state
 
     def _default_state(self):
-        """Default state structure"""
         meta_file = self.dir / "meta.json"
         meta = read_json(meta_file, {}) if meta_file.exists() else {}
         plans_file = self.dir / "plans.json"

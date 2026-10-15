@@ -1,11 +1,3 @@
-"""
-g_passa.py — Automated Pass A screening engine.
-Applies domain rules from prompt.md across all dossiers.
-Generates fully validated decision records saved directly into papers.jsonl.
-
-Verdict system: accept | reject  (no borderline)
-Evidence level: title_only | abstract | publisher_page | full_text
-"""
 import json, re, time
 from pathlib import Path
 from collections import Counter
@@ -18,7 +10,6 @@ from f_signals import G_AGENT, G_OFFENSE, G_STRUCT, SEEDS, G_NEG
 
 
 def _evidence_level(has_abstract, fulltext_read=False, landing_checked=False):
-    """Derive evidence_level from what was actually read."""
     if fulltext_read:
         return "full_text"
     if landing_checked:
@@ -79,14 +70,14 @@ def judge_paper(d, pass_name="A"):
             is_benchmark = True
             is_eval = False
 
-    # frontmatter detection
+
     is_frontmatter = bool(re.search(
         r"\b(call for papers?|editorial|foreword|preface|invited talk|workshop overview|program committee|keynote)\b",
         full_text, re.I))
 
     ev = extract_quote(source_text)
 
-    # CASE 0: Frontmatter — auto reject
+
     if is_frontmatter:
         return {
             "id": pid, "verdict": "reject", "reject_class": "other",
@@ -101,7 +92,7 @@ def judge_paper(d, pass_name="A"):
             "fulltext_read": False, "needs_deep_dive": False, "pass": pass_name, "ts": now()
         }
 
-    # CASE 1: Lane A/B must not be rejected on title alone — force needs_deep_dive
+
     title_only = not has_abstract
     if title_only and lane in ("A", "B"):
         return {
@@ -117,7 +108,7 @@ def judge_paper(d, pass_name="A"):
             "fulltext_read": False, "needs_deep_dive": True, "pass": pass_name, "ts": now()
         }
 
-    # CASE 2: Clear baseline / candidate / survey / benchmark / evaluation
+
     if (is_offensive and has_agent) or (is_seed and has_agent):
         if RX_JAILBREAK.search(title) and not (has_pentest or has_ctf or "multi-host" in full_text.lower()):
             return {
@@ -210,7 +201,7 @@ def judge_paper(d, pass_name="A"):
                 "attack_surfaces": ["network", "cve", "web"], "pass": pass_name, "ts": now()
             }
 
-    # CASE 3: Near-domain — needs deeper review (preprint LLM+security but no clear offense)
+
     if has_pentest or (is_offensive and not has_agent and d.get("signal_score", 0) >= 30):
         return {
             "id": pid, "verdict": "reject", "reject_class": "llm_no_offense",
@@ -228,7 +219,7 @@ def judge_paper(d, pass_name="A"):
 
     flags_offtopic = ["title_only_offtopic"] if (not has_abstract and lane == "C") else []
 
-    # CASE 4: Rejections by class
+
     if RX_JAILBREAK.search(full_text):
         return {
             "id": pid, "verdict": "reject", "reject_class": "generic_llm_security",
@@ -281,7 +272,7 @@ def judge_paper(d, pass_name="A"):
             "fulltext_read": False, "needs_deep_dive": False, "pass": pass_name, "ts": now()
         }
 
-    # title-only reject for lane C only
+
     flags_out = flags_offtopic
 
     return {
@@ -300,7 +291,7 @@ def judge_paper(d, pass_name="A"):
 def run_pass_a(run):
     dos = run.dossiers()
     el = run.eligible()
-    # Lane-based ordering: A first (deep), then B, then C
+
     order = sorted(el, key=lambda i: ({"A": 0, "B": 1, "C": 2}.get(dos[i].get("lane", "C"), 2),
                                        -dos[i].get("signal_score", 0)))
     print("Pass A: Screening %d papers (lane A=%d, B=%d, C=%d)..." % (

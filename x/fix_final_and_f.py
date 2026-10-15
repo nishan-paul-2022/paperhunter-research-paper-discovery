@@ -80,7 +80,7 @@ def main():
         if not fin or fin.get("passes") == ["auto"]:
             continue
 
-        # Handle special adjudications
+
         if pid in SPECIAL_ADJUDICATIONS:
             spec = SPECIAL_ADJUDICATIONS[pid]
             eurl = p.get("ee") or (("https://doi.org/" + p["doi"]) if p.get("doi") else "https://doi.org")
@@ -102,7 +102,7 @@ def main():
             p.setdefault("decisions", {})["F"] = dict(fin)
             fixed += 1
 
-        # Check validation
+
         errs = validate_record(r, dict(fin), "F", policy, dos=dos)
         errs = [x for x in errs if "not part of pass" not in x]
         if errs:

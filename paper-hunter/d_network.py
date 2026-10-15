@@ -1,7 +1,3 @@
-"""
-ph/network.py — HTTP layer, rate-limiting, and metadata providers
-(Crossref, OpenAlex, Semantic Scholar, publisher landing page, arXiv).
-"""
 import json, os, re, threading, time, xml.etree.ElementTree as ET
 from collections import defaultdict
 from html.parser import HTMLParser
@@ -21,8 +17,6 @@ URL_S2       = os.environ.get("PH_S2",       "https://api.semanticscholar.org").
 URL_ARXIV    = os.environ.get("PH_ARXIV",    "http://export.arxiv.org/api/query")
 MAILTO       = os.environ.get("PH_MAILTO",   "")
 
-
-# ── rate-limiting ─────────────────────────────────────────────────────────────
 
 class Throttle:
     def __init__(self, interval):
@@ -103,7 +97,7 @@ def jget(url, key, **kw):
 
 
 def qdoi(doi):
-    return urllib.parse.quote(doi, safe="/()") 
+    return urllib.parse.quote(doi, safe="/()")
 
 
 def title_sim(a, b):
@@ -113,8 +107,6 @@ def title_sim(a, b):
         return 0.0
     return difflib.SequenceMatcher(None, a, b).ratio()
 
-
-# ── metadata providers ────────────────────────────────────────────────────────
 
 def p_crossref(doi=None, title=None, year=None):
     m_str = "&mailto=" + urllib.parse.quote(MAILTO) if MAILTO else ""
@@ -321,7 +313,7 @@ class _MetaParser(HTMLParser):
             self._buf.append(data)
 
 
-from collections import defaultdict  # noqa: F811 (already imported above but keep explicit)
+from collections import defaultdict
 
 
 def p_landing(url):

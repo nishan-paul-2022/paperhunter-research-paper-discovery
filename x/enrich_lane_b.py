@@ -14,8 +14,8 @@ def main():
     t0 = time.time()
     oa_res = openalex_batch(dois)
     print(f"OpenAlex matched {len(oa_res)} in {time.time()-t0:.1f}s")
-    
-    # Merge into papers
+
+
     updated = 0
     for p in papers:
         doi = p.get("doi")
@@ -28,7 +28,7 @@ def main():
             m = p.get("manual") or {}
             _merge_one(p, enrichment, m)
             updated += 1
-            
+
     print(f"Updated {updated} Lane B papers with OpenAlex metadata.")
     r.save_papers()
     print("Saved papers.jsonl successfully.")

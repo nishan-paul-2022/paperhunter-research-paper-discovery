@@ -1,11 +1,3 @@
-"""
-c_schema.py — constants, validator, schema definition, and shared enumerations for paper-hunter.
-Single source of truth for the paper data structure and review rules.
-
-Verdict system: accept | reject  (no borderline, no needs_manual)
-Criteria values: yes | partial | no | unknown
-Evidence levels: title_only | abstract | publisher_page | full_text
-"""
 import difflib, re, unicodedata
 from collections import defaultdict
 
@@ -14,9 +6,9 @@ ROLE_TO_CONTRIB     = {"baseline": "agent_system", "baseline_candidate": "agent_
                        "benchmark": "benchmark_dataset", "evaluation": "evaluation_study",
                        "survey": "survey"}
 CONTRIBS            = ["agent_system", "benchmark_dataset", "evaluation_study", "survey", "other"]
-VERDICTS            = ["accept", "reject"]  # no borderline, no needs_manual
-YNU                 = ["yes", "no", "unclear"]  # legacy compat
-YNPU                = ["yes", "partial", "no", "unknown"]  # full criteria value set
+VERDICTS            = ["accept", "reject"]
+YNU                 = ["yes", "no", "unclear"]
+YNPU                = ["yes", "partial", "no", "unknown"]
 SCOPES              = ["core", "broad", "adjacent", "none"]
 PUB_STATUS          = ["published", "workshop_archival_toplevel", "workshop_other",
                        "preprint_only", "thesis_or_report", "unknown"]
@@ -28,70 +20,10 @@ REJECT_CLASSES      = ["off_domain", "security_other", "defensive_only",
 ABSTRACT_SOURCES    = ["crossref", "openalex", "semanticscholar", "landing_page", "arxiv",
                        "manual_web", "fulltext", "none"]
 EVIDENCE_SOURCES    = ["abstract", "title", "fulltext", "web"]
-EVIDENCE_LEVELS     = ["title_only", "abstract", "publisher_page", "full_text"]  # deepest thing read
-EVIDENCE_LEVELS_DEEP = {"publisher_page", "full_text"}  # required for baseline
+EVIDENCE_LEVELS     = ["title_only", "abstract", "publisher_page", "full_text"]
+EVIDENCE_LEVELS_DEEP = {"publisher_page", "full_text"}
 
-# ── Consolidated Paper Store Schema ───────────────────────────────────────────
-# Every paper record in papers.jsonl has this unified structure:
-# {
-#   "id": str,                      # e.g. "p0001"
-#   "row": int,                     # row in original CSV
-#   "dblp_key": str,
-#   "title": str,
-#   "authors": str,
-#   "year": int,
-#   "venue": str,
-#   "ee": str,
-#   "url": str,
-#   "doi": str,
-#   "in_range": bool,
-#   "pub_hint": str,
-#   "dup_of": Optional[str],
-#   "extra_columns": dict,
-#
-#   # Enrichment / Dossier fields (added during enrich)
-#   "abstract": str,
-#   "abstract_source": str,
-#   "abstract_snippet": str,
-#   "abstract_candidates": dict,
-#   "keywords": list[str],
-#   "topics": list[str],
-#   "tldr": str,
-#   "arxiv_id": str,
-#   "arxiv_url": str,
-#   "pdf_urls": list[str],
-#   "crossref_type": str,
-#   "container": str,
-#   "published_date": str,
-#   "cited_by": Optional[int],
-#   "retracted": bool,
-#   "manual_notes": str,
-#
-#   # Signals (computed from text & domain profiles)
-#   "signal_score": int,
-#   "signal_flags": list[str],
-#   "safety_net": bool,
-#   "sim": dict,
-#   "sim_domain_pct": float,
-#   "emb_domain": Optional[float],
-#
-#   # Raw provider payloads (caching expensive network lookups)
-#   "enrichment": dict,             # {crossref, openalex, s2, landing, arxiv, done, fetched_at}
-#
-#   # Manual overrides (from a_cli.py fill)
-#   "manual": dict,                 # {abstract, source, arxiv_id, pdf, notes, url}
-#
-#   # Full text
-#   "fulltext": Optional[str],
-#
-#   # Review decisions per pass
-#   "decisions": dict[str, dict],   # {"A": {...}, "B": {...}, "C": {...}, "F": {...}}
-#
-#   # Final reconciled decision
-#   "final": Optional[dict]
-# }
 
-# ── Shared Pattern Regexes ───────────────────────────────────────────────────
 RX_JAILBREAK = re.compile(
     r"\b(jailbreak|jailbreaking|prompt injection|prompt leak|safety alignment|"
     r"safety guardrail|toxic|toxicity|hallucination|adversarial prompt|unlearning|"
@@ -121,10 +53,6 @@ RX_CTF = re.compile(
 
 
 def extract_quote(text, max_words=45, min_words=4):
-    """
-    Extract a verbatim slice of text containing between min_words and max_words.
-    Matches text verbatim from the source so it passes validation.
-    """
     if not text:
         return ""
     text = text.strip()
@@ -133,13 +61,13 @@ def extract_quote(text, max_words=45, min_words=4):
         return ""
     if len(words) <= max_words:
         return text
-    # Try finding sentence boundaries
+
     sentences = re.split(r"(?<=[.!?])\s+", text)
     for s in sentences:
         sw = s.strip().split()
         if min_words <= len(sw) <= max_words:
             return s.strip()
-    # Otherwise return exact word slice up to max_words
+
     excerpt = " ".join(words[:max_words])
     for end_char in ['.', '!', '?', ';', ',']:
         if end_char in excerpt:
@@ -176,7 +104,6 @@ def quote_in(quote, hay):
 
 
 def validate_record(run, r, pass_, policy, dos=None, lane=None):
-    """Validate a single decision dict. Returns list of error strings (empty = ok)."""
     errs = []
     if dos is None:
         dos = run.dossiers()
@@ -202,7 +129,7 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
                    "vuln_detection_or_code_scan", "generic_llm_security",
                    "static_qa_benchmark"))
     for k in ("llm_agent", "offensive_security", "black_box", "long_horizon"):
-        # Accept both legacy (yes/no/unclear) and new (yes/partial/no/unknown) values
+
         if crit.get(k) not in YNPU + ["unclear"]:
             if off_domain and k not in crit:
                 crit[k] = "no"
@@ -223,18 +150,18 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
     if not isinstance(r.get("fulltext_read"), bool):
         errs.append("fulltext_read must be true/false")
 
-    # ── evidence_level (new field) ────────────────────────────────────────
+
     ev_level = r.get("evidence_level")
     if ev_level is not None and ev_level not in EVIDENCE_LEVELS:
         errs.append("evidence_level must be one of %s" % EVIDENCE_LEVELS)
 
-    # ── lane-aware title_only rules ───────────────────────────────────────
+
     if ev_level == "title_only" or r.get("evidence_source") == "title":
-        # Use lane from signal record if not passed directly
+
         _lane = lane or d.get("lane", "C")
         flags = r.get("flags") or []
         if "frontmatter" in flags:
-            pass  # frontmatter is always allowed to be rejected on title alone
+            pass
         elif _lane in ("A", "B"):
             if not r.get("needs_deep_dive"):
                 errs.append(
@@ -250,7 +177,7 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
                     "(only allowed for lane C papers whose title is unambiguously "
                     "non-security/non-LLM after >=2 source attempts)")
 
-    # evidence quote
+
     ev, es = (r.get("evidence") or "").strip(), r.get("evidence_source")
     if es not in EVIDENCE_SOURCES:
         errs.append("evidence_source must be one of %s" % EVIDENCE_SOURCES)
@@ -266,7 +193,7 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
     if es == "fulltext" and r.get("fulltext_read") is False:
         errs.append("evidence_source=fulltext but fulltext_read=false")
 
-    # verdict logic
+
     if v == "reject":
         if r.get("reject_class") not in REJECT_CLASSES:
             errs.append("reject needs reject_class in %s" % REJECT_CLASSES)
@@ -285,7 +212,7 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
             errs.append(
                 "accept requires criteria llm_agent=yes AND offensive_security=yes "
                 "(judged on the system(s) the paper presents/surveys/benchmarks/evaluates)")
-        # ── baseline (strict) ─────────────────────────────────────────────
+
         if "baseline" in roles:
             if r.get("primary_role") != "baseline":
                 errs.append(
@@ -301,12 +228,12 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
             if r.get("publication_status") not in PUB_OK_STRICT:
                 errs.append(
                     "baseline requires publication_status published or workshop_archival_toplevel")
-            # evidence_level gate: baseline must be verified on publisher page or full text
+
             if ev_level is not None and ev_level not in EVIDENCE_LEVELS_DEEP:
                 errs.append(
                     "baseline requires evidence_level publisher_page or full_text "
                     "(open the publisher page to confirm before accepting as baseline)")
-        # ── baseline_candidate (partial criteria) ─────────────────────────
+
         if "baseline_candidate" in roles:
             if r.get("primary_role") not in ("baseline_candidate", "baseline"):
                 errs.append(
@@ -333,7 +260,6 @@ def validate_record(run, r, pass_, policy, dos=None, lane=None):
 
 
 def _hay_for(run, d, src):
-    """Return the text corpus for evidence-quote verification."""
     if src == "title":
         return d.get("title", "")
     if src == "abstract":

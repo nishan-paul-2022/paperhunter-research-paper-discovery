@@ -1,13 +1,3 @@
-"""
-e_enrich.py — per-paper enrichment (Crossref, OpenAlex, S2, landing page, arXiv)
-and dossier/signal building for paper-hunter.
-
-All enrichment data and signals are saved directly into the consolidated
-papers.jsonl store. No separate dossier, database, or text files are created.
-
-Network probe: tests 6 papers before the full batch; aborts cleanly if all fail.
-Lane-gated deep enrichment: with --deep, only lane A/B papers get S2+arXiv.
-"""
 import math, os, re, time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,8 +8,6 @@ from d_network import (p_crossref, p_openalex, p_landing, p_arxiv,
                       s2_batch, openalex_batch, BROWSER_UA)
 from f_signals import compute_signals
 
-
-# ── single-paper fetch ────────────────────────────────────────────────────────
 
 def enrich_one(run, p, s2rec, oarec=None, deep=True):
     cached = run.get_enrichment(p["id"])
@@ -45,17 +33,17 @@ def enrich_one(run, p, s2rec, oarec=None, deep=True):
             landing_url = ""
         if landing_url and not landing_url.startswith("http"):
             landing_url = ""
-        # Landing page: always try; not gated on lane (gives abstracts for all)
+
         if landing_url and not have:
             c["landing"] = p_landing(landing_url)
             have = have or len((c.get("landing") or {}).get("abstract", "")) >= MIN_ABSTRACT
         else:
             c["landing"] = None
 
-        # arXiv: always try if no abstract yet, or if landing is arxiv
+
         c["arxiv"] = None
         do_arxiv = (not have) or ("arxiv" in (landing_url or "").lower())
-        # Lane-gated deep enrichment: if deep=False, only fetch arXiv for lane A/B
+
         if do_arxiv and (deep or lane in ("A", "B")):
             arxiv_result = p_arxiv(title)
             if arxiv_result:
@@ -69,8 +57,6 @@ def enrich_one(run, p, s2rec, oarec=None, deep=True):
     run.save_enrichment(p["id"], c)
     return p["id"], "fetched"
 
-
-# ── dossier merge ─────────────────────────────────────────────────────────────
 
 def _merge_one(p, c, manual):
     d = p
@@ -109,7 +95,7 @@ def _merge_one(p, c, manual):
     d["topics"]    = oa.get("topics") or []
     d["tldr"]      = s2.get("tldr", "")
 
-    # ── arXiv ID ──────────────────────────────────────────────────────────────
+
     arx = ((manual.get("arxiv_id") if manual else "")
            or ax.get("arxiv_id")
            or oa.get("arxiv_id")
@@ -142,7 +128,7 @@ def _merge_one(p, c, manual):
         hint = "conference"
     elif k.startswith("journals/") and not k.startswith("journals/corr/"):
         hint = "journal"
-    elif (p.get("doi") or "").startswith("10.48550") or \
+    elif (p.get("doi") or "").startswith("10.48550") or\
             d["crossref_type"] in ("posted-content", "preprint", "repository"):
         hint = "preprint_only"
     elif d["crossref_type"] == "dissertation":
@@ -183,16 +169,10 @@ def coverage_report(run):
         print("  ids: " + " ".join(miss[:400]) + (" ..." if len(miss) > 400 else ""))
 
 
-# ── batch enrichment ──────────────────────────────────────────────────────────
-
-_PROBE_N = 6  # papers to try before committing to the full batch
+_PROBE_N = 6
 
 
 def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="auto", deep=True):
-    """
-    deep=True  — fetch arXiv for every paper that lacks an abstract (default)
-    deep=False — fetch arXiv only for lane A/B papers (faster for large sets)
-    """
     papers = [p for p in run.papers() if p.get("in_range") or all_years]
     if limit:
         papers = papers[:limit]
@@ -212,7 +192,7 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
         s2map = s2_batch(dois)
         print("  matched %d" % len(s2map))
 
-    # ── Early network probe ─────────────────────────────────────────────────
+
     if todo and not (s2map or oamap):
         probe_ok = 0
         for p in todo[:_PROBE_N]:
@@ -238,7 +218,7 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
             f.result()
             done += 1
             if done % 200 == 0 or done == len(todo):
-                # Periodic checkpoint save for resume protection
+
                 run.save_papers()
                 print("  %d/%d  (%.0fs)" % (done, len(todo), time.time() - t0), flush=True)
 

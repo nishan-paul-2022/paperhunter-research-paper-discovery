@@ -1,19 +1,6 @@
-"""
-f_signals.py — TF-IDF / BM25 / term / embedding signals for paper-hunter.
-
-Signals ORDER and PRIORITIZE work only; they NEVER reject a paper.
-
-Lane assignment:
-  A  deep    — strong lexical+semantic signal; open publisher page + full text
-  B  standard — weak/ambiguous signal; abstract + DOI/publisher page check
-  C  quick   — no obvious security/LLM signal; abstract read; escalate to B
-               if abstract mentions agent/LLM/security/attack terms
-"""
 import bisect, difflib, math, os, re
 from collections import Counter
 
-
-# ── regex groups ──────────────────────────────────────────────────────────────
 
 def rx(*pats):
     return [re.compile(p, re.I) for p in pats]
@@ -80,7 +67,7 @@ SEEDS     = rx(r"pentestgpt", r"autoattacker", r"hacksynth", r"vulnbot", r"incal
                r"teams of llm agents.*exploit", r"llm agents.*autonomously.*hack",
                r"large language model.*multi-agent penetration")
 
-# Fuzzy seed titles (for difflib near-miss matching)
+
 SEED_TITLES = [
     "PentestGPT: Evaluating and Harnessing Large Language Models for Automated Penetration Testing",
     "AutoAttacker: A Large Language Model Guided System to Implement Automatic Cyber-attacks",
@@ -167,8 +154,6 @@ SWEEP_QUERIES = [
 ]
 
 
-# ── tokeniser / TF-IDF ───────────────────────────────────────────────────────
-
 def toks(text):
     words = [w.strip(".-+")
              for w in re.findall(r"[a-z0-9][a-z0-9\-\+\.]*", (text or "").lower())]
@@ -213,8 +198,6 @@ def try_embeddings(texts):
         return None
 
 
-# ── BM25 ──────────────────────────────────────────────────────────────────────
-
 class BM25:
     def __init__(self, docs, k1=1.4, b=0.75):
         self.docs = docs; self.k1 = k1; self.b = b
@@ -236,8 +219,6 @@ class BM25:
         return out
 
 
-# ── fuzzy seed matching ───────────────────────────────────────────────────────
-
 def _tok_text(s):
     s = (s or "").lower().replace("&", " and ")
     s = re.sub(r"[^a-z0-9 ]+", " ", s)
@@ -253,8 +234,6 @@ def fuzzy_seed(title_tok):
     return best, which
 
 
-# ── typo detection ────────────────────────────────────────────────────────────
-
 _KEY_VOCAB = sorted(
     {w for g in (G_STRONG_OFFENSE, G_OFFENSE) for p in g
      for w in re.sub(r"[^a-z0-9 ]+", " ", p.pattern.lower()).split()
@@ -264,7 +243,6 @@ _KEY_VOCAB = sorted(
 
 
 def typo_hits(text):
-    """Catches misspellings/variants that exact matching misses."""
     hits = set()
     for w in set(re.findall(r"[a-z]{8,}", text.lower())):
         if w not in _KEY_VOCAB:
@@ -274,14 +252,10 @@ def typo_hits(text):
     return sorted(hits)
 
 
-# ── percentile helper ─────────────────────────────────────────────────────────
-
 def percentile_ranks(vals):
     order = sorted(vals); n = len(vals)
     return [bisect.bisect_left(order, v) / max(1, n - 1) * 100 for v in vals]
 
-
-# ── main ──────────────────────────────────────────────────────────────────────
 
 def compute_signals(rows, embed="auto"):
     texts = [(r["title"] + " . " + r["title"] + " . " + (r.get("abstract") or "")
@@ -296,7 +270,7 @@ def compute_signals(rows, embed="auto"):
     idf       = {t: math.log((N + 1) / (c + 1)) + 1.0 for t, c in df.items()}
     pvec      = {k: vec(v, idf) for k, v in prof_toks.items()}
 
-    # TF-IDF cosine similarities vs domain profiles
+
     sims = []
     for tl in toklists:
         v_ = vec(tl, idf)
@@ -306,7 +280,7 @@ def compute_signals(rows, embed="auto"):
     for rank, i in enumerate(order):
         pct[i] = rank / max(1, len(rows) - 1)
 
-    # BM25 ranking against SWEEP_QUERIES
+
     bm    = BM25([toks(t) for t in texts])
     raw   = [0.0] * len(rows)
     for q in SWEEP_QUERIES:
@@ -314,7 +288,7 @@ def compute_signals(rows, embed="auto"):
         raw = [r + s / mx for r, s in zip(raw, sc)]
     bm_pct = percentile_ranks(raw)
 
-    # Embeddings (optional)
+
     emb = try_embeddings(texts) if embed in ("auto", "on") else None
     emb_pct = [None] * len(rows)
     if emb:
@@ -342,7 +316,7 @@ def compute_signals(rows, embed="auto"):
         ty        = typo_hits(title + " " + (r.get("abstract") or "")[:500])
         dem       = [p.pattern[:30] for p in G_NEG if p.search(title + " " + body)]
 
-        # Combined score (TF-IDF base + group bonuses + BM25 percentile)
+
         score = (100 * min(a, o) + 30 * max(a, o) * (1 if o > 0 else 0.5)
                  + (10 if st > 0 else 0) + (6 if struct_flags else 0)
                  + len(ty) * 3 + bm_pct[i] * 0.15 + fz * 30)
@@ -350,7 +324,7 @@ def compute_signals(rows, embed="auto"):
             score -= 15
         score = max(0, min(100, round(score)))
 
-        # Lane assignment (A=deep, B=standard, C=quick) — never rejects
+
         if (so_h or (a_h and o_h) or fz >= 0.6 or bm_pct[i] >= 98
                 or (ty and (a_h or o_h)) or sd > 0):
             lane = "A"

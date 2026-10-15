@@ -34,7 +34,7 @@ import unicodedata, urllib.parse
 from collections import Counter
 from pathlib import Path
 
-# ── package imports ───────────────────────────────────────────────────────────
+
 from b_io      import (Run, TOOLS_DIR, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
                           read_json, write_json, write_csv, norm, clean_title)
 from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNPU, SCOPES,
@@ -56,7 +56,6 @@ def die(msg, code=2):
     sys.exit(code)
 
 
-# ── init ──────────────────────────────────────────────────────────────────────
 DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>]+", re.I)
 
 def pub_hint_from_key(dblp_key, venue, title):
@@ -144,8 +143,6 @@ def cmd_init(a):
           % (name, len(papers), n_doi, n_dup, n_oor, a.min_year, a.max_year))
 
 
-# ── doctor ────────────────────────────────────────────────────────────────────
-
 def cmd_doctor(a):
     tests = {"crossref":        "%s/works/10.1145/3372297.3417268" % URL_CROSSREF,
              "openalex":        "%s/works/doi:10.1145/3372297.3417268?select=id" % URL_OPENALEX,
@@ -171,8 +168,6 @@ def cmd_doctor(a):
               "abstracts (store each with `a_cli.py fill`). Do NOT skip papers.")
 
 
-# ── enrich / signals / fill ───────────────────────────────────────────────────
-
 def cmd_enrich(a):
     run = Run(a.run)
     run_enrich(run, workers=a.workers, limit=a.limit, all_years=a.all_years,
@@ -184,7 +179,6 @@ def cmd_signals(a):
     coverage_report(run)
 
 def cmd_prep(a):
-    """Combined init + enrich + signals in one call."""
     cmd_init(a)
     cmd_enrich(a)
     cmd_signals(a)
@@ -213,8 +207,6 @@ def cmd_fill(a):
     build_dossiers(run, embed="off")
     print("stored for %s (abstract_source=%s)" % (a.id, run.get_paper(a.id).get("abstract_source")))
 
-
-# ── show / search ─────────────────────────────────────────────────────────────
 
 KWIC_TERMS = [r"black[- ]?box", r"gr[ae]y[- ]?box|white[- ]?box",
               r"attack chain|kill chain|multi-?step|long[- ]horizon",
@@ -321,8 +313,6 @@ def cmd_search(a):
               % (s, i, dos[i].get("signal_score"), dos[i]["title"][:110]))
 
 
-# ── status / plans / batch ────────────────────────────────────────────────────
-
 def pass_plan(run, p):
     if p == "A":
         return run.eligible()
@@ -359,8 +349,8 @@ def ensure_plan_B(run, force=False):
     missing = [i for i in el if i not in A]
     if missing and not force:
         die("pass A incomplete (%d papers left) - finish it first" % len(missing))
-    # Include: accepts, needs_deep_dive, safety_net papers, low-confidence rejects,
-    # lane-A rejects, lane-B low-confidence rejects, papers with role_hints
+
+
     B = [i for i in el if (a := A.get(i)) and
          (a["verdict"] == "accept"
           or a.get("needs_deep_dive")
@@ -396,16 +386,15 @@ def ensure_plan_C(run):
     k    = min(len(tail), max(60, math.ceil(0.12 * len(tail))))
     samp = rnd.sample(tail, k) if tail else []
 
-    # Richer audit additions:
-    # 1. fuzzy near-misses (seed_fuzzy >= 0.45 but not already in C)
+
     fuzzy_nm = [i for i in el if i not in C
                 and dos[i].get("seed_fuzzy", 0) >= 0.45]
-    # 2. lane-A rejects with confidence < 0.85
+
     lane_a_rej = [i for i in el if i not in C
                   and dos[i].get("lane") == "A"
                   and (A.get(i) or {}).get("verdict") == "reject"
                   and (A.get(i) or {}).get("confidence", 1) < 0.85]
-    # 3. low-confidence rejects < 0.70 with offense or agent signal
+
     low_conf = [i for i in el if i not in C
                 and (A.get(i) or {}).get("verdict") == "reject"
                 and (A.get(i) or {}).get("confidence", 1) < 0.70
@@ -448,7 +437,7 @@ def cmd_batch(a):
     if not todo:
         print("PASS %s COMPLETE (%d/%d)." % (p, len(ids), len(ids)))
         return
-    # Lane-based batch size: use --n if explicitly set, else auto from lane mix
+
     n = a.n if a.n else lane_batch_size(todo, dos)
     chunk = todo[:n]
     print("=" * 100)
@@ -470,8 +459,6 @@ def cmd_batch(a):
           "then `python3 a_cli.py record --pass %s` with a JSON array." % p)
 
 
-# ── record ────────────────────────────────────────────────────────────────────
-
 def cmd_record(a):
     run = Run(a.run)
     p   = a.pass_.upper()
@@ -492,7 +479,7 @@ def cmd_record(a):
     dos    = run.dossiers()
     ok, bad = 0, 0
     for r in data:
-        # Strip any borderline fields that might come from old prompts
+
         r.pop("borderline_reason", None)
         errs = validate_record(run, r, p, policy, dos=dos,
                                lane=dos.get(r.get("id", ""), {}).get("lane", "C"))
@@ -521,8 +508,6 @@ def cmd_record(a):
     except Exception:
         pass
 
-
-# ── fulltext ──────────────────────────────────────────────────────────────────
 
 def cmd_fulltext(a):
     import subprocess, tempfile
@@ -624,8 +609,6 @@ def cmd_fulltext(a):
                                                      text[max(0, h.start()-170):h.end()+170])))
 
 
-# ── expand-audit / sweep ──────────────────────────────────────────────────────
-
 def cmd_expand_audit(a):
     run = Run(a.run)
     pl  = run.plans()
@@ -640,24 +623,24 @@ def cmd_expand_audit(a):
     if a.all:
         cand = set(el) - cur
     else:
-        # signal/pct threshold
+
         for i in el:
             if i in cur:
                 continue
             if (dos[i].get("signal_score", 0) >= a.min_signal
                     or dos[i].get("sim_domain_pct", 0) >= a.min_pct):
                 cand.add(i)
-        # fuzzy near-misses (seed_fuzzy >= 0.45)
+
         for i in el:
             if i not in cur and dos[i].get("seed_fuzzy", 0) >= 0.45:
                 cand.add(i)
-        # lane-A rejects with confidence < 0.85
+
         for i in el:
             if i not in cur and dos[i].get("lane") == "A":
                 r = A.get(i, {})
                 if r.get("verdict") == "reject" and r.get("confidence", 1) < 0.85:
                     cand.add(i)
-        # low-confidence rejects with agent/offense signal
+
         for i in el:
             if i not in cur:
                 r = A.get(i, {})
@@ -674,8 +657,6 @@ def cmd_sweep(a):
     run = Run(a.run)
     run_sweep(run.name, top=a.top, min_score=a.min_score)
 
-
-# ── reconcile ─────────────────────────────────────────────────────────────────
 
 def cmd_reconcile(a):
     run = Run(a.run)
@@ -772,8 +753,6 @@ def cmd_reconcile(a):
         pass
 
 
-# ── validate ──────────────────────────────────────────────────────────────────
-
 def cmd_validate(a):
     run = Run(a.run)
     fin = run.final_decisions()
@@ -809,8 +788,6 @@ def cmd_validate(a):
     except Exception:
         pass
 
-
-# ── export ────────────────────────────────────────────────────────────────────
 
 def _row_out(d, r):
     return {"paper_id": d["id"], "title": d["title"], "authors": d.get("authors"),
@@ -853,7 +830,7 @@ def cmd_export(a):
     out_dir = Path(a.out_dir).expanduser().resolve() if a.out_dir else run.dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Only output: <stem>-audit-all.csv ────────────────────────────────────
+
     audit = []
     for p in run.papers():
         pid = p["id"]
@@ -914,9 +891,7 @@ def cmd_export(a):
     print("Wrote audit-all CSV (%d papers, accept: %d, reject: %d) to: %s"
           % (len(audit), accepts, rejects, audit_path))
 
-    # ── Filtered deliverable: paper-reference/<stem>.csv ─────────────────────
-    # Accepted papers only. Columns: dblp_key, title, authors, year, venue,
-    # ee, url, Role  — same filename as input CSV, same format as sample-2.csv.
+
     paper_url = {p["id"]: p.get("url", "") for p in run.papers()}
     role_order = {"baseline": 0, "baseline_candidate": 1,
                   "benchmark": 2, "evaluation": 3, "survey": 4}
@@ -966,8 +941,6 @@ def cmd_export(a):
     except Exception:
         pass
 
-
-# ── main CLI dispatcher ───────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser(prog="a_cli.py", description=__doc__,
