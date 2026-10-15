@@ -115,14 +115,22 @@ class Run:
             raise SystemExit("ERROR: run directory %s does not exist" % self.dir)
         self.papers_path  = self.dir / "papers.jsonl"
         self.dossier_path = self.dir / "dossiers.jsonl"
+        # New unified files
+        self.enrichment_db_path = self.dir / "enrichment.db.jsonl"
+        self.decisions_path = self.dir / "decisions.jsonl"
+        self.state_path = self.dir / "state.json"
+        # Legacy paths for backward compatibility
         self.cache_dir    = self.dir / "cache"
         self.manual_dir   = self.dir / "manual"
         self.fulltext_dir = self.dir / "full-text"
         self.plans_path   = self.dir / "plans.json"
         self.meta         = read_json(self.dir / "meta.json", {})
         self._dos         = None
+        self._enrichment_index = None
+        self._state = None
 
     def dec_path(self, p):
+        """Legacy method for backward compatibility"""
         return self.dir / ("decisions-%s.jsonl" % p.lower())
 
     def papers(self):
@@ -134,11 +142,96 @@ class Run:
             self._dos = {r["id"]: r for r in rows} if rows else {r["id"]: r for r in self.papers()}
         return self._dos
 
-    def decisions(self, p):
-        d = {}
-        for r in read_jsonl(self.dec_path(p)):
-            d[r["id"]] = r
-        return d
+    def enrichment_index(self):
+        """Lazy-load enrichment index into memory for fast lookups"""
+        if self._enrichment_index is None:
+            self._enrichment_index = {}
+            # Try new unified DB first
+            if self.enrichment_db_path.exists():
+                for record in read_jsonl(self.enrichment_db_path):
+                    self._enrichment_index[record["id"]] = record
+            # Fall back to legacy cache dir
+            elif self.cache_dir.exists():
+                for cache_file in self.cache_dir.glob("*.json"):
+                    paper_id = cache_file.stem
+                    data = read_json(cache_file, {})
+                    if data:
+                        self._enrichment_index[paper_id] = data
+        return self._enrichment_index
+
+    def get_enrichment(self, paper_id):
+        """Get cached enrichment for a paper"""
+        return self.enrichment_index().get(paper_id)
+
+    def save_enrichment(self, paper_id, data):
+        """Save enrichment data to unified DB"""
+        data["id"] = paper_id
+        if "ts" not in data:
+            data["ts"] = now()
+        append_jsonl(self.enrichment_db_path, data)
+        # Update in-memory index if loaded
+        if self._enrichment_index is not None:
+            self._enrichment_index[paper_id] = data
+
+    def decisions(self, p=None):
+        """Get decisions, optionally filtered by pass"""
+        # Try new unified log first
+        if self.decisions_path.exists():
+            decisions = {}
+            for record in read_jsonl(self.decisions_path):
+                if p is None or record.get("pass") == p:
+                    # Latest decision wins for each paper
+                    decisions[record["id"]] = record
+            return decisions
+        # Fall back to legacy per-pass files
+        elif p is not None:
+            d = {}
+            for r in read_jsonl(self.dec_path(p)):
+                d[r["id"]] = r
+            return d
+        else:
+            return {}
+
+    def save_decision(self, decision):
+        """Append decision to unified log"""
+        if "ts" not in decision:
+            decision["ts"] = now()
+        append_jsonl(self.decisions_path, decision)
+
+    def state(self):
+        """Get current run state"""
+        if self._state is None:
+            self._state = read_json(self.state_path, self._default_state())
+        return self._state
+
+    def update_state(self, **kwargs):
+        """Update run state"""
+        state = self.state()
+        state.update(kwargs)
+        write_json(self.state_path, state)
+        self._state = state
+
+    def _default_state(self):
+        """Default state structure"""
+        return {
+            "version": "2.0",
+            "current_stage": "init",
+            "stages": {
+                "enrichment": {"status": "not_started"},
+                "pass_a_screening": {"status": "not_started"},
+                "pass_b_screening": {"status": "not_started"},
+                "pass_c_screening": {"status": "not_started"},
+                "reconciliation": {"status": "not_started"},
+                "validation": {"status": "not_started"},
+                "export": {"status": "not_started"}
+            },
+            "passes": {
+                "A": {"planned": None, "completed": 0},
+                "B": {"planned": None, "completed": 0},
+                "C": {"planned": None, "completed": 0},
+                "F": {"planned": None, "completed": 0}
+            }
+        }
 
     def plans(self):
         return read_json(self.plans_path, {})
