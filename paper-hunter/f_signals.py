@@ -41,7 +41,7 @@ G_STRUCT  = {
     "evaluation": rx(r"empirical (study|evaluation|analysis)",
                      r"evaluat(e|ing|ion) (of )?(the )?(capabilit|performance)",
                      r"how (well|good|capable)", r"capabilit(y|ies)",
-                     r"comparative (study|analysis|evaluation)", r"case study",
+                     r"compar(ative|ing|ison) (study|analysis|evaluation)?", r"case study",
                      r"assess(ing|ment)? .* (llm|gpt|model)",
                      r"risk (assessment|evaluation)"),
 }

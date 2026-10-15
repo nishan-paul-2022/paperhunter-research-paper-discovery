@@ -1,7 +1,8 @@
 """
-c_schema.py — constants, validator, and shared enumerations for paper-hunter.
+c_schema.py — constants, validator, schema definition, and shared enumerations for paper-hunter.
+Single source of truth for the paper data structure and review rules.
 """
-import re, unicodedata, difflib
+import difflib, re, unicodedata
 from collections import defaultdict
 
 ROLES               = ["baseline", "baseline_candidate", "benchmark", "evaluation", "survey"]
@@ -26,6 +27,123 @@ BORDER_REASONS      = ["adjacent_non_llm", "adjacent_single_shot", "adjacent_adv
 ABSTRACT_SOURCES    = ["crossref", "openalex", "semanticscholar", "landing_page", "arxiv",
                        "manual_web", "fulltext", "none"]
 EVIDENCE_SOURCES    = ["abstract", "title", "fulltext", "web"]
+
+# ── Consolidated Paper Store Schema ───────────────────────────────────────────
+# Every paper record in papers.jsonl has this unified structure:
+# {
+#   "id": str,                      # e.g. "p0001"
+#   "row": int,                     # row in original CSV
+#   "dblp_key": str,
+#   "title": str,
+#   "authors": str,
+#   "year": int,
+#   "venue": str,
+#   "ee": str,
+#   "url": str,
+#   "doi": str,
+#   "in_range": bool,
+#   "pub_hint": str,
+#   "dup_of": Optional[str],
+#   "extra_columns": dict,
+#
+#   # Enrichment / Dossier fields (added during enrich)
+#   "abstract": str,
+#   "abstract_source": str,
+#   "abstract_snippet": str,
+#   "abstract_candidates": dict,
+#   "keywords": list[str],
+#   "topics": list[str],
+#   "tldr": str,
+#   "arxiv_id": str,
+#   "arxiv_url": str,
+#   "pdf_urls": list[str],
+#   "crossref_type": str,
+#   "container": str,
+#   "published_date": str,
+#   "cited_by": Optional[int],
+#   "retracted": bool,
+#   "manual_notes": str,
+#
+#   # Signals (computed from text & domain profiles)
+#   "signal_score": int,
+#   "signal_flags": list[str],
+#   "safety_net": bool,
+#   "sim": dict,
+#   "sim_domain_pct": float,
+#   "emb_domain": Optional[float],
+#
+#   # Raw provider payloads (caching expensive network lookups)
+#   "enrichment": dict,             # {crossref, openalex, s2, landing, arxiv, done, fetched_at}
+#
+#   # Manual overrides (from ph.py fill)
+#   "manual": dict,                 # {abstract, source, arxiv_id, pdf, notes, url}
+#
+#   # Full text
+#   "fulltext": Optional[str],
+#
+#   # Review decisions per pass
+#   "decisions": dict[str, dict],   # {"A": {...}, "B": {...}, "C": {...}, "F": {...}}
+#
+#   # Final reconciled decision
+#   "final": Optional[dict]
+# }
+
+# ── Shared Pattern Regexes ───────────────────────────────────────────────────
+RX_JAILBREAK = re.compile(
+    r"\b(jailbreak|jailbreaking|prompt injection|prompt leak|safety alignment|"
+    r"safety guardrail|toxic|toxicity|hallucination|adversarial prompt|unlearning|"
+    r"watermark|copyright|refusal|harmbench|advbench)\b", re.I)
+RX_CODE_SCAN = re.compile(
+    r"\b(vulnerability detection|code vulnerability|vulnerable code|code review|"
+    r"defect detection|smart contract vulnerability|bug detection|static analysis|"
+    r"ast|cfg|slice|slicing|fuzzing|fuzzer)\b", re.I)
+RX_DEFENSE = re.compile(
+    r"\b(intrusion detection|malware detection|phishing detection|traffic detection|"
+    r"anomaly detection|botnet detection|ransomware detection|soc\b|defender|"
+    r"blue team|firewall|ids\b|ips\b)\b", re.I)
+RX_SEC_OTHER = re.compile(
+    r"\b(cryptography|encryption|zero-knowledge proof|post-quantum|steganography|"
+    r"watermarking|authentication|biometric|hardware security|side-channel|"
+    r"pufl|differential privacy|rowhammer|kubernetes|firmware|supply chain)\b", re.I)
+RX_PENTEST = re.compile(
+    r"\b(penetration test(ing)?|pen-test(ing)?|pentest(ing)?|red team(ing)?|adversary emulation|"
+    r"attack automation|cyber operation(s)?|offensive cyber|autonomous attack(s)?)\b", re.I)
+RX_EXPLOIT = re.compile(
+    r"\b(exploit generation|automated exploitation|cve exploitation|n-day exploit(s)?|"
+    r"zero-day exploit(s)?|binary exploitation|privilege escalation|lateral movement|"
+    r"post-exploitation|parallel exploitation)\b", re.I)
+RX_CTF = re.compile(
+    r"\b(capture[- ]the[- ]flag|ctf challenge|ctf benchmark|hack the box|"
+    r"vulnhub|cyber range)\b", re.I)
+
+
+def extract_quote(text, max_words=45, min_words=4):
+    """
+    Extract a verbatim slice of text containing between min_words and max_words.
+    Matches text verbatim from the source so it passes validation.
+    """
+    if not text:
+        return ""
+    text = text.strip()
+    words = text.split()
+    if len(words) < min_words:
+        return ""
+    if len(words) <= max_words:
+        return text
+    # Try finding sentence boundaries
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    for s in sentences:
+        sw = s.strip().split()
+        if min_words <= len(sw) <= max_words:
+            return s.strip()
+    # Otherwise return exact word slice up to max_words
+    excerpt = " ".join(words[:max_words])
+    for end_char in ['.', '!', '?', ';', ',']:
+        if end_char in excerpt:
+            idx = excerpt.rfind(end_char)
+            if idx > len(" ".join(words[:min_words])):
+                return excerpt[:idx + 1].strip()
+    return excerpt
 
 
 def norm(s):
@@ -55,7 +173,7 @@ def quote_in(quote, hay):
 
 
 def validate_record(run, r, pass_, policy, dos=None):
-    """Validate a single decision dict.  Returns list of error strings (empty = ok)."""
+    """Validate a single decision dict. Returns list of error strings (empty = ok)."""
     errs = []
     if dos is None:
         dos = run.dossiers()
@@ -188,11 +306,13 @@ def validate_record(run, r, pass_, policy, dos=None):
 def _hay_for(run, d, src):
     """Return the text corpus for evidence-quote verification."""
     if src == "title":
-        return d["title"]
+        return d.get("title", "")
     if src == "abstract":
         return (d.get("abstract") or "") + " " + (d.get("abstract_snippet") or "")
     if src == "fulltext":
-        from pathlib import Path
-        f = run.fulltext_dir / ("%s.txt" % d["id"])
-        return f.read_text(encoding="utf-8", errors="replace") if f.exists() else ""
+        if isinstance(d.get("fulltext"), str) and d["fulltext"]:
+            return d["fulltext"]
+        if hasattr(run, "get_fulltext"):
+            return run.get_fulltext(d["id"]) or ""
+        return ""
     return ""

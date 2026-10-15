@@ -2,15 +2,15 @@
 e_enrich.py — per-paper enrichment (Crossref, OpenAlex, S2, landing page, arXiv)
 and dossier/signal building for paper-hunter.
 
-KEY FIX (vs original): arXiv is now fetched in Stage 0 (here), not deferred
-to Stage 6 (export). Every paper in the screening pass therefore has arXiv access.
+All enrichment data and signals are saved directly into the consolidated
+papers.jsonl store. No separate dossier, database, or text files are created.
 """
-import math, re, os, time
+import math, os, re, time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from b_io      import MIN_ABSTRACT, read_json, write_json, read_jsonl, write_jsonl, now
+from b_io      import MIN_ABSTRACT, now
 from d_network import (p_crossref, p_openalex, p_landing, p_arxiv,
                       s2_batch, openalex_batch, BROWSER_UA)
 from f_signals import compute_signals
@@ -19,11 +19,10 @@ from f_signals import compute_signals
 # ── single-paper fetch ────────────────────────────────────────────────────────
 
 def enrich_one(run, p, s2rec, oarec=None):
-    # Check unified cache first
     cached = run.get_enrichment(p["id"])
     if cached and cached.get("done"):
         return p["id"], "cached"
-    
+
     c   = {"id": p["id"], "errors": []}
     doi, title, year = p.get("doi"), p["title"], p.get("year")
     try:
@@ -48,8 +47,6 @@ def enrich_one(run, p, s2rec, oarec=None):
         else:
             c["landing"] = None
 
-        # KEY FIX: arXiv is now fetched in Stage 0 (enrichment), not deferred to Stage 6 (export)
-        # Try to fetch arXiv if we don't have a good abstract yet, or if title suggests it might be on arXiv
         c["arxiv"] = None
         if not have or "arxiv" in landing_url.lower():
             arxiv_result = p_arxiv(title)
@@ -61,8 +58,7 @@ def enrich_one(run, p, s2rec, oarec=None):
         c["errors"].append("%s: %s" % (type(e).__name__, e))
     c["done"]       = True
     c["fetched_at"] = now()
-    
-    # Save to unified cache
+
     run.save_enrichment(p["id"], c)
     return p["id"], "fetched"
 
@@ -70,17 +66,22 @@ def enrich_one(run, p, s2rec, oarec=None):
 # ── dossier merge ─────────────────────────────────────────────────────────────
 
 def _merge_one(p, c, manual):
-    d = dict(p)
-    cr, oa, s2, ld, ax = (c.get(k) or {} for k in ("crossref", "openalex", "s2", "landing", "arxiv"))
+    d = p
+    cr = (c.get("crossref") or {}) if c else {}
+    oa = (c.get("openalex") or {}) if c else {}
+    s2 = (c.get("s2") or {}) if c else {}
+    ld = (c.get("landing") or {}) if c else {}
+    ax = (c.get("arxiv") or {}) if c else {}
+
     cands = [(src, re.sub(r"\s+", " ", (v or "")).strip())
              for src, v in [("crossref", cr.get("abstract", "")),
                              ("openalex", oa.get("abstract", "")),
                              ("semanticscholar", s2.get("abstract", "")),
                              ("landing_page", ld.get("abstract", "")),
-                             ("arxiv", (ax or {}).get("abstract", ""))]]
+                             ("arxiv", ax.get("abstract", ""))]]
     good  = [(k, v) for k, v in cands if len(v) >= MIN_ABSTRACT]
     d["abstract_candidates"] = {k: len(v) for k, v in cands if v}
-    if manual.get("abstract"):
+    if manual and manual.get("abstract"):
         d["abstract"], d["abstract_source"] = manual["abstract"], manual.get("source", "manual_web")
     elif good:
         best = good[0]
@@ -100,9 +101,10 @@ def _merge_one(p, c, manual):
     d["keywords"]  = [k for k in kws if k][:20]
     d["topics"]    = oa.get("topics") or []
     d["tldr"]      = s2.get("tldr", "")
-    # ── arXiv ID: collected from all providers (Stage 0, not Stage 6) ─────
-    arx = (manual.get("arxiv_id")
-           or (ax or {}).get("arxiv_id")
+
+    # ── arXiv ID ──────────────────────────────────────────────────────────────
+    arx = ((manual.get("arxiv_id") if manual else "")
+           or ax.get("arxiv_id")
            or oa.get("arxiv_id")
            or s2.get("arxiv_id") or "")
     if not arx:
@@ -114,9 +116,9 @@ def _merge_one(p, c, manual):
     d["arxiv_id"]  = arx
     d["arxiv_url"] = ("https://arxiv.org/abs/" + arx) if arx else ""
     pdfs = []
-    for u in ([manual.get("pdf")] + [s2.get("pdf")] +
+    for u in ([(manual.get("pdf") if manual else "")] + [s2.get("pdf")] +
               (oa.get("pdf_links") or []) + (cr.get("pdf_links") or []) +
-              (ld.get("pdf_links") or []) + ((ax or {}).get("pdf_links") or [])):
+              (ld.get("pdf_links") or []) + (ax.get("pdf_links") or [])):
         if u and u not in pdfs:
             pdfs.append(u)
     d["pdf_urls"]      = pdfs
@@ -128,7 +130,12 @@ def _merge_one(p, c, manual):
                                 else s2.get("cited_by")))
     d["retracted"]     = bool(cr.get("retracted") or oa.get("retracted"))
     hint = p.get("pub_hint", "unknown")
-    if (p.get("doi") or "").startswith("10.48550") or \
+    k = p.get("dblp_key", "")
+    if k.startswith("conf/"):
+        hint = "conference"
+    elif k.startswith("journals/") and not k.startswith("journals/corr/"):
+        hint = "journal"
+    elif (p.get("doi") or "").startswith("10.48550") or \
             d["crossref_type"] in ("posted-content", "preprint", "repository"):
         hint = "preprint_only"
     elif d["crossref_type"] == "dissertation":
@@ -139,22 +146,20 @@ def _merge_one(p, c, manual):
         elif d["crossref_type"] in ("proceedings-article", "book-chapter"):
             hint = "conference"
     d["pub_hint"]      = hint
-    d["manual_notes"]  = manual.get("notes", "")
+    d["manual_notes"]  = manual.get("notes", "") if manual else ""
     return d
 
 
 def build_dossiers(run, embed="auto"):
     rows = []
-    enrichment_index = run.enrichment_index()
     for p in run.papers():
-        c = enrichment_index.get(p["id"], {})
-        m = run.get_manual_override(p["id"])
+        c = p.get("enrichment") or run.get_enrichment(p["id"]) or {}
+        m = p.get("manual") or run.get_manual_override(p["id"]) or {}
         rows.append(_merge_one(p, c, m))
     sig = compute_signals(rows, embed=embed)
     for r, s in zip(rows, sig):
         r.update(s)
-    write_jsonl(run.dossier_path, rows)
-    run._dos = None
+    run.save_papers()
     return rows
 
 
@@ -169,9 +174,6 @@ def coverage_report(run):
         print("  -> you must look these up yourself (web search / fetch the DOI page) "
               "and store with `ph.py fill`.")
         print("  ids: " + " ".join(miss[:400]) + (" ..." if len(miss) > 400 else ""))
-        (run.dir / "missing-abstracts.txt").write_text("\n".join(miss))
-    else:
-        (run.dir / "missing-abstracts.txt").write_text("")
 
 
 # ── batch enrichment ──────────────────────────────────────────────────────────
@@ -180,29 +182,22 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
     papers = [p for p in run.papers() if p.get("in_range") or all_years]
     if limit:
         papers = papers[:limit]
-    
-    # Load enrichment index to check what's done
-    enrichment_index = run.enrichment_index()
-    todo = [p for p in papers if not enrichment_index.get(p["id"], {}).get("done")]
-    
+
+    todo = [p for p in papers if not (p.get("enrichment") or {}).get("done")]
     print("enrich: %d papers, %d still to fetch" % (len(papers), len(todo)))
+
     dois = sorted({p["doi"] for p in todo if p.get("doi")})
-    oa_cache_file = run.dir / "openalex_batch.json"
     oamap = {}
-    if oa_cache_file.exists():
-        print("loading cached OpenAlex batch ...")
-        oamap = read_json(oa_cache_file, {})
-        print("  loaded %d" % len(oamap))
-    elif dois:
+    if dois:
         print("openalex batch pre-pass for %d DOIs ..." % len(dois))
         oamap = openalex_batch(dois)
         print("  matched %d" % len(oamap))
-        write_json(oa_cache_file, oamap)
     s2map = {}
     if dois and not skip_s2:
         print("semantic scholar batch pre-pass for %d DOIs ..." % len(dois))
         s2map = s2_batch(dois)
         print("  matched %d" % len(s2map))
+
     done, t0 = 0, time.time()
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = [ex.submit(enrich_one, run, p, s2map.get(p.get("doi")), oamap.get(p.get("doi"))) for p in todo]
@@ -210,12 +205,13 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
             f.result()
             done += 1
             if done % 200 == 0 or done == len(todo):
+                # Periodic checkpoint save for resume protection
+                run.save_papers()
                 print("  %d/%d  (%.0fs)" % (done, len(todo), time.time() - t0), flush=True)
-    
+
     build_dossiers(run, embed=embed)
     coverage_report(run)
-    
-    # Update state tracking
+
     try:
         run.update_state(
             current_stage="enrichment_complete",
@@ -226,4 +222,4 @@ def run_enrich(run, workers=8, limit=0, all_years=False, skip_s2=False, embed="a
             }}
         )
     except Exception:
-        pass  # State tracking is optional
+        pass

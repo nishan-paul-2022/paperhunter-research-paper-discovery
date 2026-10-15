@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-a_cli.py — paper-hunter CLI dispatcher.  Python 3.8+, standard library only.
+a_cli.py — paper-hunter CLI dispatcher. Python 3.8+, standard library only.
 
-The AI agent driving the pipeline (see prompt.md) calls this; humans never need to.
-All logic is in the co-located Python files (b_io.py, c_schema.py, etc.).
-Every sub-command is resumable: all state lives in runs/<csv-stem>/ as plain files.
+All run state is consolidated into two flat files in paper-dump/<csv-stem>/:
+  - papers.jsonl (the unified per-paper store: metadata, enrichment, signals, overrides, decisions, final)
+  - state.json   (run metadata, stage tracking, pass plans)
 
+Sub-commands:
   init          load + normalise the CSV, assign stable ids
   doctor        check network access to metadata providers
   enrich        fetch abstracts + metadata for EVERY paper (Crossref, OpenAlex, S2,
-                publisher landing page, arXiv) — arXiv included at Stage 0
+                publisher landing page, arXiv)
   signals       recompute signals only (after manual abstracts were filled in)
   fill          store an abstract/metadata the agent found by hand for one paper
   show          print one full dossier
@@ -23,26 +24,24 @@ Every sub-command is resumable: all state lives in runs/<csv-stem>/ as plain fil
   sweep         add high-signal papers to blind pass C
   reconcile     merge passes, find disagreements, build the adjudication queue
   validate      consistency checks on the final verdicts
-  export        write the filtered CSV (+ borderline CSV, audit CSV, short report)
+  export        write the filtered CSV (+ on-demand --borderline or --audit CSVs)
 """
 import argparse, csv as _csv, json, math, random, re, shutil, sys, textwrap, time
-import unicodedata
+import unicodedata, urllib.parse
 from collections import Counter
 from pathlib import Path
 
-# ── package imports (relative path removed, direct imports) ───────────────────
+# ── package imports ───────────────────────────────────────────────────────────
 from b_io      import (Run, TOOLS_DIR, RUNS_DIR, DEFAULT_OUTPUT, now, read_jsonl, write_jsonl,
-                         append_jsonl, read_json, write_json, write_csv, norm, clean_title)
+                          read_json, write_json, write_csv, norm, clean_title)
 from c_schema  import (ROLES, ROLE_TO_CONTRIB, CONTRIBS, VERDICTS, YNU, SCOPES,
-                         PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES, BORDER_REASONS,
-                         ABSTRACT_SOURCES, EVIDENCE_SOURCES, validate_record)
+                          PUB_STATUS, PUB_OK_STRICT, REJECT_CLASSES, BORDER_REASONS,
+                          ABSTRACT_SOURCES, EVIDENCE_SOURCES, validate_record)
 from d_network import (http, p_crossref, p_openalex, p_landing, p_arxiv,
-                         s2_batch, BROWSER_UA, title_sim, URL_S2, URL_CROSSREF,
-                         URL_OPENALEX, URL_ARXIV)
+                          s2_batch, BROWSER_UA, title_sim, URL_S2, URL_CROSSREF,
+                          URL_OPENALEX, URL_ARXIV)
 from e_enrich  import (run_enrich, build_dossiers, coverage_report, enrich_one)
 from f_signals import compute_signals, SWEEP_QUERIES
-
-import urllib.parse
 
 SEED = 20261014
 
@@ -66,7 +65,7 @@ def pub_hint_from_key(dblp_key, venue, title):
     return "unknown"
 
 def cmd_init(a):
-    import csv, io as _io
+    import csv, io as _io, hashlib
     src = Path(a.csv).expanduser()
     if not src.exists():
         die("CSV not found: %s" % src)
@@ -78,7 +77,6 @@ def cmd_init(a):
     cols = {c.strip().lower(): c for c in rdr.fieldnames}
     if "title" not in cols:
         die("CSV needs a 'title' column; found %s" % list(cols))
-    import hashlib
     g       = lambda row, k: (row.get(cols[k], "") or "").strip() if k in cols else ""
     name    = re.sub(r"[^A-Za-z0-9._-]+", "_", src.stem)
     run_dir = RUNS_DIR / name
@@ -88,9 +86,8 @@ def cmd_init(a):
         return cmd_status(argparse.Namespace(run=name))
     if run_dir.exists() and a.fresh:
         shutil.rmtree(run_dir)
-    for sub in ("cache", "manual", "fulltext"):
-        (run_dir / sub).mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, run_dir / "input.csv")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     papers, seen_doi, seen_title = [], {}, {}
     for i, row in enumerate(rdr, 1):
         title = clean_title(g(row, "title"))
@@ -125,13 +122,16 @@ def cmd_init(a):
             seen_title[nt] = pid
         papers.append(p)
     write_jsonl(run_dir / "papers.jsonl", papers)
+
     meta = {"csv": str(src.resolve()), "sha1": hashlib.sha1(raw).hexdigest(),
             "created": now(), "n_rows": len(papers),
             "min_year": a.min_year, "max_year": a.max_year,
             "output_dir": str(Path(a.output_dir).expanduser().resolve()) if a.output_dir else str(DEFAULT_OUTPUT),
             "publication_policy": a.publication_policy}
-    write_json(run_dir / "meta.json", meta)
+    run = Run(name)
+    run.update_state(meta=meta)
     (TOOLS_DIR / ".current").write_text(str(src.resolve()))
+
     n_dup = sum(1 for p in papers if p.get("dup_of"))
     n_oor = sum(1 for p in papers if not p["in_range"])
     n_doi = sum(1 for p in papers if p["doi"])
@@ -180,9 +180,10 @@ def cmd_signals(a):
 
 def cmd_fill(a):
     run = Run(a.run)
-    if a.id not in {p["id"] for p in run.papers()}:
+    p = run.get_paper(a.id)
+    if not p:
         die("unknown id " + a.id)
-    m  = run.get_manual_override(a.id)
+    m = run.get_manual_override(a.id)
     ab = a.abstract
     if a.abstract_file:
         ab = Path(a.abstract_file).read_text(encoding="utf-8")
@@ -199,7 +200,7 @@ def cmd_fill(a):
         m["url"] = a.url
     run.save_manual_override(a.id, m)
     build_dossiers(run, embed="off")
-    print("stored for %s (abstract_source=%s)" % (a.id, run.dossiers()[a.id]["abstract_source"]))
+    print("stored for %s (abstract_source=%s)" % (a.id, run.get_paper(a.id).get("abstract_source")))
 
 
 # ── show / search ─────────────────────────────────────────────────────────────
@@ -253,15 +254,14 @@ def render_dossier(d, run=None, with_prior=None):
 
 def cmd_show(a):
     run = Run(a.run)
-    d   = run.dossiers().get(a.id)
+    d   = run.get_paper(a.id)
     if not d:
         die("unknown id")
-    print(render_dossier(d, with_prior=(
-        [(p, run.decisions(p).get(a.id)) for p in ("A", "B", "C", "F")]
-        if not a.blind else None)))
+    decs = d.get("decisions", {})
+    prior = [(p, decs.get(p)) for p in ("A", "B", "C", "F")] if not a.blind else None
+    print(render_dossier(d, with_prior=prior))
 
 def _toks(text):
-    import math
     words = [w.strip(".-+") for w in re.findall(r"[a-z0-9][a-z0-9\-\+\.]*", (text or "").lower())]
     STOP  = set("a an the of for and or in on to with by from is are be this that these those "
                 "we our it its as at using use based via into over under between across".split())
@@ -269,7 +269,7 @@ def _toks(text):
     return uni + [a + "_" + b for a, b in zip(uni, uni[1:])]
 
 def search_docs(run, query, top=20):
-    import math, difflib
+    import difflib
     dos  = run.dossiers()
     ids  = [i for i in run.eligible() if i in dos]
     texts = [dos[i]["title"] + " . " + dos[i]["title"] + " . "
@@ -323,11 +323,7 @@ def cmd_status(a):
     el  = run.eligible()
     print("run: %s | csv: %s | papers: %d | eligible: %d"
           % (run.name, run.meta.get("csv"), len(run.papers()), len(el)))
-    if run.dossier_path.exists():
-        coverage_report(run)
-    else:
-        print("dossiers not built yet -> run `ph.py enrich`")
-    pl = run.plans()
+    coverage_report(run)
     for p in ("A", "B", "C", "F"):
         plan = pass_plan(run, p)
         dec  = run.decisions(p)
@@ -340,9 +336,9 @@ def cmd_status(a):
     A = run.decisions("A")
     if A:
         print("pass A verdicts: %s" % dict(Counter(r["verdict"] for r in A.values())))
-    fin = read_jsonl(run.dir / "final.jsonl")
+    fin = run.final_decisions()
     if fin:
-        print("final verdicts: %s" % dict(Counter(r["verdict"] for r in fin)))
+        print("final verdicts: %s" % dict(Counter(r["verdict"] for r in fin.values())))
 
 def ensure_plan_B(run, force=False):
     pl = run.plans()
@@ -390,8 +386,6 @@ def cmd_batch(a):
     p   = a.pass_.upper()
     dos = run.dossiers()
     if p == "A":
-        if not run.dossier_path.exists():
-            die("run `ph.py enrich` first")
         ids = sorted(run.eligible(), key=lambda i: -dos[i].get("signal_score", 0))
     elif p == "B":
         ids = ensure_plan_B(run, a.force)
@@ -415,7 +409,7 @@ def cmd_batch(a):
     print("PASS %s | batch of %d | %d remaining | %d total in pass"
           % (p, len(chunk), len(todo), len(ids)))
     if p == "C":
-        print("BLIND PASS: do NOT open decisions_A/B files or reuse earlier verdicts. "
+        print("BLIND PASS: do NOT open decisions files or reuse earlier verdicts. "
               "Re-read prompt.md sections 2-4 before judging.")
     print("=" * 100)
     for i in chunk:
@@ -427,7 +421,7 @@ def cmd_batch(a):
         print(render_dossier(dos[i], with_prior=prior))
         print("-" * 100)
     print("Next: judge every paper above (follow prompt.md), "
-          "then `python3 tools/ph.py record --pass %s` with a JSON array." % p)
+          "then `python3 a_cli.py record --pass %s` with a JSON array." % p)
 
 
 # ── record ────────────────────────────────────────────────────────────────────
@@ -462,24 +456,21 @@ def cmd_record(a):
         r["pass"], r["ts"] = p, now()
         if r["verdict"] == "reject":
             r["roles"] = []
-        
-        # Save to unified decision log
         run.save_decision(r)
         ok += 1
-    
+
     print("recorded %d, rejected %d (fix the rejected ones and resend only those)"
           % (ok, bad))
     if plan is not None:
         dec = run.decisions(p)
         print("pass %s: %d/%d done" % (p, sum(1 for i in plan if i in dec), len(plan)))
-    
-    # Update state tracking
+
     try:
         passes = run.state()["passes"]
         passes[p]["completed"] = sum(1 for d in run.decisions(p).values())
         run.update_state(passes=passes)
     except Exception:
-        pass  # State tracking is optional
+        pass
 
 
 # ── fulltext ──────────────────────────────────────────────────────────────────
@@ -528,12 +519,12 @@ def cmd_fulltext(a):
         return ""
 
     run = Run(a.run)
-    d   = run.dossiers().get(a.id)
+    d   = run.get_paper(a.id)
     if not d:
         die("unknown id")
-    dst  = run.fulltext_dir / ("%s.txt" % a.id)
-    text = dst.read_text(encoding="utf-8", errors="replace") if dst.exists() and not a.refresh else ""
-    src  = "cache"
+
+    text = run.get_fulltext(a.id) if not a.refresh else ""
+    src  = d.get("fulltext_source", "cache")
     if not text:
         urls = list(a.url or []) + d.get("pdf_urls", [])
         if d.get("arxiv_id"):
@@ -542,7 +533,6 @@ def cmd_fulltext(a):
             urls.append(d["ee"])
         if d.get("doi"):
             urls.append("https://doi.org/" + d["doi"])
-        from d_network import _MetaParser
         for u in dict.fromkeys(urls):
             st, body, final, _ = http(u, urllib.parse.urlparse(u).netloc,
                                        browser=True, retries=2, timeout=45)
@@ -559,14 +549,15 @@ def cmd_fulltext(a):
                 t = re.sub(r"\n\s*\n+", "\n\n", "".join(ex.out))
             if len(t) >= 3000:
                 text, src = t, final
-                dst.write_text(text, encoding="utf-8")
+                run.save_fulltext(a.id, text, src)
                 break
+
     if not text:
         print("NO FULL TEXT RETRIEVABLE for %s. "
               "Use your own web tools; quote with evidence_source=web + evidence_url." % a.id)
         return
-    print("FULL TEXT for %s saved at %s  (%d chars, source: %s)"
-          % (a.id, dst, len(text), src))
+    print("FULL TEXT for %s stored in papers.jsonl (%d chars, source: %s)"
+          % (a.id, len(text), src))
     heads = [(m.start(), m.group(0).strip()) for m in re.finditer(
         r"(?im)^\s*(\d+\.?\s*)?(abstract|introduction|background|related work|threat model|"
         r"design|approach|methodology|method|system overview|architecture|implementation|"
@@ -672,8 +663,9 @@ def cmd_reconcile(a):
         return
     if fn and not pl.get("expanded_once"):
         print("!! The audit found false negatives. Widen the net: "
-              "`ph.py expand-audit --min-signal 1 --min-pct 0.5` "
+              "`python3 a_cli.py expand-audit --min-signal 1 --min-pct 0.5` "
               "(or --all), finish pass C on the new papers, then reconcile again.")
+
     final = []
     for p in run.papers():
         i = p["id"]
@@ -696,30 +688,31 @@ def cmd_reconcile(a):
                                              + float(c.get("confidence", 0))) / 2, 2)
                 row["fulltext_read"] = bool(base.get("fulltext_read") or c.get("fulltext_read"))
         final.append(row)
-    write_jsonl(run.dir / "final.jsonl", final)
-    print("final.jsonl written: %s" % dict(Counter(r["verdict"] for r in final)))
+
+    run.save_final(final)
+    print("final verdicts recorded in papers.jsonl: %s" % dict(Counter(r["verdict"] for r in final)))
 
 
 # ── validate ──────────────────────────────────────────────────────────────────
 
 def cmd_validate(a):
-    run    = Run(a.run)
-    fin    = read_jsonl(run.dir / "final.jsonl")
+    run = Run(a.run)
+    fin = run.final_decisions()
     if not fin:
-        die("no final.jsonl - run reconcile")
+        die("no final decisions in papers.jsonl - run reconcile first")
     policy = run.meta.get("publication_policy", "strict")
-    errs, ids = [], {r["id"] for r in fin}
+    errs = []
     for p in run.papers():
-        if p["id"] not in ids:
+        if p["id"] not in fin:
             errs.append("%s missing from final" % p["id"])
     dos = run.dossiers()
-    for r in fin:
+    for pid, r in fin.items():
         if r.get("passes") == ["auto"]:
             continue
         e = validate_record(run, dict(r), "F", policy, dos=dos)
         e = [x for x in e if "not part of pass" not in x]
         if e:
-            errs.append("%s: %s" % (r["id"], " | ".join(e)))
+            errs.append("%s: %s" % (pid, " | ".join(e)))
     if errs:
         print("VALIDATION FAILED (%d):" % len(errs))
         print("\n".join(errs[:60]))
@@ -729,14 +722,6 @@ def cmd_validate(a):
 
 
 # ── export ────────────────────────────────────────────────────────────────────
-
-CSV_COLS = ["paper_id", "title", "authors", "year", "venue", "doi", "arxiv_url",
-            "ee", "dblp_key", "url", "tier", "primary_role", "roles",
-            "primary_contribution", "subject_scope",
-            "llm_agent", "offensive_security", "black_box", "long_horizon",
-            "publication_status", "system_or_artifact_name", "attack_surfaces",
-            "confidence", "review_passes", "full_text_read",
-            "abstract_source", "evidence_quote", "reason", "abstract"]
 
 def _row_out(d, r):
     return {"paper_id": d["id"], "title": d["title"], "authors": d.get("authors"),
@@ -770,27 +755,24 @@ def cmd_export(a):
     except SystemExit:
         if not a.force:
             die("fix validation errors first (or use --force)")
-    fin = {r["id"]: r for r in read_jsonl(run.dir / "final.jsonl")}
+    fin = run.final_decisions()
     dos = run.dossiers()
-    
-    # Get original CSV filename
+
     csv_path = Path(run.meta.get("csv", ""))
     output_filename = csv_path.stem if csv_path.exists() else run.name
-    
-    # Prepare accepted papers for paper-reference
+
     order = {r: n for n, r in enumerate(ROLES)}
     acc = [_row_out(dos[i], r) for i, r in fin.items() if r["verdict"] == "accept"]
     acc.sort(key=lambda x: (order.get(x["primary_role"], 9),
                              -float(x["confidence"] or 0), x["title"]))
-    
-    # Output filtered CSV to paper-reference/
-    out_dir = DEFAULT_OUTPUT
+
+    out_dir = Path(a.out_dir).expanduser().resolve() if a.out_dir else DEFAULT_OUTPUT
     out_dir.mkdir(parents=True, exist_ok=True)
     output_path = out_dir / f"{output_filename}.csv"
-    
+
     output_rows = []
     for row in acc:
-        output_row = {
+        output_rows.append({
             "dblp_key": row["dblp_key"],
             "title": row["title"],
             "authors": row["authors"],
@@ -799,58 +781,58 @@ def cmd_export(a):
             "ee": row["ee"],
             "url": row["url"],
             "Role": row["primary_role"]
-        }
-        output_rows.append(output_row)
-    
+        })
+
     cols = ["dblp_key", "title", "authors", "year", "venue", "ee", "url", "Role"]
     write_csv(output_path, cols, output_rows)
-    
-    # Save borderline and audit CSV to paper-dump (run directory)
-    bor = []
-    for i, r in fin.items():
-        if r["verdict"] == "borderline":
-            row = _row_out(dos[i], r)
-            row["reason"] = "[%s] %s" % (r.get("borderline_reason"), r.get("reason"))
-            bor.append(row)
-    bor.sort(key=lambda x: -float(x["confidence"] or 0))
-    
-    audit = []
-    for p in run.papers():
-        r = fin[p["id"]]
-        d = dos[p["id"]]
-        audit.append({"paper_id": p["id"], "dblp_key": p["dblp_key"],
-                      "title": p["title"], "year": p["year"], "venue": p["venue"],
-                      "tier": r["verdict"], "roles": ";".join(r.get("roles", [])),
-                      "reject_class": r.get("reject_class", ""),
-                      "borderline_reason": r.get("borderline_reason", ""),
-                      "confidence": r.get("confidence", ""),
-                      "review_passes": "".join(r.get("passes", [])),
-                      "signal_score": d.get("signal_score"),
-                      "abstract_source": d.get("abstract_source"),
-                      "reason": r.get("reason", "")})
-    
-    # Write borderline and audit to paper-dump
-    borderline_cols = ["paper_id", "dblp_key", "title", "authors", "year", "venue", "doi", 
-                       "arxiv_url", "ee", "url", "tier", "primary_role", "roles", 
-                       "primary_contribution", "subject_scope", "llm_agent", "offensive_security",
-                       "black_box", "long_horizon", "publication_status", "system_or_artifact_name",
-                       "attack_surfaces", "confidence", "review_passes", "full_text_read",
-                       "abstract_source", "evidence_quote", "reason", "abstract"]
-    
-    write_csv(run.dir / f"{output_filename}-borderline.csv", borderline_cols, bor)
-    write_csv(run.dir / f"{output_filename}-audit-all.csv", 
-              ["paper_id", "dblp_key", "title", "year", "venue", "tier",
-               "roles", "reject_class", "borderline_reason", "confidence",
-               "review_passes", "signal_score", "abstract_source", "reason"], audit)
-    
     print("Wrote filtered CSV with %d papers to: %s" % (len(output_rows), output_path))
-    print("Wrote borderline (%d) and audit (%d) CSVs to: %s" % (len(bor), len(audit), run.dir))
+
+    # On-demand human-facing views
+    if a.borderline:
+        bor = []
+        for i, r in fin.items():
+            if r["verdict"] == "borderline":
+                row = _row_out(dos[i], r)
+                row["reason"] = "[%s] %s" % (r.get("borderline_reason"), r.get("reason"))
+                bor.append(row)
+        bor.sort(key=lambda x: -float(x["confidence"] or 0))
+        borderline_cols = ["paper_id", "dblp_key", "title", "authors", "year", "venue", "doi", 
+                           "arxiv_url", "ee", "url", "tier", "primary_role", "roles", 
+                           "primary_contribution", "subject_scope", "llm_agent", "offensive_security",
+                           "black_box", "long_horizon", "publication_status", "system_or_artifact_name",
+                           "attack_surfaces", "confidence", "review_passes", "full_text_read",
+                           "abstract_source", "evidence_quote", "reason", "abstract"]
+        bor_path = run.dir / f"{output_filename}-borderline.csv"
+        write_csv(bor_path, borderline_cols, bor)
+        print("Generated on-demand borderline CSV (%d rows) at: %s" % (len(bor), bor_path))
+
+    if a.audit:
+        audit = []
+        for p in run.papers():
+            r = fin[p["id"]]
+            d = dos[p["id"]]
+            audit.append({"paper_id": p["id"], "dblp_key": p["dblp_key"],
+                          "title": p["title"], "year": p["year"], "venue": p["venue"],
+                          "tier": r["verdict"], "roles": ";".join(r.get("roles", [])),
+                          "reject_class": r.get("reject_class", ""),
+                          "borderline_reason": r.get("borderline_reason", ""),
+                          "confidence": r.get("confidence", ""),
+                          "review_passes": "".join(r.get("passes", [])),
+                          "signal_score": d.get("signal_score"),
+                          "abstract_source": d.get("abstract_source"),
+                          "reason": r.get("reason", "")})
+        audit_cols = ["paper_id", "dblp_key", "title", "year", "venue", "tier",
+                      "roles", "reject_class", "borderline_reason", "confidence",
+                      "review_passes", "signal_score", "abstract_source", "reason"]
+        audit_path = run.dir / f"{output_filename}-audit-all.csv"
+        write_csv(audit_path, audit_cols, audit)
+        print("Generated on-demand audit CSV (%d rows) at: %s" % (len(audit), audit_path))
 
 
-# ── selftest (Change 2) ───────────────────────────────────────────────────────
+# ── main CLI dispatcher ───────────────────────────────────────────────────────
 
 def main():
-    ap = argparse.ArgumentParser(prog="ph.py", description=__doc__,
+    ap = argparse.ArgumentParser(prog="a_cli.py", description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", default=None, help="run name (default: current)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -928,9 +910,11 @@ def main():
     s = sub.add_parser("validate");  s.set_defaults(f=cmd_validate)
 
     s = sub.add_parser("export")
-    s.add_argument("--out-dir"); s.add_argument("--force", action="store_true")
-    s.add_argument("--no-network", action="store_true",
-                   help="skip arXiv link lookup (not needed; arXiv is fetched at Stage 0)")
+    s.add_argument("--out-dir")
+    s.add_argument("--force", action="store_true")
+    s.add_argument("--audit", action="store_true", help="generate on-demand audit CSV")
+    s.add_argument("--borderline", action="store_true", help="generate on-demand borderline CSV")
+    s.add_argument("--no-network", action="store_true")
     s.set_defaults(f=cmd_export)
 
     a = ap.parse_args()
