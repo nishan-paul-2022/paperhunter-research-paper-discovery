@@ -17,7 +17,7 @@ The human sets `.current`, hands the agent `paper-matching-guide.md`, and receiv
 ## 0. Non-negotiables (read first)
 
 1. **Content only.** Decisions use title, abstract and full text. **Never** venue, year, authors, affiliation, publisher, DOI, citation counts, retraction flags, preprint/workshop/journal status or any bibliographic field. Those fields are copied through to the output untouched. Code, prompt, schema and database must contain **no decision logic and no decision columns** based on them.
-2. **Rules propose, AI decides.** Rule code produces *cues, a triage tier and a non-binding prior*. It never issues a final accept. It may issue a final reject only for papers whose content carries no AI cue and no security cue (tier 0), and a random audit measures that gate.
+2. **Rules propose, AI decides.** Rule code produces *cues, a triage tier and a non-binding prior*. It never issues a final accept. It may issue a final reject only for papers whose content lacks an AI cue or a security cue and that have an abstract to confirm it (tier 0, and tier 1 with an abstract). Tier-1 papers *without* an abstract go to the AI. Deterministic hash-sampled blind audits measure both rule-reject strata (§4.4).
 3. **No fabricated evidence, ever.** `evidence level` may only be raised by a recorded fetch. No code path may assign a placeholder quote or a "publisher page investigated" label.
 4. **Parallel by construction.** Work is a leased queue. Any number of worker processes (sub-agents) can claim, judge and submit concurrently. No command may load whole tables, rewrite rows from a snapshot, or read-modify-write JSON.
 5. **Streaming, not staged.** Follow-up work (blind review, adjudication) is queued the moment its trigger exists, with no global stage barrier except two cheap deterministic ones.
@@ -277,7 +277,7 @@ The orchestrator (the main agent) runs the deterministic commands, then spawns w
 
 `run-deterministic` is a convenience that executes phases 1–6 in order (with `fetch` passes before and after `triage`).
 
-Estimated wall time of the deterministic part (from the code's throttle constants; **verify on first run**): `a-2026` about 3–8 min; `q1-2023` (92k) about 10–25 min, dominated by about 1,850 OpenAlex and up to about 740 S2 requests. `triage` should take under 60 s on 8 cores for 92k papers (measured single-core cost of the legacy signals was 6 ms/paper; the new cues must be ≤ 0.5 ms/paper).
+Estimated wall time of the deterministic part (from the code's throttle constants; **verify on first run**): `a-2026` about 3–8 min; `q1-2023` (92k) about 10–25 min, dominated by about 1,850 OpenAlex and up to about 740 S2 requests. `triage` should take under 30 s on 8 cores for 92k papers (legacy signals cost 6.0 ms/paper; a design-time prototype of the §6 cues measured **1.4 ms/paper**, i.e. 130 s single-core for 92k, about 17 s on 8 cores; the requirement is ≤ 2 ms/paper/core).
 
 ### 4.3 Tiers (content-only, corpus-independent)
 
@@ -419,7 +419,7 @@ For `reject`: `"reject_class":"defensive_only"` instead of `role`; `criteria` op
 
 ## 6. Rules specification (`f_cues.py`, `g_prior.py`)
 
-Goal: **high-recall, corpus-independent, cheap (≤ 0.5 ms/paper), explainable**. Rules route and advise. They do not judge.
+Goal: **high-recall, corpus-independent, cheap (≤ 2 ms/paper/core), explainable**. Rules route and advise. They do not judge.
 
 ### 6.1 Cue tokens (booleans over normalised title + abstract)
 
@@ -457,6 +457,20 @@ The tier is computed from cues alone. The prior is computed afterwards from the 
 
 Probe cases the cues must satisfy are in Appendix B.
 
+### 6.4 Design-time prototype results (throw-away code, not in the repo; use as the expected baseline)
+A prototype of §6.1–6.3, run read-only on the stored title/abstract text of the existing runs:
+
+| Corpus (canonical papers) | Tier 0 / 1 / 2 / 3 | Tier ≥ 2 | Tier-1 papers with no abstract today |
+|---|---|---|---|
+| `a-2026` (9,707) | 7,438 / 2,036 / 219 / 14 | 233 (2.4%) | 538 |
+| `q1-2023` (92,106) | 85,797 / 6,238 / 70 / 1 | 71 (0.08%) | 3,147 |
+
+- It found **both legacy accepts** of `a-2026` at tier 3 with prior `accept:baseline`.
+- On `sample.csv` it put **all 6 reference papers at tier 3** (including HackWorld and Lin et al., which have no abstract and are caught by title cues) and **none of the 24 hardware/ML negatives at tier ≥ 2**.
+- Appendix B: 16/16 once rows 6 and 7 are stated as intentional rule failures.
+- These counts use the abstracts stored today (about 12% coverage). After `fetch`, tier ≥ 2 will grow and the tier-1-without-abstract queue will shrink. Even the pessimistic sum (tier ≥ 2 plus all tier-1 without abstract) is about 3,200 papers for the largest file, which is the upper bound of the AI workload.
+- The prototype is the reference for cue *behaviour*, not code to copy. The implementer should add the full vocabularies from §6.1 and keep the Appendix B probes green.
+
 ---
 
 ## 7. Validator specification (`c_schema.validate_review`)
@@ -483,7 +497,7 @@ The contract is frozen by §3.3 (DDL), §5 (signatures, CLI) and §7 (validator)
 | **WP0** (orchestrator, first) | `b_db.py` skeleton: `open_db`, `create_schema` (DDL verbatim from §3.3), function stubs with signatures from §5 | none | DDL executes; `PRAGMA user_version=3` |
 | **WP1** | `b_db.py` (bodies), `c_schema.py` | WP0 | tests T4, T6, T7, T9 pass |
 | **WP2** | `d_network.py`, `e_fetch.py` | WP0 | fetch tests with recorded fixtures pass; per-host throttle in-process |
-| **WP3** | `f_cues.py`, `g_prior.py` | none (pure functions) | Appendix B probes pass; ≤ 0.5 ms/paper (T12) |
+| **WP3** | `f_cues.py`, `g_prior.py` | none (pure functions) | Appendix B probes pass; ≤ 2 ms/paper/core (T12) |
 | **WP4** | `h_flow.py`, `i_export.py` | WP0 | tests T5, T8, T10, T11 pass with stub reviewers |
 | **WP5** | `a_cli.py` | WP1 stubs | every command in §5.1 runs on `sample.csv` |
 | **WP6** | `paper-matching-guide.md` (= Appendix A, then command spellings checked against WP5) | WP5 | guide has no reference to a removed command or file |
@@ -510,7 +524,7 @@ All must pass before legacy files are retired. Put them in `paper-hunter/tests/`
 | T9 | **Termination** | Stub workers that fail randomly 30% of the time: `advance` reaches `done:true`; no task stays `leased`/`todo` |
 | T10 | **Export** | Output columns = input columns + `Role`, original order and text preserved byte-for-byte; sha1 mismatch aborts; zero accepts writes a header-only file |
 | T11 | **Idempotence and resume** | Kill `fetch`, `triage` and `advance` mid-run and re-run: final DB equals an uninterrupted run |
-| T12 | **Speed** | `triage` ≤ 0.5 ms/paper/core (92k papers < 60 s on 8 cores); `claim` and `submit` latency < 100 ms and independent of corpus size; no command other than `init`/`triage`/`export` reads whole tables |
+| T12 | **Speed** | `triage` ≤ 2 ms/paper/core (92k papers < 30 s on 8 cores); `claim` and `submit` latency < 100 ms and independent of corpus size; no command other than `init`/`triage`/`export` reads whole tables |
 | T13 | **Size** | New DB on `a-2026.csv` after `fetch`: file size minus (titles + abstracts + fulltext) ≤ 400 B/paper; legacy was about 3,800 B/paper outside content (370 MB file minus 23 MB of text, over 92,344 papers) |
 | T14 | **Probe coverage** | Every Appendix B probe meets its expected tier and prior constraint |
 | T15 | **End-to-end smoke** | `sample.csv` through the whole flow with the real agent: output contains all six rows of `paper-reference/sample.csv` with their roles (Incalmo, PentestLLMAgent, PenForge = baseline; HackWorld, Shao et al. = benchmark; Lin et al. = evaluation) and none of the 24 hardware/ML rows. Treat as a smoke test only; six papers measure nothing statistically |
