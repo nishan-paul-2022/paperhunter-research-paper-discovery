@@ -1,12 +1,19 @@
-"""b_db.py: storage layer for PAPER-HUNTER v3.
+"""Database storage layer.
 
-Storage only. No decision policy lives here (policy is in h_flow.py).
-The schema is the contract described in PIPELINE-OPINION.md section 3.3.
+Storage only. Decision policy is in h_flow. Schema is normalized with sparse tables
+for content (abstract, fulltext) and work (task queue, reviews, results).
 
-Rules for callers:
-  * never load whole tables; use iter_papers() / keyed accessors;
-  * every write goes through tx(conn) (BEGIN IMMEDIATE, short transactions);
-  * `paper.id` is the 1-based data-row ordinal of the input CSV.
+Design principles:
+  * One fact, one place. No blobs repeating columns
+  * Sparse tables for sparse facts (most papers never reviewed)
+  * Append-only judgements. Reviews never updated
+  * Parallel by construction. Leased work queue for concurrent workers
+  * Integrity at schema level. CHECK and FOREIGN KEY constraints
+
+Caller rules:
+  * Never load whole tables; use iter_papers() and keyed accessors
+  * All writes through tx(conn) (short transactions, BEGIN IMMEDIATE)
+  * paper.id is the 1-based CSV row ordinal
 """
 
 import csv
@@ -168,7 +175,7 @@ def extract_doi(*values):
 # --------------------------------------------------------------------------- connection
 
 def open_db(path, create=False, readonly=False):
-    """Open a v3 database. Sets pragmas; creates the schema when create=True."""
+    """Open database. Sets pragmas; creates schema when create=True."""
     path = str(path)
     if readonly:
         conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True, isolation_level=None,
@@ -247,11 +254,10 @@ def run_paths(csv_path=None):
 
 
 def init_from_csv(csv_path, db_path, handle_cols=("ee", "url", "doi"), fresh=False):
-    """Parse the CSV once and create the v3 database.
+    """Parse CSV and create database.
 
-    Only `title` and the handle columns are read. Every other column is pass-through
-    and is never parsed here. Returns a stats dict. Raises FileExistsError when a v3
-    database already exists (caller resumes) unless fresh=True.
+    Only title and handle columns are read. Every other column is pass-through.
+    Returns stats dict. Raises FileExistsError if database exists unless fresh=True.
     """
     csv_path, db_path = Path(csv_path), Path(db_path)
     if not csv_path.exists():

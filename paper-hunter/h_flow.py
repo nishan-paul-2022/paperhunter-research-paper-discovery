@@ -1,9 +1,10 @@
-"""h_flow.py: task creation, follow-up policy, finalisation and fallbacks (PIPELINE-OPINION.md 4.4).
+"""Workflow state machine: task creation, follow-up policy, finalization, and fallbacks.
 
-Everything here is a pure function of table contents. `_evaluate` is the single policy
-evaluator: `on_submit` runs it for the paper that just received a review and `advance` runs
-it for every paper that still needs a decision, so a missed follow-up is repaired and running
-`advance` twice changes nothing. Content only: no bibliographic field is read.
+Policy lives here. Pure functions of table contents. _evaluate() is the single policy
+evaluator called by on_submit() and advance(). Idempotent: running advance() twice is safe.
+
+Flow: triage → review → blind (on uncertainty) → final (on conflict) → result.
+Decisions are deterministic. Content only: no bibliographic fields read.
 """
 
 import b_db

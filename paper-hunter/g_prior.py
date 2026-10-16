@@ -1,20 +1,13 @@
-"""g_prior.py: advisory prior (spec section 6.3).
+"""Advisory prior generation from cues and title.
 
-A prior is a hint for the reviewer, never a verdict. It is computed after the tier, from the
-tier, the cues and the normalised title, and never feeds back into the tier. Unmatched papers
-get None: "no opinion".
+Prior is a hint for reviewers, never a verdict. Only tier >= 2 papers get priors.
+Bare word "defense" never counts as evidence for reject:defensive_only.
 """
 
 from f_cues import BENCH_RE, DEF_CORE_RE, EVAL_RE, JB_RE, OFF_STRONG_RE, SCAN_RE, normalize
 
 
 def prior(title, abstract, cue_set, tier):
-    """'accept:<role>' | 'reject:<class>' | None.
-
-    Only tier >= 2 papers get a prior. The abstract is accepted for API symmetry: its content
-    is already summarised by `cue_set`, and title-level evidence decides the competing topics.
-    The bare word "defense" never counts as defensive evidence.
-    """
     if tier < 2:
         return None
     t = normalize(title)

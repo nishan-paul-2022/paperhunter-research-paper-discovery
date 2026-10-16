@@ -1,10 +1,14 @@
-"""f_cues.py: pure, corpus-independent content cues and triage tier (spec section 6).
+"""Content cues and triage tier classification.
 
-Cues are booleans over the normalised title and abstract only. The same paper gets the
-same cues and tier in any file: no percentiles, no corpus statistics, no global state.
-Rules route and advise; they never judge.
+Cues are pure boolean tests over normalized title and abstract. Corpus-independent:
+the same paper gets the same cues and tier in any file.
 
-Tokens: ai agent sec off off_strong def jb scan surv bench eval front seed
+Tier 0: no AI or security cues → rule reject
+Tier 1: AI xor security → weak signal, most rule rejected
+Tier 2: AI and security → AI review
+Tier 3: strong offensive + agent signals → priority review
+
+Cue tokens: ai agent sec off off_strong def jb scan surv bench eval front seed
 """
 
 import os

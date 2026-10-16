@@ -1,10 +1,7 @@
-"""d_network.py: HTTP plumbing and abstract providers for PAPER-HUNTER v3.
+"""HTTP client and abstract providers (OpenAlex, Semantic Scholar, Crossref, arXiv, landing pages).
 
-Content-only: every provider returns `{"abstract": str, "pdf": str|None, "arxiv": str|None}`
-(abstract + two retrieval handles) or None when the source has nothing for the paper.
-A network-level failure (no HTTP answer after retries) raises `NetworkError`, so callers can
-tell "the source has nothing" (None, safe to cache) from "we could not ask" (retry later).
-Throttles are per process and shared by all threads.
+Content-only: providers return {abstract, pdf, arxiv} or None. Never return bibliographic
+fields. Throttles enforce per-provider rate limits shared across threads.
 """
 
 import difflib
@@ -24,7 +21,7 @@ from html.parser import HTMLParser
 from b_db import MIN_ABSTRACT, norm_title
 
 MAILTO = os.environ.get("PH_MAILTO", "")
-UA = "paper-hunter/3.0 (literature screening; mailto:%s)" % (MAILTO or "unknown@example.org")
+UA = "paper-hunter/1.0 (literature screening; mailto:%s)" % (MAILTO or "unknown@example.org")
 BROWSER_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"

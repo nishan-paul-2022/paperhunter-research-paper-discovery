@@ -1,4 +1,4 @@
-# Paper-Hunter v3 Review Guide
+# Paper-Hunter Review Guide
 
 This is the **master prompt** for AI reviewers and for the orchestrator that runs them.
 
@@ -74,7 +74,7 @@ Accept requires `agent=y` and `offense=y`. A `baseline` additionally needs `blac
 
 ```bash
 python3 a_cli.py doctor
-python3 a_cli.py run-deterministic          # init, fetch, triage, deep fetch, triage, advance
+python3 a_cli.py run-deterministic
 python3 a_cli.py status
 ```
 
@@ -106,12 +106,25 @@ and do a short self-audit: open `paper-reference/<stem>.csv`, check the role dis
 ## 10. Review record
 
 ```json
-[{"id": 4211, "verdict": "accept", "p": 0.93, "role": "baseline",
-  "criteria": {"agent": "y", "offense": "y", "black_box": "y", "long_horizon": "p"},
-  "level": "abstract", "quote_src": "abstract",
+[{
+  "id": 4211,
+  "verdict": "accept",
+  "p": 0.93,
+  "role": "baseline",
+  "criteria": {
+    "agent": "y",
+    "offense": "y",
+    "black_box": "y",
+    "long_horizon": "p"
+  },
+  "level": "abstract",
+  "quote_src": "abstract",
   "quote": "verbatim, 4 to 45 words, copied from the stored text",
-  "vs_prior": "agree", "reason": "At most 60 words."}]
+  "vs_prior": "agree",
+  "reason": "At most 60 words."
+}]
 ```
+
 Reject: replace `role` with `"reject_class": "<class>"` and `p < 0.5`; `criteria` only for the values you judged. Never include metadata fields.
 
 ## 11. Reference cases (learn the calls that keywords get wrong)

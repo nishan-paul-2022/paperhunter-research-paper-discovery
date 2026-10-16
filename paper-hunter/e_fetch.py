@@ -1,10 +1,8 @@
-"""e_fetch.py: abstract fetch passes for PAPER-HUNTER v3 (content only).
+"""Abstract fetching orchestrator.
 
-Pass 1 (`deep=False`): OpenAlex batches feed an S2 batch worker; both run concurrently.
-Pass 2 (`deep=True`): per-paper provider chain for papers whose title triage tier is >= 1.
-Resumability is `fetch_state.tried` (a provider that answered "nothing" is marked, a provider
-that could not be reached is not). Only retrieval handles (doi, link, pdf, arXiv id) and
-title/abstract text are used.
+Pass 1 (shallow): OpenAlex and Semantic Scholar batches run concurrently.
+Pass 2 (deep): tier >= 1 papers with no abstract try Crossref, landing pages, and arXiv.
+Resumability via fetch_state.tried bitmask. Only content and retrieval handles used.
 """
 
 import queue

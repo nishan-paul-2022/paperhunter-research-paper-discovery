@@ -1,8 +1,8 @@
-"""i_export.py: CSV pass-through export (PIPELINE-OPINION.md 5.2).
+"""CSV export: pass-through with Role column appended.
 
-Re-reads the original input CSV, keeps header and every field exactly as parsed, selects the
-accepted papers and adds a `Role` column. No column other than `Role` is ever interpreted.
-Ids follow b_db.init_from_csv: the 1-based index of the non-empty records after the header.
+Re-reads original input CSV. Keeps header and all fields exactly as parsed.
+Selects accepted papers, adds Role column. No column except Role is interpreted.
+Row IDs are 1-based ordinals matching init_from_csv().
 """
 
 import csv

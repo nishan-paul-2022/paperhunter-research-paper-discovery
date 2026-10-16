@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""a_cli.py: CLI for PAPER-HUNTER v3.
+"""Command-line interface for automated paper classification.
 
-Argument parsing and dossier rendering only. No policy.
+Argument parsing and dossier rendering. Decision policy is in h_flow.
 """
 
 import argparse
@@ -78,7 +78,7 @@ def cmd_doctor(a):
     report["network"] = {}
     for url in hosts:
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "paper-hunter/3.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "paper-hunter/1.0"})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 report["network"][url] = {"ok": True, "status": resp.status}
         except Exception as e:
@@ -471,7 +471,7 @@ def cmd_export(a):
 # --------------------------------------------------------------------------- main
 
 def main():
-    p = argparse.ArgumentParser(description="PAPER-HUNTER v3 CLI")
+    p = argparse.ArgumentParser(description="Paper classification workflow CLI")
     p.add_argument("--csv", help="CSV path (default: from .current)")
     
     sub = p.add_subparsers(dest="command", required=True)

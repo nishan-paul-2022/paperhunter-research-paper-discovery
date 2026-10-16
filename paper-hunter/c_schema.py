@@ -1,8 +1,12 @@
-"""c_schema.py: enums, quote matching and the review validator (PIPELINE-OPINION.md section 7).
+"""Schema validation and review record validation.
 
-The validator is the rule side's veto: it decides whether a reviewer's JSON record may be
-stored. It reads content only (title, abstract, full text, triage tier/prior, the lease and the
-owner's earlier reasons); no bibliographic field is ever consulted.
+Validates review records against evidence provenance rules:
+  * level=abstract requires abstract row in database
+  * level=fulltext requires fulltext row in database
+  * quotes must match stored text (fuzzy match for title/abstract, shingle for fulltext)
+  * verdict/role/p consistency enforced
+
+Content only: reads title, abstract, fulltext, tier, prior. No bibliographic fields.
 """
 
 import difflib
