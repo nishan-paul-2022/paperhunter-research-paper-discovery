@@ -211,7 +211,7 @@ def cmd_run_deterministic(a):
     # Triage
     print("\n=== TRIAGE ===")
     r2 = f_cues.run_triage(conn, workers=a.workers)
-    print("Triaged: %(computed)d papers" % r2)
+    print("Triaged: %(processed)d papers" % r2)
     
     # Deep fetch
     print("\n=== FETCH (deep) ===")
@@ -221,7 +221,7 @@ def cmd_run_deterministic(a):
     # Triage again
     print("\n=== TRIAGE (incremental) ===")
     r4 = f_cues.run_triage(conn, workers=a.workers)
-    print("Triaged: %(computed)d additional papers" % r4)
+    print("Triaged: %(processed)d additional papers" % r4)
     
     # Advance once
     print("\n=== ADVANCE ===")
@@ -271,9 +271,7 @@ def _render_dossier(d, stage):
     
     if d.get("abstract"):
         src = "[%s]" % d["abstract_src"] if d.get("abstract_src") else ""
-        lines.append("ABSTRACT%s: %s" % (src, d["abstract"][:500]))
-        if len(d["abstract"]) > 500:
-            lines.append("  [... %d more chars]" % (len(d["abstract"]) - 500))
+        lines.append("ABSTRACT%s: %s" % (src, d["abstract"]))
     else:
         handle = d.get("fetch_handle", "")
         lines.append("ABSTRACT: NONE  fetch_handle: %s" % handle)

@@ -1,3 +1,0 @@
-﻿dblp_key,title,authors,year,venue,ee,url,Role
-conf/iwpc/ChenLWLZLX26,A Multi-Agent Framework for Automated Exploit Generation with Constraint-Guided Comprehension and Reflection,Siyi Chen; Tianhan Luo; Shijian Wu; Xiangyu Liu; Yilin Zhou; Qi Li; Wenyuan Xu 0007,2026,ICPC,https://doi.org/10.1145/3794763.3794817,db/conf/iwpc/icpc2026.html#ChenLWLZLX26,baseline
-conf/eacl/ZhuKGLFBK26,Teams of LLM Agents can Exploit Zero-Day Vulnerabilities,Yuxuan Zhu 0003; Antony Kellermann; Akul Gupta; Philip Li; Richard Fang; Rohan Bindu; Daniel Kang 0001,2026,EACL (Volume 1: Long Papers),https://doi.org/10.18653/v1/2026.eacl-long.2,db/conf/eacl/eacl2026-1.html#ZhuKGLFBK26,baseline
