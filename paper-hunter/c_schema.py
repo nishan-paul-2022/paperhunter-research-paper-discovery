@@ -1,353 +1,292 @@
+"""c_schema.py: enums, quote matching and the review validator (PIPELINE-OPINION.md section 7).
+
+The validator is the rule side's veto: it decides whether a reviewer's JSON record may be
+stored. It reads content only (title, abstract, full text, triage tier/prior, the lease and the
+owner's earlier reasons); no bibliographic field is ever consulted.
+"""
+
 import difflib
 import re
 import unicodedata
 
-ROLES = ["baseline", "benchmark", "evaluation", "survey"]
-ROLE_TO_CONTRIB = {
-    "baseline": "agent_system",
-    "baseline_candidate": "agent_system",
-    "benchmark": "benchmark_dataset",
-    "evaluation": "evaluation_study",
-    "survey": "survey",
+import b_db
+
+ROLES = ("baseline", "benchmark", "evaluation", "survey")
+REJECT_CLASSES = ("off_domain", "security_other", "defensive_only", "vuln_detection_or_code_scan",
+                  "generic_llm_security", "static_qa_benchmark", "llm_no_offense", "frontmatter")
+CRIT_VALUES = ("y", "p", "n", "u")
+LEVELS = ("title", "abstract", "fulltext")
+STAGES = ("review", "blind", "final")
+VERDICTS = ("accept", "reject")
+VS_PRIOR = ("agree", "override")
+
+CRITERIA_KEYS = (("agent", "c_agent"), ("offense", "c_off"),
+                 ("black_box", "c_bb"), ("long_horizon", "c_lh"))
+
+QUOTE_MIN_WORDS, QUOTE_MAX_WORDS = 4, 45
+REASON_MIN_CHARS, REASON_MAX_WORDS = 10, 60
+MAX_SAME_REASON = 5
+TITLE_ACCEPT_MIN_P = 0.6
+PLACEHOLDER_QUOTES = ("research paper on", "paper on", "front matter and")
+
+MATCH_RATIO = 0.92
+SHINGLE = 4
+FUZZY_MAX_CHARS = 20_000  # above this, difflib is never run (quadratic)
+
+_DEPTH = {"title": 0, "abstract": 1, "fulltext": 2}
+_WORD = re.compile(r"\w+")
+_CHAR_MAP = {
+    **dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-"),
+    **dict.fromkeys(map(ord, "\u2018\u2019\u201a\u201b\u2032\u0060\u00b4"), "'"),
+    **dict.fromkeys(map(ord, "\u201c\u201d\u201e\u201f\u2033"), '"'),
+    0x00AD: None,
 }
-CONTRIBS = ["agent_system", "benchmark_dataset", "evaluation_study", "survey", "other"]
-VERDICTS = ["accept", "reject"]
-YNU = ["yes", "no", "unclear"]
-YNPU = ["yes", "partial", "no", "unknown"]
-SCOPES = ["core", "broad", "adjacent", "none"]
-PUB_STATUS = [
-    "published",
-    "workshop_archival_toplevel",
-    "workshop_other",
-    "preprint_only",
-    "thesis_or_report",
-    "unknown",
-]
-PUB_OK_STRICT = {"published", "workshop_archival_toplevel"}
-REJECT_CLASSES = [
-    "off_domain",
-    "security_other",
-    "defensive_only",
-    "vuln_detection_or_code_scan",
-    "generic_llm_security",
-    "static_qa_benchmark",
-    "llm_no_offense",
-    "out_of_range",
-    "duplicate",
-    "retracted",
-    "other",
-]
-ABSTRACT_SOURCES = [
-    "crossref",
-    "openalex",
-    "semanticscholar",
-    "landing_page",
-    "arxiv",
-    "manual_web",
-    "fulltext",
-    "none",
-]
-EVIDENCE_SOURCES = ["abstract", "title", "fulltext", "web"]
-EVIDENCE_LEVELS = ["title_only", "abstract", "publisher_page", "full_text"]
-EVIDENCE_LEVELS_DEEP = {"abstract", "publisher_page", "full_text"}
 
 
-RX_JAILBREAK = re.compile(
-    r"\b(jailbreak|jailbreaking|prompt injection|prompt leak|safety alignment|"
-    r"safety guardrail|toxic|toxicity|hallucination|adversarial prompt|unlearning|"
-    r"watermark|copyright|refusal|harmbench|advbench)\b",
-    re.IGNORECASE,
-)
-RX_CODE_SCAN = re.compile(
-    r"\b(vulnerability detection|code vulnerability|vulnerable code|code review|"
-    r"defect detection|smart contract vulnerability|bug detection|static analysis|"
-    r"ast|cfg|slice|slicing|fuzzing|fuzzer)\b",
-    re.IGNORECASE,
-)
-RX_DEFENSE = re.compile(
-    r"\b(intrusion detection|malware detection|phishing detection|traffic detection|"
-    r"anomaly detection|botnet detection|ransomware detection|attack(s)? detection|"
-    r"soc\b|defender|blue team|firewall|ids\b|ips\b)\b",
-    re.IGNORECASE,
-)
-RX_SEC_OTHER = re.compile(
-    r"\b(cryptography|encryption|zero-knowledge proof|post-quantum|steganography|"
-    r"watermarking|authentication|biometric|hardware security|side-channel|"
-    r"pufl|differential privacy|rowhammer|kubernetes|firmware|supply chain)\b",
-    re.IGNORECASE,
-)
-RX_PENTEST = re.compile(
-    r"\b(penetration test(ing)?|pen-test(ing)?|pentest(ing)?|red team(ing)?|adversary emulation|"
-    r"attack automation|cyber operation(s)?|offensive cyber|autonomous attack(s)?)\b",
-    re.IGNORECASE,
-)
-RX_EXPLOIT = re.compile(
-    r"\b(exploit generation|automated exploitation|cve exploitation|n-day exploit(s)?|"
-    r"zero-day exploit(s)?|binary exploitation|privilege escalation|lateral movement|"
-    r"post-exploitation|parallel exploitation)\b",
-    re.IGNORECASE,
-)
-RX_CTF = re.compile(
-    r"\b(capture[- ]the[- ]flag|ctf challenge|ctf benchmark|hack the box|"
-    r"vulnhub|cyber range)\b",
-    re.IGNORECASE,
-)
-
-
-def extract_quote(text, max_words=45, min_words=4):
-    if not text:
-        return ""
-    text = text.strip()
-    words = text.split()
-    if len(words) < min_words:
-        return ""
-    if len(words) <= max_words:
-        return text
-
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    for s in sentences:
-        sw = s.strip().split()
-        if min_words <= len(sw) <= max_words:
-            return s.strip()
-
-    excerpt = " ".join(words[:max_words])
-    for end_char in [".", "!", "?", ";", ","]:
-        if end_char in excerpt:
-            idx = excerpt.rfind(end_char)
-            if idx > len(" ".join(words[:min_words])):
-                return excerpt[: idx + 1].strip()
-    return excerpt
-
-
-def norm(s):
-    s = unicodedata.normalize("NFKD", s or "")
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
-
+# --------------------------------------------------------------------------- text matching
 
 def normtext(s):
-    s = unicodedata.normalize("NFKC", s or "").lower()
-    for ch, rep in [
-        ("\u2010", "-"),
-        ("\u2011", "-"),
-        ("\u2012", "-"),
-        ("\u2013", "-"),
-        ("\u2014", "-"),
-    ]:
-        s = s.replace(ch, rep)
-    s = re.sub(r'["\'`\u2018\u2019\u201c\u201d]', "", s)
-    return re.sub(r"\s+", " ", re.sub(r"[^\w\s\-]", " ", s)).strip()
+    """NFKC, casefold, dash and quote unification, collapsed whitespace."""
+    if not isinstance(s, str):
+        return ""
+    s = unicodedata.normalize("NFKC", s).casefold().translate(_CHAR_MAP)
+    return " ".join(s.split())
 
 
-def quote_in(quote, hay):
-    q, h = normtext(quote), normtext(hay)
+def _grams(words):
+    return zip(*(words[i:] for i in range(SHINGLE)))
+
+
+def _shingle_coverage(q, h):
+    """Fraction of the quote's word 4-grams that occur in the text (linear time)."""
+    qw = _WORD.findall(q)
+    if len(qw) < SHINGLE:
+        return 0.0
+    qg = list(_grams(qw))
+    have = set(_grams(_WORD.findall(h)))
+    return sum(g in have for g in qg) / len(qg)
+
+
+def quote_in(quote, text, fulltext=None):
+    """True when `quote` occurs in `text` after normalisation.
+
+    Exact substring first. Then, for short texts, a difflib fallback (longest common block
+    >= 92% of the quote); for full text, 4-gram word-shingle coverage >= 92%. `fulltext=None`
+    picks the shingle method automatically when the text exceeds FUZZY_MAX_CHARS.
+    """
+    q, h = normtext(quote), normtext(text)
     if not q or not h:
         return False
     if q in h:
         return True
+    if fulltext is None:
+        fulltext = len(h) > FUZZY_MAX_CHARS
+    if fulltext:
+        return _shingle_coverage(q, h) >= MATCH_RATIO
     sm = difflib.SequenceMatcher(None, q, h, autojunk=False)
-    m = sm.find_longest_match(0, len(q), 0, len(h))
-    return m.size >= 0.92 * len(q)
+    return sm.find_longest_match(0, len(q), 0, len(h)).size >= MATCH_RATIO * len(q)
 
 
-def validate_record(run, r, pass_, policy, dos=None, lane=None):
+# --------------------------------------------------------------------------- record mapping
+
+def _tok(v):
+    """Strip strings (empty becomes None); pass anything else through for the validator."""
+    if isinstance(v, str):
+        return v.strip() or None
+    return v
+
+
+def to_row(rec, stage, owner):
+    """Map a submitted JSON record to review-table columns (b_db.REVIEW_COLS). Never raises."""
+    rec = rec if isinstance(rec, dict) else {}
+    crit = rec.get("criteria")
+    crit = crit if isinstance(crit, dict) else {}
+    p = rec.get("p")
+    reason = rec.get("reason")
+    reason = reason.strip() if isinstance(reason, str) else ("" if reason is None else reason)
+    row = {
+        "paper_id": rec.get("id"),
+        "stage": stage,
+        "by": owner,
+        "verdict": _tok(rec.get("verdict")),
+        "p": float(p) if isinstance(p, (int, float)) and not isinstance(p, bool) else None,
+        "role": _tok(rec.get("role")),
+        "rclass": _tok(rec.get("reject_class")),
+        "lvl": _tok(rec.get("level")),
+        "qsrc": _tok(rec.get("quote_src")),
+        "quote": _tok(rec.get("quote")),
+        "vs_prior": _tok(rec.get("vs_prior")),
+        "reason": reason,
+        "at": b_db.now(),
+    }
+    for key, col in CRITERIA_KEYS:
+        row[col] = _tok(crit.get(key))
+    return row
+
+
+# --------------------------------------------------------------------------- validation
+
+def _one(conn, sql, *args):
+    return conn.execute(sql, args).fetchone()
+
+
+def _title_has_cues(title):
+    """True when the title alone carries both the `ai` and `off_strong` cues."""
+    try:
+        from f_cues import cues
+        found = cues(title, "")
+    except Exception:
+        return False
+    return "ai" in found and "off_strong" in found
+
+
+def _check_quote(row, errs, *, required, paper_title, abstract, fulltext):
+    quote, qsrc, lvl = row["quote"], row["qsrc"], row["lvl"]
+    if quote is None:
+        if required:
+            errs.append("quote is required (verbatim %d-%d words from the paper)"
+                        % (QUOTE_MIN_WORDS, QUOTE_MAX_WORDS))
+        return
+    if not isinstance(quote, str):
+        errs.append("quote must be a string")
+        return
+    n = len(quote.split())
+    if not QUOTE_MIN_WORDS <= n <= QUOTE_MAX_WORDS:
+        errs.append("quote has %d words; it must be %d-%d" % (n, QUOTE_MIN_WORDS, QUOTE_MAX_WORDS))
+    if normtext(quote).startswith(PLACEHOLDER_QUOTES):
+        errs.append("quote is a placeholder, not text copied from the paper")
+    if qsrc not in LEVELS:
+        errs.append("quote_src must be one of %s when a quote is given" % (LEVELS,))
+        return
+    if lvl in LEVELS and _DEPTH[qsrc] > _DEPTH[lvl]:
+        errs.append("quote_src '%s' is deeper than level '%s'; raise level only after reading that text"
+                    % (qsrc, lvl))
+        return
+    stored = {"title": paper_title, "abstract": abstract, "fulltext": fulltext}[qsrc]
+    if stored is None:
+        errs.append("quote_src '%s' has no stored text for this paper" % qsrc)
+    elif not quote_in(quote, stored, fulltext=(qsrc == "fulltext")):
+        errs.append("quote not found in the stored %s text; copy it verbatim" % qsrc)
+
+
+def validate_review(conn, rec, stage, owner):
+    """Return every problem with `rec` as short messages; [] means the record may be stored."""
     errs = []
-    if dos is None:
-        dos = run.dossiers()
-    pid = r.get("id")
-    if pid not in dos:
-        return ["unknown id %r" % pid]
-    d = dos[pid]
-    v = r.get("verdict")
-    if v not in VERDICTS:
-        errs.append("verdict must be one of %s" % VERDICTS)
-    roles = r.get("roles", [])
-    if isinstance(roles, list):
-        roles = ["baseline" if x == "baseline_candidate" else x for x in roles]
-        r["roles"] = roles
-    if r.get("primary_role") == "baseline_candidate":
-        r["primary_role"] = "baseline"
-    if not isinstance(roles, list) or any(x not in ROLES for x in roles):
-        errs.append("roles must be a list drawn from %s" % ROLES)
-        roles = []
-    pc = r.get("primary_contribution")
-    if pc not in CONTRIBS:
-        errs.append("primary_contribution must be one of %s" % CONTRIBS)
-    if r.get("subject_scope") not in SCOPES:
-        errs.append("subject_scope must be one of %s" % SCOPES)
-    crit = r.get("criteria") or {}
-    off_domain = v == "reject" and r.get("reject_class") in (
-        "off_domain",
-        "security_other",
-        "defensive_only",
-        "vuln_detection_or_code_scan",
-        "generic_llm_security",
-        "static_qa_benchmark",
+    row = to_row(rec, stage, owner)
+    rec = rec if isinstance(rec, dict) else {}
+    if rec.get("criteria") is not None and not isinstance(rec["criteria"], dict):
+        errs.append("criteria must be an object with agent/offense/black_box/long_horizon")
+
+    verdict, p, role, rclass = row["verdict"], row["p"], row["role"], row["rclass"]
+    lvl, qsrc = row["lvl"], row["qsrc"]
+    accept, reject = verdict == "accept", verdict == "reject"
+
+    if stage not in STAGES:
+        errs.append("stage must be one of %s" % (STAGES,))
+    pid = row["paper_id"]
+    if not isinstance(pid, int) or isinstance(pid, bool):
+        errs.append("id must be an integer paper id")
+        pid = None
+    if not (accept or reject):
+        errs.append("verdict must be 'accept' or 'reject'")
+    if p is None or not 0 <= p <= 1:
+        errs.append("p must be a number in [0,1]")
+    if lvl not in LEVELS:
+        errs.append("level must be one of %s" % (LEVELS,))
+    for key, col in CRITERIA_KEYS:
+        if row[col] is not None and row[col] not in CRIT_VALUES:
+            errs.append("criteria.%s must be one of %s" % (key, CRIT_VALUES))
+    if row["vs_prior"] is not None and row["vs_prior"] not in VS_PRIOR:
+        errs.append("vs_prior must be 'agree' or 'override'")
+
+    if accept:
+        if role not in ROLES:
+            errs.append("accept needs role in %s" % (ROLES,))
+        if rclass is not None:
+            errs.append("accept must not carry reject_class")
+        if p is not None and p < 0.5:
+            errs.append("accept needs p >= 0.5")
+        if row["c_agent"] != "y" or row["c_off"] != "y":
+            errs.append("accept needs criteria.agent='y' and criteria.offense='y'")
+        if role == "baseline":
+            for key, col in CRITERIA_KEYS[2:]:
+                if row[col] == "n":
+                    errs.append("baseline must not have criteria.%s='n' (use 'p' or 'u' unless contradicted)" % key)
+    elif reject:
+        if rclass not in REJECT_CLASSES:
+            errs.append("reject needs reject_class in %s" % (REJECT_CLASSES,))
+        if role is not None:
+            errs.append("reject must not carry role")
+        if p is not None and p >= 0.5:
+            errs.append("reject needs p < 0.5")
+
+    reason = row["reason"]
+    if not isinstance(reason, str):
+        errs.append("reason must be a string")
+    else:
+        words = len(reason.split())
+        if len(reason) < REASON_MIN_CHARS:
+            errs.append("reason must be at least %d characters" % REASON_MIN_CHARS)
+        elif words > REASON_MAX_WORDS:
+            errs.append("reason has %d words; the limit is %d" % (words, REASON_MAX_WORDS))
+
+    if pid is None:
+        return errs
+    paper = _one(conn, "SELECT id, title, dup_of FROM paper WHERE id=?", pid)
+    if paper is None:
+        return errs + ["unknown paper id %d" % pid]
+    if paper["dup_of"] is not None:
+        return errs + ["paper %d is a duplicate of %d and is not reviewed" % (pid, paper["dup_of"])]
+
+    if stage in STAGES:
+        task = _one(conn, "SELECT state, owner FROM task WHERE paper_id=? AND stage=?", pid, stage)
+        if task is None:
+            errs.append("no '%s' task exists for paper %d" % (stage, pid))
+        elif task["state"] != "leased":
+            errs.append("the '%s' task for paper %d is %s, not leased" % (stage, pid, task["state"]))
+        elif task["owner"] != owner:
+            errs.append("the '%s' task for paper %d is leased to another owner" % (stage, pid))
+
+    if isinstance(reason, str) and reason and _one(
+            conn, "SELECT COUNT(*) FROM review WHERE by=? AND reason=?", owner, reason)[0] > MAX_SAME_REASON:
+        errs.append("this exact reason was already submitted more than %d times; write a specific reason"
+                    % MAX_SAME_REASON)
+
+    abs_row = _one(conn, "SELECT text FROM abstract WHERE paper_id=?", pid)
+    has_ft = _one(conn, "SELECT 1 FROM fulltext WHERE paper_id=?", pid) is not None
+    tri = _one(conn, "SELECT tier, prior FROM triage WHERE paper_id=?", pid)
+    tier = tri["tier"] if tri else 0
+    prior = tri["prior"] if tri else None
+
+    if lvl == "abstract" and abs_row is None:
+        errs.append("level 'abstract' but no abstract is stored for paper %d" % pid)
+    elif lvl == "fulltext" and not has_ft:
+        errs.append("level 'fulltext' but no full text is stored for paper %d" % pid)
+    elif lvl == "title":
+        if reject and abs_row is not None:
+            errs.append("level 'title' is not allowed for a reject: an abstract is stored; read it and use level 'abstract'")
+        elif accept:
+            if stage != "final":
+                errs.append("an accept at level 'title' is allowed only at stage 'final'")
+            if qsrc != "title":
+                errs.append("an accept at level 'title' needs quote_src='title'")
+            if p is not None and p < TITLE_ACCEPT_MIN_P:
+                errs.append("an accept at level 'title' needs p >= %s" % TITLE_ACCEPT_MIN_P)
+            if not _title_has_cues(paper["title"]):
+                errs.append("an accept at level 'title' needs a title with both AI and strong-offence cues")
+
+    _check_quote(
+        row, errs, required=accept or (reject and tier >= 2),
+        paper_title=paper["title"],
+        abstract=abs_row["text"] if abs_row else None,
+        fulltext=(_one(conn, "SELECT text FROM fulltext WHERE paper_id=?", pid)["text"]
+                  if has_ft and qsrc == "fulltext" else None),
     )
-    for k in ("llm_agent", "offensive_security", "black_box", "long_horizon"):
-        if crit.get(k) not in YNPU + ["unclear"]:
-            if off_domain and k not in crit:
-                crit[k] = "no"
-                r["criteria"] = crit
-            else:
-                errs.append("criteria.%s must be one of %s" % (k, YNPU))
-    if not isinstance(r.get("confidence"), (int, float)) or not (
-        0 <= r["confidence"] <= 1
-    ):
-        errs.append("confidence must be a number 0..1")
-    reason = (r.get("reason") or "").strip()
-    if len(reason) < 10:
-        errs.append("reason is required (one or two sentences, <= 60 words)")
-    elif len(reason.split()) > 80:
-        errs.append("reason too long (<= 60 words)")
-    if r.get("abstract_source") not in ABSTRACT_SOURCES + [None]:
-        errs.append("abstract_source must be one of %s" % ABSTRACT_SOURCES)
-    if r.get("publication_status") not in PUB_STATUS:
-        errs.append("publication_status must be one of %s" % PUB_STATUS)
-    if not isinstance(r.get("fulltext_read"), bool):
-        errs.append("fulltext_read must be true/false")
 
-    ev_level = r.get("evidence_level")
-    if ev_level is not None and ev_level not in EVIDENCE_LEVELS:
-        errs.append("evidence_level must be one of %s" % EVIDENCE_LEVELS)
+    if stage == "blind":
+        if row["vs_prior"] is not None:
+            errs.append("vs_prior must be absent at stage 'blind'")
+    elif stage in ("review", "final") and prior is not None and row["vs_prior"] is None:
+        errs.append("vs_prior ('agree' or 'override') is required: this paper has an advisory prior")
 
-    if ev_level == "title_only" or r.get("evidence_source") == "title":
-        _lane = lane or d.get("lane", "C")
-        flags = r.get("flags") or []
-        if "frontmatter" in flags:
-            pass
-        elif _lane in ("A", "B"):
-            if not r.get("needs_deep_dive"):
-                errs.append(
-                    "lane %s papers cannot be rejected on title alone; "
-                    "obtain an abstract via DOI or web before deciding" % _lane
-                )
-            elif (r.get("confidence") or 0) > 0.60:
-                errs.append(
-                    "lane %s title_only reject requires confidence <= 0.60 and needs_deep_dive=true"
-                    % _lane
-                )
-        elif v == "reject":
-            if "title_only_offtopic" not in flags:
-                errs.append(
-                    "title_only reject requires flag 'title_only_offtopic' "
-                    "(only allowed for lane C papers whose title is unambiguously "
-                    "non-security/non-LLM after >=2 source attempts)"
-                )
-
-    ev, es = (r.get("evidence") or "").strip(), r.get("evidence_source")
-    if es not in EVIDENCE_SOURCES:
-        errs.append("evidence_source must be one of %s" % EVIDENCE_SOURCES)
-    elif len(ev.split()) < 4 or len(ev.split()) > 45:
-        errs.append("evidence must be a verbatim quote of 4-45 words")
-    elif es == "web":
-        if not r.get("evidence_url"):
-            errs.append(
-                "evidence_source=web requires evidence_url (URL where the quote was found)"
-            )
-    elif not quote_in(ev, _hay_for(run, d, es)):
-        errs.append(
-            "evidence quote NOT found verbatim in the %s text of %s "
-            "- copy it exactly (or use a_cli.py fulltext first)" % (es, pid)
-        )
-    if es == "fulltext" and r.get("fulltext_read") is False:
-        errs.append("evidence_source=fulltext but fulltext_read=false")
-
-    if v == "reject":
-        if r.get("reject_class") not in REJECT_CLASSES:
-            errs.append("reject needs reject_class in %s" % REJECT_CLASSES)
-        if roles:
-            errs.append("reject must have roles=[]")
-    if v == "accept":
-        if not roles:
-            errs.append("accept needs at least one role")
-        pr = r.get("primary_role")
-        if pr not in roles:
-            errs.append("accept needs primary_role contained in roles")
-        elif pc != ROLE_TO_CONTRIB.get(pr):
-            errs.append(
-                "primary_role=%s requires primary_contribution=%s"
-                % (pr, ROLE_TO_CONTRIB.get(pr))
-            )
-        if crit.get("llm_agent") != "yes" or crit.get("offensive_security") != "yes":
-            errs.append(
-                "accept requires criteria llm_agent=yes AND offensive_security=yes "
-                "(judged on the system(s) the paper presents/surveys/benchmarks/evaluates)"
-            )
-
-        if "baseline" in roles:
-            if r.get("primary_role") != "baseline":
-                errs.append(
-                    "baseline may only be the PRIMARY role. "
-                    'It may also appear alongside secondary roles (e.g. ["baseline", "benchmark"]) '
-                    "only when those are explicit secondary contributions; primary_role must still be 'baseline'."
-                )
-            if any(
-                crit.get(k) != "yes"
-                for k in (
-                    "llm_agent",
-                    "offensive_security",
-                    "black_box",
-                    "long_horizon",
-                )
-            ):
-                errs.append(
-                    "baseline requires ALL FOUR criteria = yes "
-                    "(3 and 4 under their soft definitions, on positive evidence). "
-                    "If 3/4 are only partial/unknown use role baseline_candidate."
-                )
-            if r.get("publication_status") not in PUB_OK_STRICT:
-                errs.append(
-                    "baseline requires publication_status published or workshop_archival_toplevel"
-                )
-
-            if ev_level is not None and ev_level not in EVIDENCE_LEVELS_DEEP:
-                errs.append(
-                    "baseline requires evidence_level abstract, publisher_page or full_text "
-                    "(open the publisher page to confirm before accepting as baseline)"
-                )
-
-        if "baseline_candidate" in roles:
-            if r.get("primary_role") not in ("baseline_candidate", "baseline"):
-                errs.append(
-                    "baseline_candidate as a role requires primary_role=baseline_candidate "
-                    "(use this when criteria 3 or 4 are only 'partial' or 'unknown')"
-                )
-            if pc != "agent_system":
-                errs.append(
-                    "baseline_candidate requires primary_contribution=agent_system"
-                )
-            if (
-                crit.get("llm_agent") != "yes"
-                or crit.get("offensive_security") != "yes"
-            ):
-                errs.append(
-                    "baseline_candidate requires llm_agent=yes AND offensive_security=yes; "
-                    "criteria 3/4 may be partial/unknown"
-                )
-        if r.get("subject_scope") not in ("core", "broad"):
-            errs.append("accept requires subject_scope core or broad")
-        if d.get("retracted"):
-            errs.append("paper looks retracted")
-    if pass_ == "F" and r.get("needs_deep_dive"):
-        errs.append("pass F must be definitive (needs_deep_dive=false)")
-    if r.get("abstract_source") == "none" and d.get("abstract_source") != "none":
-        errs.append(
-            "abstract_source=none but the dossier has an abstract (%s)"
-            % d.get("abstract_source")
-        )
     return errs
-
-
-def _hay_for(run, d, src):
-    if src == "title":
-        return d.get("title", "")
-    if src == "abstract":
-        return (d.get("abstract") or "") + " " + (d.get("abstract_snippet") or "")
-    if src == "fulltext":
-        if isinstance(d.get("fulltext"), str) and d["fulltext"]:
-            return d["fulltext"]
-        if hasattr(run, "get_fulltext"):
-            return run.get_fulltext(d["id"]) or ""
-        return ""
-    return ""
