@@ -149,7 +149,6 @@ def _pass1(conn, workers, progress):
         try:
             out = net.openalex_batch(batch)
         except net.NetworkError:
-            probe.fail()
             return None
         probe.ok()
         return out
@@ -161,10 +160,13 @@ def _pass1(conn, workers, progress):
         futs = {oa_ex.submit(oa_task, b): b for b in batches}
         for fut in as_completed(futs):
             out = fut.result()
+            batch = futs[fut]
             if out is None:
+                for d in batch:
+                    s2_queue.put(d)
                 continue
             found, marks = [], []
-            for d in futs[fut]:
+            for d in batch:
                 rec, text = out.get(d), _usable(out.get(d))
                 if text:
                     pids = by_doi[d]
@@ -218,7 +220,8 @@ def _deep_one(c, plan, probe):
         try:
             rec = call()
         except net.NetworkError:
-            probe.fail()
+            if bit != b_db.TRIED_OPENALEX:
+                probe.fail()
             continue
         probe.ok()
         bits |= bit

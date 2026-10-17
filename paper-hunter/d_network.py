@@ -75,7 +75,7 @@ def throttle_for(key):
 
 _fail_count, _fail_time, _fail_lock = defaultdict(int), defaultdict(float), threading.Lock()
 DEAD_AFTER = 6
-RESET_AFTER = 60.0
+RESET_AFTER = 3600.0
 
 
 def http(url, key, method="GET", data=None, headers=None, timeout=30, retries=4,
@@ -103,14 +103,19 @@ def http(url, key, method="GET", data=None, headers=None, timeout=30, retries=4,
                     _fail_count[host] = 0
                 return r.status, r.read(max_bytes), r.geturl(), dict(r.headers)
         except urllib.error.HTTPError as e:
-            with _fail_lock:
-                _fail_count[host] = 0
             if e.code in (429, 500, 502, 503, 504):
                 ra = e.headers.get("Retry-After") if e.headers else None
                 delay = float(ra) if ra and ra.replace(".", "").isdigit() else 2 ** attempt * 3
                 last = "HTTP %d" % e.code
-                time.sleep(min(delay, 45))
+                if delay > 60:
+                    with _fail_lock:
+                        _fail_count[host] = DEAD_AFTER
+                        _fail_time[host] = time.time()
+                    break
+                time.sleep(min(delay, 10))
                 continue
+            with _fail_lock:
+                _fail_count[host] = 0
             try:
                 body = e.read()
             except Exception:
@@ -125,6 +130,9 @@ def http(url, key, method="GET", data=None, headers=None, timeout=30, retries=4,
             if dead:
                 break
             time.sleep(min(2 ** attempt, 4))
+    with _fail_lock:
+        _fail_count[host] += 1
+        _fail_time[host] = time.time()
     return 0, b"", url, {"error": last}
 
 

@@ -273,7 +273,7 @@ def _render_dossier(d, stage):
         src = "[%s]" % d["abstract_src"] if d.get("abstract_src") else ""
         lines.append("ABSTRACT%s: %s" % (src, d["abstract"]))
     else:
-        handle = d.get("fetch_handle", "")
+        handle = d.get("handle") or d.get("fetch_handle", "")
         lines.append("ABSTRACT: NONE  fetch_handle: %s" % handle)
     
     if not d.get("blind", False):
