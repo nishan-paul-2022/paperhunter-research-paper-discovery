@@ -19,7 +19,9 @@ Thumbs.db
 *.swo
 
 # DBLP paper-database files
-paper-database/dblp.xml
-paper-database/dblp.xml.gz
+dblp.xml
+dblp.xml.gz
+paper-dblp.xml
+paper-dblp.xml.gz
 
 paper-supplement/
