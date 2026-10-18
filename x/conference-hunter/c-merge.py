@@ -4,11 +4,11 @@ from collections import Counter
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CONTEXT_DIR = REPO_ROOT / "conference-context"
+ARCHIVE_DIR = REPO_ROOT / "archive"
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 IN_EXACT = SUPPLEMENT_DIR / "1-exact-matched.csv"
 IN_FUZZY = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
-OUT_FINAL = CONTEXT_DIR / "list-of-conferences.csv"
+OUT_FINAL = ARCHIVE_DIR / "list-of-conferences.csv"
 OUT_FIELDS = ["dblp_key", "dblp_acronym", "title", "ranking"]
 
 

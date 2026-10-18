@@ -5,10 +5,11 @@ import unicodedata
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+ARCHIVE_DIR = REPO_ROOT / "archive"
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 DBLP_CSV = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
 CORE_CSV = SUPPLEMENT_DIR / "3-source-pool.csv"
-CORE_MASTER_CSV = REPO_ROOT / "conference-context" / "core-2026.csv"
+CORE_MASTER_CSV = ARCHIVE_DIR / "publication-core-2026.csv"
 OUT_CSV = SUPPLEMENT_DIR / "4-fuzzy-matched.csv"
 EXPLICIT_MAP = {
     "conf/mm": (

@@ -9,15 +9,14 @@ from lxml import etree
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
-DATA_DIR = REPO_ROOT / "paper-database"
-CONTEXT_DIR = REPO_ROOT / "conference-context"
+ARCHIVE_DIR = REPO_ROOT / "archive"
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
-CORE_SRC = CONTEXT_DIR / "core-2026.csv"
-XML_PATH = DATA_DIR / "dblp.xml"
+CORE_SRC = ARCHIVE_DIR / "publication-core-2026.csv"
+XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 OUT_1_EXACT = SUPPLEMENT_DIR / "1-exact-matched.csv"
 OUT_2_TODO = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
 OUT_3_CORE_POOL = SUPPLEMENT_DIR / "3-source-pool.csv"
-OUT_FINAL = CONTEXT_DIR / "list-of-conferences.csv"
+OUT_FINAL = ARCHIVE_DIR / "list-of-conferences.csv"
 OUT_FIELDS = ["dblp_key", "dblp_acronym", "title", "ranking"]
 OUT_FIELDS_DBLP = ["dblp_key", "dblp_acronym"]
 OUT_FIELDS_CORE = ["title", "acronym", "ranking"]
@@ -222,7 +221,7 @@ def phase_write(
     )
     print("  NEXT STEP:")
     print("  → Use 1-exact-matched.csv directly")
-    print("  → Run b_match.py to match remaining\n")
+    print("  → Run b-match.py to match remaining\n")
     max_possible = len(exact_matched) + len(core_available)
     estimated = len(exact_matched) + int(len(core_available) * 0.3)
     print("  Overall Statistics:")
@@ -242,7 +241,7 @@ def main() -> None:
     ap.add_argument(
         "--xml",
         default=str(XML_PATH),
-        help=f"Path to dblp.xml  (default: {XML_PATH.name})",
+        help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})",
     )
     ap.add_argument(
         "--core",
@@ -255,7 +254,7 @@ def main() -> None:
     if not core_path.exists():
         sys.exit(f"CORE CSV not found: {core_path}")
     if not xml_path.exists():
-        sys.exit(f"dblp.xml not found: {xml_path}\nRun the downloader first.")
+        sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║         paperhunter  ·  Conference List Builder                      ║")
@@ -279,7 +278,7 @@ def main() -> None:
     print("━" * 70)
     print("  Done.")
     print("  → Use 1-exact-matched.csv directly")
-    print("  → Run b_match.py for remaining matches")
+    print("  → Run b-match.py for remaining matches")
     print("━" * 70)
     print()
 

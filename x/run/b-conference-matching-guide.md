@@ -7,12 +7,12 @@ Build a comprehensive list of CORE-ranked conferences by matching DBLP database 
 ## Workflow Overview
 
 **Automated Steps (Python):**
-1. `a_extract.py` - Scan DBLP XML, extract conferences, match by acronym → Generates exact matches
-2. `b_match.py` - Fuzzy match remaining conferences → Generates HIGH/NONE confidence matches
-3. `c_merge.py` - Combine exact + HIGH confidence matches → Final conference list
+1. `a-extract.py` - Scan DBLP XML, extract conferences, match by acronym → Generates exact matches
+2. `b-match.py` - Fuzzy match remaining conferences → Generates HIGH/NONE confidence matches
+3. `c-merge.py` - Combine exact + HIGH confidence matches → Final conference list
 
 **Your Role (AI):**  
-Between steps 2 and 3, review `b_match.py` output and improve matching quality using:
+Between steps 2 and 3, review `b-match.py` output and improve matching quality using:
 - Algorithm results as starting point
 - Web search to verify conference details
 - Your intelligence to resolve edge cases (renamed conferences, aliases, ambiguous matches)
@@ -23,29 +23,29 @@ Between steps 2 and 3, review `b_match.py` output and improve matching quality u
 
 ## Strategy: Hybrid Algorithm + AI Review
 
-### Step 1: Run a_extract.py (Initial Extraction)
+### Step 1: Run a-extract.py (Initial Extraction)
 ```bash
 cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python3 conference-hunter/a_extract.py
+python3 x/conference-hunter/a-extract.py
 ```
 
-**This extracts conferences from DBLP XML and performs Phase 1 acronym matching.**
+**This extracts conferences from DBLP XML (`x/archive/paper-dblp.xml`) and CORE rankings (`x/archive/publication-core-2026.csv`), performing Phase 1 acronym matching.**
 
 Generates:
-- `conference-supplement/1-exact-matched.csv` - Exact acronym matches (auto-approved)
-- `conference-supplement/2-dblp-unmatched.csv` - DBLP conferences needing matching
-- `conference-supplement/3-source-pool.csv` - CORE conferences available for matching
+- `x/conference-supplement/1-exact-matched.csv` - Exact acronym matches (auto-approved)
+- `x/conference-supplement/2-dblp-unmatched.csv` - DBLP conferences needing matching
+- `x/conference-supplement/3-source-pool.csv` - CORE conferences available for matching
 
-### Step 2: Run b_match.py (Fuzzy Matching)
+### Step 2: Run b-match.py (Fuzzy Matching)
 ```bash
-python3 conference-hunter/b_match.py
+python3 x/conference-hunter/b-match.py
 ```
 
-Generates `conference-supplement/4-fuzzy-matched.csv` with HIGH and NONE confidence entries.
+Generates `x/conference-supplement/4-fuzzy-matched.csv` with HIGH and NONE confidence entries.
 
 ### Step 3: Review Algorithm Output
 
-Check `conference-supplement/4-fuzzy-matched.csv`:
+Check `x/conference-supplement/4-fuzzy-matched.csv`:
 - **HIGH confidence** → Likely correct, spot-check
 - **NONE (NO_MATCH)** → Need your review
 
@@ -63,7 +63,7 @@ Focus on **NO_MATCH entries**:
 
 3. **Check if in CORE pool:**
    ```bash
-   grep -i "[acronym]" conference-supplement/3-source-pool.csv
+   grep -i "[acronym]" x/conference-supplement/3-source-pool.csv
    ```
 
 4. **Common issues:**
@@ -76,17 +76,17 @@ Focus on **NO_MATCH entries**:
 
 ## Input Files
 
-### 1. `conference-supplement/2-dblp-unmatched.csv`
+### 1. `x/conference-supplement/2-dblp-unmatched.csv`
 Columns: `dblp_key`, `dblp_acronym`
 
 DBLP conferences not matched by exact acronym.
 
-### 2. `conference-supplement/3-source-pool.csv`
+### 2. `x/conference-supplement/3-source-pool.csv`
 Columns: `title`, `acronym`, `ranking`
 
 CORE conferences available (A*, A, B, C).
 
-### 3. `conference-supplement/4-fuzzy-matched.csv`
+### 3. `x/conference-supplement/4-fuzzy-matched.csv`
 Columns: `dblp_key`, `dblp_acronym`, `core_title`, `acronym`, `ranking`, `confidence`, `reasoning`
 
 Algorithm's matching results.
@@ -137,7 +137,7 @@ Example: "AI" could be multiple conferences
 - Visit dblp.org to see full name
 
 ### Case 5: Regional Conferences
-Example: "AAAI" (main) vs "AAAI-Asia" (regional)
+Example: "AAAI" (main) vs "AAAI-Asia"
 - CORE only lists main conference
 - Regional variants → NO_MATCH
 
@@ -147,14 +147,14 @@ Example: "AAAI" (main) vs "AAAI-Asia" (regional)
 
 ### Phase 1: Algorithmic Matching
 ```bash
-python conference-hunter/b_match.py
+python3 x/conference-hunter/b-match.py
 ```
-Output: `conference-supplement/4-fuzzy-matched.csv`
+Output: `x/conference-supplement/4-fuzzy-matched.csv`
 
 ### Phase 2: AI Review
 1. **Count NO_MATCH:**
    ```bash
-   grep "NO_MATCH" conference-supplement/4-fuzzy-matched.csv | wc -l
+   grep "NO_MATCH" x/conference-supplement/4-fuzzy-matched.csv | wc -l
    ```
 
 2. **For each NO_MATCH:**
@@ -170,20 +170,20 @@ Output: `conference-supplement/4-fuzzy-matched.csv`
 
 ### Phase 3: Generate Final List
 ```bash
-python conference-hunter/c_merge.py
+python3 x/conference-hunter/c-merge.py
 ```
 
 Merges:
-- `conference-supplement/1-exact-matched.csv`
-- `conference-supplement/4-fuzzy-matched.csv` (HIGH only)
+- `x/conference-supplement/1-exact-matched.csv`
+- `x/conference-supplement/4-fuzzy-matched.csv` (HIGH only)
 
-Output: `conference-context/list-of-conferences.csv`
+Output: `x/archive/list-of-conferences.csv`
 
 ---
 
 ## Output Format
 
-Update `conference-supplement/4-fuzzy-matched.csv` for NO_MATCH entries:
+Update `x/conference-supplement/4-fuzzy-matched.csv` for NO_MATCH entries:
 
 ```csv
 dblp_key,dblp_acronym,core_title,acronym,ranking,confidence,reasoning
@@ -229,11 +229,11 @@ conf/unknown,UNKNOWN,NO_MATCH,,,NONE,Not in CORE rankings (regional workshop)
 
 ```bash
 # Step 1: Run algorithm
-python conference-hunter/b_match.py
+python3 x/conference-hunter/b-match.py
 # Output: 123 HIGH, 456 NONE
 
 # Step 2: Review NO_MATCH
-grep "NO_MATCH" conference-supplement/4-fuzzy-matched.csv | head -5
+grep "NO_MATCH" x/conference-supplement/4-fuzzy-matched.csv | head -5
 
 # Step 3: Search one
 # conf/neurips,NEURIPS,NO_MATCH,...
@@ -241,10 +241,10 @@ grep "NO_MATCH" conference-supplement/4-fuzzy-matched.csv | head -5
 # Found: "Advances in Neural Information Processing Systems (was NIPS)" - A*
 
 # Step 4: Check CORE pool
-grep -i "neurips\|nips" conference-supplement/3-source-pool.csv
+grep -i "neurips\|nips" x/conference-supplement/3-source-pool.csv
 # Result: Advances in Neural Information Processing Systems (was NIPS),NeurIPS,A*
 
-# Step 5: Update conference-supplement/4-fuzzy-matched.csv
+# Step 5: Update x/conference-supplement/4-fuzzy-matched.csv
 # Change: conf/nips,NIPS,NO_MATCH,...
 # To: conf/nips,NIPS,Advances in Neural Information Processing Systems (was NIPS),NeurIPS,A*,HIGH,Conference renamed
 ```
@@ -253,7 +253,7 @@ grep -i "neurips\|nips" conference-supplement/3-source-pool.csv
 
 ## Final Output
 
-**File**: `context/list-of-conferences.csv`
+**File**: `x/archive/list-of-conferences.csv`
 
 **Columns**: `dblp_key`, `dblp_acronym`, `title`, `ranking`
 
