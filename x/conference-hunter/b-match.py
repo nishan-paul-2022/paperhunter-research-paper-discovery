@@ -1,221 +1,163 @@
 #!/usr/bin/env python3
-import csv
+"""Stage 2: propose DBLP key ↔ CORE venue pairs into the candidate table.
+
+A pair is proposed only when the acronym AND a proceedings title agree.
+Proposals are not approvals: the AI reviewer decides each one (needs_review).
+"""
+import re
+import sqlite3
 import sys
-from collections import Counter, defaultdict
+import unicodedata
+from collections import defaultdict
 from pathlib import Path
 
-HUNTER_DIR = Path(__file__).resolve().parent
-REPO_ROOT = HUNTER_DIR.parent
-ARCHIVE_DIR = REPO_ROOT / "archive"
-SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
-CORE_MASTER_CSV = ARCHIVE_DIR / "publication-core-2026.csv"
-VENUES_CSV = SUPPLEMENT_DIR / "1-dblp-venues.csv"
-CANDIDATES_CSV = SUPPLEMENT_DIR / "2-exact-matched.csv"
-OUT_CSV = SUPPLEMENT_DIR / "5-fuzzy-matched.csv"
-OUT_REVIEW = SUPPLEMENT_DIR / "6-needs-review.csv"
-DECISIONS_CSV = SUPPLEMENT_DIR / "7-decisions.csv"
-DECISION_FIELDS = ["dblp_key", "core_title", "decision", "reason"]
-DECISIONS = {"accept", "reject", "absent"}
-VALID_RANKINGS = {"A*", "A", "B", "C"}
-REVIEW_FIELDS = [
-    "issue",
-    "dblp_key",
-    "dblp_acronym",
-    "core_title",
-    "acronym",
-    "ranking",
-    "detail",
-    "papers",
-    "years",
-    "booktitles",
-    "proceedings_titles",
-]
-OUT_FIELDS = [
-    "dblp_key",
-    "dblp_acronym",
-    "core_title",
-    "acronym",
-    "ranking",
-    "confidence",
-    "reasoning",
-]
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DB_PATH = REPO_ROOT / "conference-supplement" / "conference.db"
+MIN_TITLE_SCORE = 0.6
+MIN_BOOKTITLE_SHARE = 0.15
+STOPWORDS = set(
+    "a an the of on in for and to at with from by its their international "
+    "conference conf symposium workshop workshops congress meeting annual "
+    "joint ieee acm ifip usenix siam proceedings th st nd rd was previously "
+    "changed".split()
+)
+SPELLING = {
+    "modelling": "modeling",
+    "optimisation": "optimization",
+    "visualisation": "visualization",
+    "organisation": "organization",
+    "behaviour": "behavior",
+    "analyse": "analyze",
+}
+CO_LOCATED = re.compile(r"co-located|colocated|in conjunction|held at|workshop", re.I)
+ORG_PREFIX = re.compile(r"^(IEEE|ACM|IFIP)[ _-]+", re.I)
 
 
-def read_csv(path: Path) -> list[dict]:
-    with open(path, encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f))
+def fold(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.lower().replace("&", " and ")
 
 
-def load_core() -> dict[str, dict]:
-    core = {}
-    for r in read_csv(CORE_MASTER_CSV):
-        if r["Ranking"].strip() in VALID_RANKINGS:
-            core[r["Title"].strip()] = {
-                "title": r["Title"].strip(),
-                "acronym": r["Acronym"].strip(),
-                "ranking": r["Ranking"].strip(),
-            }
-    return core
+def norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", fold(s))
 
 
-def load_decisions(core: dict, venues: dict) -> tuple[dict, dict, dict, list[str]]:
-    accept: dict[tuple[str, str], str] = {}
-    reject: dict[tuple[str, str], str] = {}
-    absent: dict[str, str] = {}
-    errors = []
-    if not DECISIONS_CSV.exists():
-        with open(DECISIONS_CSV, "w", encoding="utf-8", newline="") as f:
-            csv.writer(f).writerow(DECISION_FIELDS)
-    seen = Counter()
-    for i, r in enumerate(read_csv(DECISIONS_CSV), start=2):
-        key, title = (r.get("dblp_key") or "").strip(), (r.get("core_title") or "").strip()
-        decision, reason = (r.get("decision") or "").strip(), (r.get("reason") or "").strip()
-        where = f"{DECISIONS_CSV.name}:{i}"
-        if decision not in DECISIONS:
-            errors.append(f"{where}: unknown decision {decision!r}")
-            continue
-        if title not in core:
-            errors.append(f"{where}: core_title not in CORE A*–C: {title!r}")
-            continue
-        if not reason:
-            errors.append(f"{where}: reason is required")
-        seen[(key, title)] += 1
-        if seen[(key, title)] > 1:
-            errors.append(f"{where}: duplicate decision for {key or 'absent'} → {title}")
-        if decision == "absent":
-            if key:
-                errors.append(f"{where}: 'absent' rows must have an empty dblp_key")
-            absent[title] = reason
-            continue
-        if key not in venues:
-            errors.append(f"{where}: {key} has no inproceedings in the DBLP index")
-            continue
-        (accept if decision == "accept" else reject)[(key, title)] = reason
-    for title in absent:
-        if any(t == title for _, t in accept):
-            errors.append(f"CORE venue marked absent but also accepted: {title!r}")
-    return accept, reject, absent, errors
+def tokens(s: str) -> set[str]:
+    out = set()
+    for t in re.findall(r"[a-z0-9]+", fold(s)):
+        t = SPELLING.get(t, t)
+        if len(t) > 3 and t.endswith("s") and not t.endswith("ss"):
+            t = t[:-1]
+        if t not in STOPWORDS and not t.isdigit():
+            out.add(t)
+    return out
 
 
-def build_matcher() -> None:
-    for path in (VENUES_CSV, CANDIDATES_CSV, CORE_MASTER_CSV):
-        if not path.exists():
-            sys.exit(f"Missing input: {path}  (run a-extract.py first)")
-    core = load_core()
-    venues = {r["dblp_key"]: r for r in read_csv(VENUES_CSV)}
-    candidates = read_csv(CANDIDATES_CSV)
-    accept, reject, absent, errors = load_decisions(core, venues)
+def strip_parens(s: str) -> str:
+    return re.sub(r"\(.*?\)", "", s)
 
-    rows_by_key: dict[str, list[dict]] = defaultdict(list)
-    candidate_pairs = set()
-    for c in candidates:
-        pair = (c["dblp_key"], c["title"])
-        candidate_pairs.add(pair)
-        evidence = f"score {c['score']}: {c['proceedings_title']}"
-        if pair in accept:
-            confidence, reasoning = "HIGH", f"Reviewed evidence match ({accept[pair]}); {evidence}"
-        elif pair in reject:
-            confidence, reasoning = "REJECTED", f"{reject[pair]}; {evidence}"
-        else:
-            confidence, reasoning = "UNREVIEWED", f"Needs decision in 7-decisions.csv; {evidence}"
-        rows_by_key[c["dblp_key"]].append((c["title"], confidence, reasoning))
-    for (key, title), reason in accept.items():
-        if (key, title) not in candidate_pairs:
-            rows_by_key[key].append((title, "HIGH", f"Reviewed manual match: {reason}"))
 
-    output_rows = []
-    for key in sorted(venues):
-        acronym = venues[key]["dblp_acronym"]
-        entries = rows_by_key.get(key, [])
-        for title, confidence, reasoning in entries:
-            c = core[title]
-            output_rows.append(
-                {
-                    "dblp_key": key,
-                    "dblp_acronym": acronym,
-                    "core_title": title,
-                    "acronym": c["acronym"],
-                    "ranking": c["ranking"],
-                    "confidence": confidence,
-                    "reasoning": reasoning,
-                }
-            )
-        if not any(conf in {"HIGH", "UNREVIEWED"} for _, conf, _ in entries):
-            output_rows.append(
-                {
-                    "dblp_key": key,
-                    "dblp_acronym": acronym,
-                    "core_title": "NO_MATCH",
-                    "acronym": "",
-                    "ranking": "",
-                    "confidence": "NONE",
-                    "reasoning": "No CORE A*–C venue supported by DBLP evidence",
-                }
-            )
+def acronym_forms(acronym: str) -> set[str]:
+    a = strip_parens(acronym).strip()
+    return {f for f in (norm(a), norm(ORG_PREFIX.sub("", a))) if f}
 
-    with open(OUT_CSV, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS)
-        writer.writeheader()
-        writer.writerows(output_rows)
 
-    counts = Counter(r["confidence"] for r in output_rows)
-    high_keys = Counter(r["dblp_key"] for r in output_rows if r["confidence"] == "HIGH")
-    conflicts = [k for k, n in high_keys.items() if n > 1]
-    covered = {r["core_title"] for r in output_rows if r["confidence"] == "HIGH"}
-    uncovered = [t for t in core if t not in covered and t not in absent]
-    stale_absent = [t for t in absent if t in covered]
-    unreviewed = [r for r in output_rows if r["confidence"] == "UNREVIEWED"]
+def edition_acronyms(proceedings_title: str) -> set[str]:
+    text = re.sub(r"[^a-z0-9 ']", "", fold(proceedings_title).replace("-", ""))
+    return set(re.findall(r"\b([a-z][a-z0-9]*)\s*'?(?:19|20)?\d{2}\b", text))
 
-    review = [{"issue": "ERROR", "detail": e} for e in errors]
-    review += [{"issue": "ERROR", "dblp_key": k, "detail": "accepted for more than one CORE venue"} for k in conflicts]
-    review += [{"issue": "ERROR", "core_title": t, "detail": "marked absent but has an accepted key"} for t in stale_absent]
-    review += [
-        {
-            "issue": "UNREVIEWED",
-            "dblp_key": r["dblp_key"],
-            "dblp_acronym": r["dblp_acronym"],
-            "core_title": r["core_title"],
-            "acronym": r["acronym"],
-            "ranking": r["ranking"],
-            "detail": r["reasoning"],
-            "papers": venues[r["dblp_key"]]["papers"],
-            "years": f"{venues[r['dblp_key']]['first_year']}–{venues[r['dblp_key']]['last_year']}",
-            "booktitles": venues[r["dblp_key"]]["booktitles"],
-            "proceedings_titles": venues[r["dblp_key"]]["proceedings_titles"],
+
+def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
+    """Per key: acronyms it is known by, proceedings titles, and whether it is a co-located series."""
+    booktitles: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for key, booktitle, n in conn.execute(
+        "SELECT dblp_key, booktitle, papers FROM dblp_booktitle ORDER BY dblp_key, papers DESC, booktitle"
+    ):
+        if len(booktitles[key]) < 5:
+            booktitles[key].append((booktitle, n))
+    proceedings: dict[str, list[str]] = defaultdict(list)
+    for key, title in conn.execute(
+        "SELECT dblp_key, title FROM dblp_proceedings ORDER BY dblp_key, year DESC, title DESC"
+    ):
+        if len(proceedings[key]) < 3:
+            proceedings[key].append(title)
+    evidence = {}
+    for (key,) in conn.execute("SELECT dblp_key FROM dblp_venue"):
+        bts = booktitles.get(key, [])
+        total = sum(n for _, n in bts) or 1
+        dominant = {
+            norm(re.sub(r"\(.*?\)|@.*$", "", b)) for b, n in bts if n / total >= MIN_BOOKTITLE_SHARE
         }
-        for r in unreviewed
-    ]
-    review += [
-        {
-            "issue": "UNCOVERED",
-            "core_title": t,
-            "acronym": core[t]["acronym"],
-            "ranking": core[t]["ranking"],
-            "detail": "No accepted DBLP key and not marked absent: search 1-dblp-venues.csv",
+        pts = proceedings.get(key, [])
+        acronyms = {norm(key.split("/", 1)[1])} | dominant
+        for p in pts:
+            acronyms |= edition_acronyms(p)
+        evidence[key] = {
+            "acronyms": acronyms - {""},
+            "pt_tokens": [tokens(p) for p in pts],
+            "pts": pts,
+            "co_located": bool(pts) and all(CO_LOCATED.search(p) for p in pts),
         }
-        for t in uncovered
-    ]
-    with open(OUT_REVIEW, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=REVIEW_FIELDS, restval="")
-        writer.writeheader()
-        writer.writerows(review)
+    return evidence
 
-    print(f"Generated {len(output_rows)} rows in {OUT_CSV.name}")
-    print(f"  HIGH (accepted):           {counts['HIGH']}")
-    print(f"  REJECTED (reviewed):       {counts['REJECTED']}")
-    print(f"  UNREVIEWED:                {counts['UNREVIEWED']}")
-    print(f"  NONE (NO_MATCH):           {counts['NONE']}")
-    print(f"  CORE venues covered:       {len(covered)} / {len(core)}  (+{len(absent)} documented absent)")
-    print(f"  Items needing review:      {len(review)}  → {OUT_REVIEW.name}")
-    for r in review[:30]:
-        print(f"  ? {r['issue']} {r.get('dblp_key', '')} {r.get('core_title', '')} {r['detail'][:120]}")
-    if len(review) > 30:
-        print(f"  ... and {len(review) - 30} more in {OUT_REVIEW.name}")
-    if review:
-        print("\n  ✗ Review needed: resolve every row of 6-needs-review.csv in 7-decisions.csv, then re-run b-match.py")
-        sys.exit(1)
-    print("\n  ✓ All candidates reviewed and every CORE venue accounted for")
+
+def propose(conn: sqlite3.Connection) -> list[tuple]:
+    evidence = load_evidence(conn)
+    by_acronym: dict[str, set[str]] = defaultdict(set)
+    for key, e in evidence.items():
+        for a in e["acronyms"]:
+            by_acronym[a].add(key)
+    pairs = []
+    for core_id, title, acronym in conn.execute("SELECT id, title, acronym FROM core_venue"):
+        ct = tokens(strip_parens(title))
+        if not ct:
+            continue
+        keys = set().union(*(by_acronym.get(a, set()) for a in acronym_forms(acronym)))
+        for key in keys:
+            e = evidence[key]
+            if e["co_located"] and "workshop" not in title.lower():
+                continue
+            scores = [len(ct & pt) / len(ct) for pt in e["pt_tokens"]]
+            if not scores or max(scores) < MIN_TITLE_SCORE:
+                continue
+            best = max(range(len(scores)), key=scores.__getitem__)
+            pairs.append((key, core_id, round(scores[best], 2), e["pts"][best]))
+    return pairs
+
+
+def main() -> None:
+    if not DB_PATH.exists():
+        sys.exit(f"Database not found: {DB_PATH}  (run a-extract.py first)")
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
+    if not conn.execute("SELECT count(*) FROM dblp_venue").fetchone()[0]:
+        sys.exit("No DBLP evidence in the database  (run a-extract.py first)")
+    print()
+    print("╔══════════════════════════════════════════════════════════════════════╗")
+    print("║         paperhunter  ·  Conference Candidate Matcher                 ║")
+    print("╚══════════════════════════════════════════════════════════════════════╝")
+    print()
+    pairs = propose(conn)
+    with conn:
+        conn.execute("DELETE FROM candidate")
+        conn.executemany("INSERT INTO candidate VALUES (?, ?, ?, ?)", pairs)
+    issues = dict(conn.execute("SELECT issue, count(*) FROM needs_review GROUP BY issue").fetchall())
+    decisions = conn.execute("SELECT count(*) FROM decision").fetchone()[0]
+    final = conn.execute("SELECT count(*) FROM list_of_conferences").fetchone()[0]
+    print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)")
+    print(f"  ├─ decisions:   {decisions}")
+    print(f"  ├─ UNREVIEWED:  {issues.get('UNREVIEWED', 0)}")
+    print(f"  ├─ UNCOVERED:   {issues.get('UNCOVERED', 0)}")
+    print(f"  └─ final list:  {final} keys")
+    print()
+    if issues:
+        print("  ✗ Review needed → give run/b-conference-matching-guide.md to the AI")
+    else:
+        print("  ✓ Review complete → list_of_conferences is final")
+    print()
+    conn.close()
 
 
 if __name__ == "__main__":
-    build_matcher()
+    main()
