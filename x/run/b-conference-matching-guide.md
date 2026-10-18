@@ -1,260 +1,72 @@
-# Conference Matching Guide: DBLP ↔ CORE
+# Master Prompt: Finish the Conference List (DBLP ↔ CORE)
 
-## Objective
+You are the reviewer. Complete this task end to end with no human help and no questions to the user. You are done when `c-merge.py` writes `x/archive/list-of-conferences.csv`: every DBLP conference key (`conf/<name>`) that belongs to a CORE A*–C venue, with zero false positives and zero false negatives.
 
-Build a comprehensive list of CORE-ranked conferences by matching DBLP database entries to CORE rankings.
-
-## Workflow Overview
-
-**Automated Steps (Python):**
-1. `a-extract.py` - Scan DBLP XML, extract conferences, match by acronym → Generates exact matches
-2. `b-match.py` - Fuzzy match remaining conferences → Generates HIGH/NONE confidence matches
-3. `c-merge.py` - Combine exact + HIGH confidence matches → Final conference list
-
-**Your Role (AI):**  
-Between steps 2 and 3, review `b-match.py` output and improve matching quality using:
-- Algorithm results as starting point
-- Web search to verify conference details
-- Your intelligence to resolve edge cases (renamed conferences, aliases, ambiguous matches)
-
-**Goal:** Maximize correct matches, minimize false positives.
+Work from `/home/nishan/Documents/paperhunter-research-paper-discovery`.
 
 ---
 
-## Strategy: Hybrid Algorithm + AI Review
-
-### Step 1: Run a-extract.py (Initial Extraction)
-```bash
-cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python3 x/conference-hunter/a-extract.py
-```
-
-**This extracts conferences from DBLP XML (`x/archive/paper-dblp.xml`) and CORE rankings (`x/archive/publication-core-2026.csv`), performing Phase 1 acronym matching.**
-
-Generates:
-- `x/conference-supplement/1-exact-matched.csv` - Exact acronym matches (auto-approved)
-- `x/conference-supplement/2-dblp-unmatched.csv` - DBLP conferences needing matching
-- `x/conference-supplement/3-source-pool.csv` - CORE conferences available for matching
-
-### Step 2: Run b-match.py (Fuzzy Matching)
-```bash
-python3 x/conference-hunter/b-match.py
-```
-
-Generates `x/conference-supplement/4-fuzzy-matched.csv` with HIGH and NONE confidence entries.
-
-### Step 3: Review Algorithm Output
-
-Check `x/conference-supplement/4-fuzzy-matched.csv`:
-- **HIGH confidence** → Likely correct, spot-check
-- **NONE (NO_MATCH)** → Need your review
-
-### Step 4: AI Manual Review
-
-Focus on **NO_MATCH entries**:
-
-1. **Search DBLP key online:**
-   - Visit: `https://dblp.org/db/conf/[acronym]/`
-   - Get: Full conference name, homepage, organizer
-
-2. **Search conference info:**
-   - Query: `"[conference_name]" CORE ranking`
-   - Query: `"[acronym]" conference computer science`
-
-3. **Check if in CORE pool:**
-   ```bash
-   grep -i "[acronym]" x/conference-supplement/3-source-pool.csv
-   ```
-
-4. **Common issues:**
-   - Conference renamed (NeurIPS was NIPS)
-   - Acronym changed (ESEC/FSE → FSE)
-   - Multiple conferences with similar names
-   - Workshop vs Main conference
-
----
-
-## Input Files
-
-### 1. `x/conference-supplement/2-dblp-unmatched.csv`
-Columns: `dblp_key`, `dblp_acronym`
-
-DBLP conferences not matched by exact acronym.
-
-### 2. `x/conference-supplement/3-source-pool.csv`
-Columns: `title`, `acronym`, `ranking`
-
-CORE conferences available (A*, A, B, C).
-
-### 3. `x/conference-supplement/4-fuzzy-matched.csv`
-Columns: `dblp_key`, `dblp_acronym`, `core_title`, `acronym`, `ranking`, `confidence`, `reasoning`
-
-Algorithm's matching results.
-
----
-
-## Matching Rules
-
-### SAME Conference:
-- **Same acronym** (case-insensitive)
-- **Same organizing body** (ACM, IEEE, USENIX, etc.)
-- **Same topic/scope**
-
-### NOT the Same:
-- Workshops vs Main conference (ICML vs ICML Workshop)
-- Regional variations (AAAI vs AAAI-Asia)
-- Different years of renamed conference (count as same if renamed)
-
-### Confidence Levels
-
-**HIGH** - Acronym match OR verified via official website  
-**MEDIUM** - Strong name similarity but uncertain  
-**LOW** - Weak match, needs expert review  
-**NONE** - No match in CORE pool
-
----
-
-## Special Cases
-
-### Case 1: Conference Renamed
-Example: "NIPS" → "NeurIPS" (2018)
-- CORE lists as: "Advances in Neural Information Processing Systems (was NIPS)"
-- Match DBLP `conf/nips` to this entry
-
-### Case 2: Merged Conferences
-Example: "ESEC/FSE" → "FSE"
-- CORE notes: "(was ESEC/FSE, changed 2024)"
-- Match both `conf/fse` and historical keys
-
-### Case 3: Workshop Series
-Example: "ICML Workshop on AutoML"
-- Not in CORE (workshops not ranked)
-- Mark as NO_MATCH
-
-### Case 4: Ambiguous Acronyms
-Example: "AI" could be multiple conferences
-- Check DBLP key: `conf/ai` vs `conf/aaai`
-- Visit dblp.org to see full name
-
-### Case 5: Regional Conferences
-Example: "AAAI" (main) vs "AAAI-Asia"
-- CORE only lists main conference
-- Regional variants → NO_MATCH
-
----
-
-## Workflow
-
-### Phase 1: Algorithmic Matching
-```bash
-python3 x/conference-hunter/b-match.py
-```
-Output: `x/conference-supplement/4-fuzzy-matched.csv`
-
-### Phase 2: AI Review
-1. **Count NO_MATCH:**
-   ```bash
-   grep "NO_MATCH" x/conference-supplement/4-fuzzy-matched.csv | wc -l
-   ```
-
-2. **For each NO_MATCH:**
-   - Search conference online
-   - Check DBLP.org for full name
-   - Look for CORE entry
-   - Update if match found
-
-3. **Quality check HIGH confidence:**
-   - Sample 20 entries
-   - Verify acronyms match
-   - Flag suspicious ones
-
-### Phase 3: Generate Final List
-```bash
-python3 x/conference-hunter/c-merge.py
-```
-
-Merges:
-- `x/conference-supplement/1-exact-matched.csv`
-- `x/conference-supplement/4-fuzzy-matched.csv` (HIGH only)
-
-Output: `x/archive/list-of-conferences.csv`
-
----
-
-## Output Format
-
-Update `x/conference-supplement/4-fuzzy-matched.csv` for NO_MATCH entries:
-
-```csv
-dblp_key,dblp_acronym,core_title,acronym,ranking,confidence,reasoning
-conf/icml,ICML,International Conference on Machine Learning,ICML,A*,HIGH,Verified via DBLP
-conf/unknown,UNKNOWN,NO_MATCH,,,NONE,Not in CORE rankings (regional workshop)
-```
-
----
-
-## Tools & Resources
-
-### Recommended Searches:
-- `"[conference_acronym]" CORE ranking`
-- `site:dblp.org/db/conf/[acronym]`
-- `"[full_name]" computer science conference`
-
-### Useful Sites:
-- **DBLP**: https://dblp.org/db/conf/
-- **CORE Portal**: http://portal.core.edu.au/conf-ranks/
-- **Conference websites** (check organizers, history)
-
----
-
-## Quality Checklist
-
-- [ ] All HIGH confidence spot-checked (sample 20)
-- [ ] NO_MATCH entries searched online
-- [ ] No duplicate CORE conferences assigned
-- [ ] Conference name changes documented
-- [ ] Reasoning filled for all entries
-
----
-
-## Expected Results
-
-- **HIGH confidence**: Majority of remaining conferences after exact matching
-- **NO_MATCH**: Workshops, regional conferences, unranked venues
-- **Total matched**: High coverage of CORE-ranked conferences
-
----
-
-## Example Session
-
-```bash
-# Step 1: Run algorithm
-python3 x/conference-hunter/b-match.py
-# Output: 123 HIGH, 456 NONE
-
-# Step 2: Review NO_MATCH
-grep "NO_MATCH" x/conference-supplement/4-fuzzy-matched.csv | head -5
-
-# Step 3: Search one
-# conf/neurips,NEURIPS,NO_MATCH,...
-# Google: "NeurIPS conference CORE"
-# Found: "Advances in Neural Information Processing Systems (was NIPS)" - A*
-
-# Step 4: Check CORE pool
-grep -i "neurips\|nips" x/conference-supplement/3-source-pool.csv
-# Result: Advances in Neural Information Processing Systems (was NIPS),NeurIPS,A*
-
-# Step 5: Update x/conference-supplement/4-fuzzy-matched.csv
-# Change: conf/nips,NIPS,NO_MATCH,...
-# To: conf/nips,NIPS,Advances in Neural Information Processing Systems (was NIPS),NeurIPS,A*,HIGH,Conference renamed
-```
-
----
-
-## Final Output
-
-**File**: `x/archive/list-of-conferences.csv`
-
-**Columns**: `dblp_key`, `dblp_acronym`, `title`, `ranking`
-
-**Use**: Authoritative list for extracting papers from DBLP conferences.
+## Files
+
+| file | made by | you |
+|---|---|---|
+| `x/archive/paper-dblp.xml`, `x/archive/publication-core-2026.csv` | inputs | read only |
+| `x/conference-supplement/1-dblp-venues.csv` | `a-extract.py` | read: evidence for every DBLP conference key (papers, years, booktitles, proceedings titles) |
+| `x/conference-supplement/2-exact-matched.csv` | `a-extract.py` | read: proposed pairs (acronym and proceedings title agree), not yet approved |
+| `x/conference-supplement/3-dblp-unmatched.csv` | `a-extract.py` | read: keys with no proposal |
+| `x/conference-supplement/4-source-pool.csv` | `a-extract.py` | read: CORE venues with no proposal |
+| `x/conference-supplement/5-fuzzy-matched.csv` | `b-match.py` | read: every key with its status |
+| `x/conference-supplement/6-needs-review.csv` | `b-match.py` | read: **your to-do list** |
+| `x/conference-supplement/7-decisions.csv` | **you** | write: your decisions; no script ever writes it |
+| `x/archive/list-of-conferences.csv` | `c-merge.py` | final output |
+
+Never edit files `1-` to `6-` or `list-of-conferences.csv`; every run overwrites them. Never edit the Python scripts.
+
+## Procedure
+
+1. Run `python3 x/conference-hunter/a-extract.py --reuse-index` if `1-dblp-venues.csv` exists, otherwise without the flag (full XML scan, ~15–20 min). Then run `python3 x/conference-hunter/b-match.py`.
+2. If `b-match.py` prints `✓ All candidates reviewed and every CORE venue accounted for`, go to step 6.
+3. Resolve every `UNREVIEWED` and `ERROR` row of `6-needs-review.csv` by adding or fixing rows in `7-decisions.csv`.
+4. Run `b-match.py` again. Accepting a key also covers its CORE venue, so the `UNCOVERED` list shrinks. Resolve the remaining `UNCOVERED` rows.
+5. Repeat steps 3–4 until `b-match.py` prints ✓.
+6. Run `python3 x/conference-hunter/c-merge.py`. It must print `✅ Done!`. If it prints `✗ Validation failed`, fix `7-decisions.csv` and go back to step 4.
+7. Report in five lines or fewer: number of keys per rank, CORE venues covered vs absent, and the decisions you added this run.
+
+On a normal rerun `7-decisions.csv` already holds earlier decisions, and only new or changed cases appear. If it is missing or empty, every candidate and every CORE venue (about 1,600 rows) appears. Work through all of them; you may use scripts to read and filter, but every decision must rest on the evidence for that row.
+
+## `7-decisions.csv` format
+
+Columns: `dblp_key,core_title,decision,reason`
+
+| decision | `dblp_key` | meaning |
+|---|---|---|
+| `accept` | the key | the key is this CORE venue (one key per row; a venue may have several keys) |
+| `reject` | the key | the proposed pair is a different venue |
+| `absent` | empty | this CORE venue has no DBLP series of its own |
+
+- `core_title` must be copied exactly from the `Title` column of `publication-core-2026.csv`.
+- `reason` is one line of evidence and is required, e.g. `Selected Areas in Cryptography proceedings`.
+- Append new rows. Don't delete existing rows unless the evidence proves them wrong.
+
+## How to decide
+
+**`UNREVIEWED`** (`dblp_key` → `core_title`). Compare the row's `proceedings_titles` and `booktitles` with the CORE title. If unclear, open `https://dblp.org/db/conf/<name>/`.
+- `accept` only if the proceedings name the same conference series as the CORE title. Renames and mergers count as the same series, e.g. NIPS→NeurIPS, WCRE→SANER, ATAL→AAMAS, ICSM→ICSME.
+- Otherwise `reject`. Typical cases:
+  - a different venue sharing the acronym (`conf/sac` is ACM Symposium on Applied Computing, not Selected Areas in Cryptography; `conf/fse` is Fast Software Encryption, not ACM FSE)
+  - a workshop co-located with the venue
+  - a regional or national namesake
+  - a journal-like or SCF series
+
+**`UNCOVERED`** (CORE venue with no accepted key).
+1. Search the `proceedings_titles` and `booktitles` columns of `1-dblp-venues.csv` for its full name, former names (often given in brackets in the CORE title) and acronym. Then search dblp.org.
+2. If you find its key, add `accept` rows: one per key, including historic keys of renamed or merged predecessors.
+3. If it has no DBLP series of its own, add an `absent` row with the reason, e.g. `Not indexed in DBLP` or `papers indexed inside conf/ic3k`.
+
+**`ERROR`.** The row names the bad line of `7-decisions.csv`: unknown title, missing reason, unknown decision, duplicate, a key accepted for two venues, or a venue both absent and accepted. Fix that line.
+
+## Rules
+
+- One DBLP key maps to at most one CORE venue.
+- Never accept on acronym alone; the proceedings titles must name the same series.
+- Every row in `6-needs-review.csv` must be resolved. `c-merge.py` refuses to write the list otherwise. Never bypass it.

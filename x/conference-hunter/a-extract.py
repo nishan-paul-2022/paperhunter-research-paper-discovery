@@ -2,10 +2,11 @@
 import argparse
 import csv
 import os
+import re
 import sys
-from collections import Counter
+import unicodedata
+from collections import Counter, defaultdict
 from pathlib import Path
-from lxml import etree
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
@@ -13,22 +14,92 @@ ARCHIVE_DIR = REPO_ROOT / "archive"
 SUPPLEMENT_DIR = REPO_ROOT / "conference-supplement"
 CORE_SRC = ARCHIVE_DIR / "publication-core-2026.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
-OUT_1_EXACT = SUPPLEMENT_DIR / "1-exact-matched.csv"
-OUT_2_TODO = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
-OUT_3_CORE_POOL = SUPPLEMENT_DIR / "3-source-pool.csv"
-OUT_FINAL = ARCHIVE_DIR / "list-of-conferences.csv"
-OUT_FIELDS = ["dblp_key", "dblp_acronym", "title", "ranking"]
-OUT_FIELDS_DBLP = ["dblp_key", "dblp_acronym"]
+OUT_1_VENUES = SUPPLEMENT_DIR / "1-dblp-venues.csv"
+OUT_2_EXACT = SUPPLEMENT_DIR / "2-exact-matched.csv"
+OUT_3_TODO = SUPPLEMENT_DIR / "3-dblp-unmatched.csv"
+OUT_4_CORE_POOL = SUPPLEMENT_DIR / "4-source-pool.csv"
+OUT_FIELDS_VENUES = [
+    "dblp_key",
+    "dblp_acronym",
+    "papers",
+    "first_year",
+    "last_year",
+    "booktitles",
+    "proceedings_titles",
+]
+OUT_FIELDS_EXACT = [
+    "dblp_key",
+    "dblp_acronym",
+    "title",
+    "acronym",
+    "ranking",
+    "score",
+    "proceedings_title",
+]
+OUT_FIELDS_DBLP = OUT_FIELDS_VENUES
 OUT_FIELDS_CORE = ["title", "acronym", "ranking"]
 VALID_RANKINGS = {"A*", "A", "B", "C"}
+SEP = " | "
+MIN_TITLE_SCORE = 0.6
+MIN_BOOKTITLE_SHARE = 0.15
+STOPWORDS = set(
+    "a an the of on in for and to at with from by its their international "
+    "conference conf symposium workshop workshops congress meeting annual "
+    "joint ieee acm ifip usenix siam proceedings th st nd rd was previously "
+    "changed".split()
+)
+SPELLING = {
+    "modelling": "modeling",
+    "optimisation": "optimization",
+    "visualisation": "visualization",
+    "organisation": "organization",
+    "behaviour": "behavior",
+    "analyse": "analyze",
+}
+CO_LOCATED = re.compile(r"co-located|colocated|in conjunction|held at|workshop", re.I)
+ORG_PREFIX = re.compile(r"^(IEEE|ACM|IFIP)[ _-]+", re.I)
 
 
-def phase_clean(core_path: Path) -> tuple[list[dict], dict[str, dict]]:
+def fold(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.lower().replace("&", " and ")
+
+
+def norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", fold(s))
+
+
+def tokens(s: str) -> set[str]:
+    out = set()
+    for t in re.findall(r"[a-z0-9]+", fold(s)):
+        t = SPELLING.get(t, t)
+        if len(t) > 3 and t.endswith("s") and not t.endswith("ss"):
+            t = t[:-1]
+        if t not in STOPWORDS and not t.isdigit():
+            out.add(t)
+    return out
+
+
+def strip_parens(s: str) -> str:
+    return re.sub(r"\(.*?\)", "", s)
+
+
+def acronym_forms(acronym: str) -> set[str]:
+    a = strip_parens(acronym).strip()
+    return {f for f in (norm(a), norm(ORG_PREFIX.sub("", a))) if f}
+
+
+def edition_acronyms(proceedings_title: str) -> set[str]:
+    text = re.sub(r"[^a-z0-9 ']", "", fold(proceedings_title).replace("-", ""))
+    return set(re.findall(r"\b([a-z][a-z0-9]*)\s*'?(?:19|20)?\d{2}\b", text))
+
+
+def phase_clean(core_path: Path) -> list[dict]:
     print("━" * 70)
     print("  Phase 1 – Cleaning CORE CSV")
     print("━" * 70)
     rows = []
-    acronym_index = {}
     dropped = 0
     with open(core_path, encoding="utf-8", newline="") as f:
         for row in csv.DictReader(f):
@@ -36,31 +107,35 @@ def phase_clean(core_path: Path) -> tuple[list[dict], dict[str, dict]]:
             if ranking not in VALID_RANKINGS:
                 dropped += 1
                 continue
-            title = row["Title"].strip()
-            acronym = row["Acronym"].strip()
-            record = {
-                "title": title,
-                "acronym": acronym,
-                "ranking": ranking,
-            }
-            rows.append(record)
-            acronym_lower = acronym.lower()
-            if acronym_lower not in acronym_index:
-                acronym_index[acronym_lower] = record
-    print(f"  ✓  {len(rows)} valid conferences  |  {dropped} invalid rows dropped")
-    print(f"  ✓  {len(acronym_index)} unique acronyms indexed\n")
-    return rows, acronym_index
+            rows.append(
+                {
+                    "title": row["Title"].strip(),
+                    "acronym": row["Acronym"].strip(),
+                    "ranking": ranking,
+                }
+            )
+    titles = Counter(r["title"] for r in rows)
+    duplicates = [t for t, n in titles.items() if n > 1]
+    if duplicates:
+        sys.exit(f"Duplicate CORE titles (titles must be unique ids): {duplicates}")
+    print(f"  ✓  {len(rows)} valid conferences  |  {dropped} invalid rows dropped\n")
+    return rows
 
 
-def _scan_xml(xml_path: Path) -> dict[str, str]:
+def _scan_xml(xml_path: Path) -> dict[str, dict]:
+    from lxml import etree
+
     size = os.path.getsize(xml_path)
-    seen = indexed = 0
-    result: dict[str, str] = {}
+    seen = 0
+    papers: Counter = Counter()
+    booktitles: dict[str, Counter] = defaultdict(Counter)
+    years: dict[str, list[int]] = {}
+    proceedings: dict[str, list[tuple[int, str]]] = defaultdict(list)
     f = open(xml_path, "rb")
     ctx = etree.iterparse(
         f,
         events=("end",),
-        tag="inproceedings",
+        tag=("inproceedings", "proceedings"),
         load_dtd=True,
         resolve_entities=True,
         huge_tree=True,
@@ -68,19 +143,30 @@ def _scan_xml(xml_path: Path) -> dict[str, str]:
     for _, el in ctx:
         seen += 1
         key = el.get("key", "")
-        if key.startswith("conf/"):
-            parts = key.split("/")
-            if len(parts) >= 2:
-                prefix = "/".join(parts[:2])
-                if prefix not in result:
-                    acronym = parts[1].upper()
-                    result[prefix] = acronym
-                    indexed += 1
+        parts = key.split("/")
+        if key.startswith("conf/") and len(parts) >= 3:
+            prefix = "/".join(parts[:2])
+            year_text = el.findtext("year") or ""
+            year = int(year_text) if year_text.isdigit() else 0
+            if el.tag == "inproceedings":
+                papers[prefix] += 1
+                booktitle = (el.findtext("booktitle") or "").strip()
+                if booktitle:
+                    booktitles[prefix][booktitle] += 1
+                if year:
+                    lo, hi = years.get(prefix, (year, year))
+                    years[prefix] = [min(lo, year), max(hi, year)]
+            else:
+                title_el = el.find("title")
+                if title_el is not None:
+                    title = " ".join("".join(title_el.itertext()).split())
+                    if title:
+                        proceedings[prefix].append((year, title))
         if seen % 500_000 == 0:
             pct = f.tell() * 100 // size
             print(
-                f"  {pct:3}%  |  papers scanned: {seen:,}"
-                f"  |  conferences found: {indexed:,}",
+                f"  {pct:3}%  |  records scanned: {seen:,}"
+                f"  |  conference keys: {len(papers):,}",
                 end="\r",
                 flush=True,
             )
@@ -88,197 +174,181 @@ def _scan_xml(xml_path: Path) -> dict[str, str]:
         while el.getprevious() is not None:
             del el.getparent()[0]
     f.close()
-    print(f"  100%  |  papers scanned: {seen:,}  |  conferences found: {indexed:,}")
-    return result
+    print(f"  100%  |  records scanned: {seen:,}  |  conference keys: {len(papers):,}")
+    venues = {}
+    for prefix, n in papers.items():
+        latest = sorted(proceedings.get(prefix, []), reverse=True)[:3]
+        first, last = years.get(prefix, ("", ""))
+        venues[prefix] = {
+            "dblp_key": prefix,
+            "dblp_acronym": prefix.split("/", 1)[1].upper(),
+            "papers": n,
+            "first_year": first,
+            "last_year": last,
+            "booktitles": SEP.join(
+                f"{b} ({c})" for b, c in booktitles[prefix].most_common(5)
+            ),
+            "proceedings_titles": SEP.join(t for _, t in latest),
+        }
+    return venues
 
 
-def phase_index(xml_path: Path) -> dict[str, str]:
+def phase_index(xml_path: Path, reuse: bool) -> dict[str, dict]:
     print("━" * 70)
-    print("  Phase 2 – DBLP Conference Index")
+    print("  Phase 2 – DBLP Venue Evidence Index")
     print("━" * 70)
+    if reuse and OUT_1_VENUES.exists():
+        with open(OUT_1_VENUES, encoding="utf-8", newline="") as f:
+            venues = {r["dblp_key"]: r for r in csv.DictReader(f)}
+        print(f"  Reusing {OUT_1_VENUES.name}  ({len(venues):,} keys)\n")
+        return venues
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB)")
     print("  (This takes ~15–20 min.)\n")
-    idx = _scan_xml(xml_path)
-    print(f"\n  ✓  {len(idx):,} unique conferences found\n")
-    return idx
+    venues = _scan_xml(xml_path)
+    SUPPLEMENT_DIR.mkdir(parents=True, exist_ok=True)
+    with open(OUT_1_VENUES, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=OUT_FIELDS_VENUES)
+        writer.writeheader()
+        writer.writerows(sorted(venues.values(), key=lambda r: r["dblp_key"]))
+    print(f"\n  ✓  {len(venues):,} conference keys indexed → {OUT_1_VENUES.name}\n")
+    return venues
+
+
+def _booktitle_share(field: str) -> list[tuple[str, int]]:
+    out = []
+    for part in field.split(SEP) if field else []:
+        m = re.match(r"^(.*) \((\d+)\)$", part)
+        if m:
+            out.append((m.group(1), int(m.group(2))))
+    return out
+
+
+def venue_evidence(v: dict) -> dict:
+    bts = _booktitle_share(v["booktitles"])
+    total = sum(n for _, n in bts) or 1
+    dominant = {
+        norm(re.sub(r"\(.*?\)|@.*$", "", b)) for b, n in bts if n / total >= MIN_BOOKTITLE_SHARE
+    }
+    pts = [p for p in v["proceedings_titles"].split(SEP) if p]
+    acronyms = {norm(v["dblp_key"].split("/", 1)[1])} | dominant
+    for p in pts:
+        acronyms |= edition_acronyms(p)
+    return {
+        "acronyms": acronyms - {""},
+        "pt_tokens": [tokens(p) for p in pts],
+        "pts": pts,
+        "co_located": bool(pts) and all(CO_LOCATED.search(p) for p in pts),
+    }
 
 
 def phase_match(
-    dblp_index: dict[str, str],
-    core_rows: list[dict],
-    core_acronym_index: dict[str, dict],
+    venues: dict[str, dict], core_rows: list[dict]
 ) -> tuple[list[dict], list[dict], list[dict]]:
     print("━" * 70)
-    print("  Phase 3 – Acronym Matching")
+    print("  Phase 3 – Evidence Matching (acronym AND proceedings-title agreement)")
     print("━" * 70)
-    exact_matched = []
-    dblp_matched_keys = set()
-    core_matched_acronyms = set()
-    for dblp_key, dblp_acronym in dblp_index.items():
-        acronym_lower = dblp_acronym.lower()
-        if acronym_lower in core_acronym_index:
-            core_record = core_acronym_index[acronym_lower]
-            exact_matched.append(
+    evidence = {k: venue_evidence(v) for k, v in venues.items()}
+    by_acronym: dict[str, set[str]] = defaultdict(set)
+    for k, e in evidence.items():
+        for a in e["acronyms"]:
+            by_acronym[a].add(k)
+    candidates = []
+    for c in core_rows:
+        ct = tokens(strip_parens(c["title"]))
+        if not ct:
+            continue
+        keys = set().union(*(by_acronym.get(a, set()) for a in acronym_forms(c["acronym"])))
+        for k in keys:
+            e = evidence[k]
+            if e["co_located"] and "workshop" not in c["title"].lower():
+                continue
+            scores = [len(ct & pt) / len(ct) for pt in e["pt_tokens"]]
+            if not scores or max(scores) < MIN_TITLE_SCORE:
+                continue
+            best = max(range(len(scores)), key=scores.__getitem__)
+            candidates.append(
                 {
-                    "dblp_key": dblp_key,
-                    "dblp_acronym": dblp_acronym,
-                    "title": core_record["title"],
-                    "ranking": core_record["ranking"],
+                    "dblp_key": k,
+                    "dblp_acronym": venues[k]["dblp_acronym"],
+                    "title": c["title"],
+                    "acronym": c["acronym"],
+                    "ranking": c["ranking"],
+                    "score": f"{scores[best]:.2f}",
+                    "proceedings_title": e["pts"][best],
                 }
             )
-            dblp_matched_keys.add(dblp_key)
-            core_matched_acronyms.add(acronym_lower)
-            print(
-                f"  ✓  {core_record['ranking']}  {dblp_acronym} → {core_record['title'][:50]}"
-            )
-    print(f"\n  ✓  {len(exact_matched)} conferences matched by acronym\n")
-    dblp_unmatched = [
-        {"dblp_key": k, "dblp_acronym": v}
-        for k, v in dblp_index.items()
-        if k not in dblp_matched_keys
-    ]
-    core_available = [
-        {
-            "title": r["title"],
-            "acronym": r["acronym"],
-            "ranking": r["ranking"],
-        }
-        for r in core_rows
-        if r["acronym"].lower() not in core_matched_acronyms
-    ]
-    total_dblp = len(dblp_index)
-    total_core = len(core_rows)
-    print("  Summary Statistics:")
-    print(f"  ├─ Total DBLP conferences in XML: {total_dblp:,}")
-    print(f"  ├─ Total CORE conferences (A*-C): {total_core:,}")
-    print(
-        f"  ├─ Acronym matched: {len(exact_matched):,} ({len(exact_matched) / total_dblp * 100:.1f}% of DBLP)"
-    )
-    print(
-        f"  ├─ DBLP needs matching: {len(dblp_unmatched):,} ({len(dblp_unmatched) / total_dblp * 100:.1f}% of DBLP)"
-    )
-    print(
-        f"  ├─ CORE available: {len(core_available):,} ({len(core_available) / total_core * 100:.1f}% of CORE)"
-    )
-    print(f"  └─ Match rate: {len(exact_matched) / total_dblp * 100:.1f}%\n")
-    return exact_matched, dblp_unmatched, core_available
+    matched_keys = {r["dblp_key"] for r in candidates}
+    matched_titles = {r["title"] for r in candidates}
+    dblp_unmatched = [v for k, v in venues.items() if k not in matched_keys]
+    core_available = [c for c in core_rows if c["title"] not in matched_titles]
+    print(f"  ✓  {len(candidates):,} candidate pairs  ({len(matched_keys):,} keys)")
+    print(f"  ├─ DBLP keys without candidate: {len(dblp_unmatched):,}")
+    print(f"  └─ CORE venues without candidate: {len(core_available):,}\n")
+    return candidates, dblp_unmatched, core_available
+
+
+def _write(path: Path, fields: list[str], rows: list[dict]) -> None:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def phase_write(
-    exact_matched: list[dict],
-    dblp_unmatched: list[dict],
-    core_available: list[dict],
-    out_exact: Path,
-    out_dblp: Path,
-    out_core: Path,
+    candidates: list[dict], dblp_unmatched: list[dict], core_available: list[dict]
 ) -> None:
     print("━" * 70)
     print("  Phase 4 – Writing Output Files")
     print("━" * 70)
     order = {"A*": 0, "A": 1, "B": 2, "C": 3}
-    exact_sorted = sorted(
-        exact_matched, key=lambda r: (order.get(r["ranking"], 9), r["title"].lower())
+    SUPPLEMENT_DIR.mkdir(parents=True, exist_ok=True)
+    _write(
+        OUT_2_EXACT,
+        OUT_FIELDS_EXACT,
+        sorted(candidates, key=lambda r: (order[r["ranking"]], r["title"].lower(), r["dblp_key"])),
     )
-    out_exact.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_exact, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=OUT_FIELDS, delimiter=",", quoting=csv.QUOTE_MINIMAL
-        )
-        writer.writeheader()
-        writer.writerows(exact_sorted)
-    ranks = Counter(r["ranking"] for r in exact_matched)
-    print("\n  File 1: 1-exact-matched.csv (AUTO-APPROVED)")
-    print(f"  → {out_exact}")
-    print(f"  Total: {len(exact_matched)} conferences")
-    print(
-        f"  A*: {ranks['A*']}   A: {ranks['A']}   B: {ranks['B']}   C: {ranks['C']}\n"
+    _write(OUT_3_TODO, OUT_FIELDS_DBLP, sorted(dblp_unmatched, key=lambda r: r["dblp_key"]))
+    _write(
+        OUT_4_CORE_POOL,
+        OUT_FIELDS_CORE,
+        sorted(core_available, key=lambda r: (order[r["ranking"]], r["title"].lower())),
     )
-    dblp_sorted = sorted(dblp_unmatched, key=lambda r: r["dblp_key"])
-    with open(out_dblp, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=OUT_FIELDS_DBLP, delimiter=",", quoting=csv.QUOTE_MINIMAL
-        )
-        writer.writeheader()
-        writer.writerows(dblp_sorted)
-    print("  File 2: 2-dblp-unmatched.csv (Need Matching)")
-    print(f"  → {out_dblp}")
-    print(f"  Total: {len(dblp_unmatched)} conferences\n")
-    core_sorted = sorted(
-        core_available, key=lambda r: (order.get(r["ranking"], 9), r["title"].lower())
-    )
-    with open(out_core, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=OUT_FIELDS_CORE, delimiter=",", quoting=csv.QUOTE_MINIMAL
-        )
-        writer.writeheader()
-        writer.writerows(core_sorted)
-    ranks_core = Counter(r["ranking"] for r in core_available)
-    print("  File 3: 3-source-pool.csv (Available for Matching)")
-    print(f"  → {out_core}")
-    print(f"  Total: {len(core_available)} conferences")
-    print(
-        f"  A*: {ranks_core['A*']}   A: {ranks_core['A']}   B: {ranks_core['B']}   C: {ranks_core['C']}\n"
-    )
+    print(f"  File 2: {OUT_2_EXACT.name}  ({len(candidates)} evidence candidates, NOT auto-approved)")
+    print(f"  File 3: {OUT_3_TODO.name}  ({len(dblp_unmatched)} keys, with evidence columns)")
+    print(f"  File 4: {OUT_4_CORE_POOL.name}  ({len(core_available)} CORE venues)\n")
     print("  NEXT STEP:")
-    print("  → Use 1-exact-matched.csv directly")
-    print("  → Run b-match.py to match remaining\n")
-    max_possible = len(exact_matched) + len(core_available)
-    estimated = len(exact_matched) + int(len(core_available) * 0.3)
-    print("  Overall Statistics:")
-    print(
-        f"  ├─ 1-exact-matched.csv: {len(exact_matched):,} conferences (AUTO-APPROVED)"
-    )
-    print(
-        f"  ├─ 2-dblp-unmatched.csv: {len(dblp_unmatched):,} conferences (NEED MATCHING)"
-    )
-    print(f"  ├─ 3-source-pool.csv: {len(core_available):,} conferences (AVAILABLE)")
-    print(f"  ├─ Expected: ~{estimated:,} conferences (realistic)")
-    print(f"  └─ Maximum possible: {max_possible:,} conferences (all CORE matched)\n")
+    print("  → Run b-match.py (applies reviewed decisions in 7-decisions.csv)\n")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--xml", default=str(XML_PATH), help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})")
+    ap.add_argument("--core", default=str(CORE_SRC), help=f"Path to CORE CSV  (default: {CORE_SRC.name})")
     ap.add_argument(
-        "--xml",
-        default=str(XML_PATH),
-        help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})",
-    )
-    ap.add_argument(
-        "--core",
-        default=str(CORE_SRC),
-        help=f"Path to CORE CSV  (default: {CORE_SRC.name})",
+        "--reuse-index",
+        action="store_true",
+        help=f"Reuse {OUT_1_VENUES.name} instead of rescanning the XML",
     )
     args = ap.parse_args()
     xml_path = Path(args.xml)
     core_path = Path(args.core)
     if not core_path.exists():
         sys.exit(f"CORE CSV not found: {core_path}")
-    if not xml_path.exists():
+    if not (args.reuse_index and OUT_1_VENUES.exists()) and not xml_path.exists():
         sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║         paperhunter  ·  Conference List Builder                      ║")
     print("║                                                                      ║")
-    print("║  Strategy: Acronym matching (A*, A, B, C rankings)                   ║")
+    print("║  Strategy: DBLP evidence (booktitles + proceedings titles) vs CORE   ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print()
-    core_rows, core_acronym_index = phase_clean(core_path)
-    dblp_index = phase_index(xml_path)
-    exact_matched, dblp_unmatched, core_available = phase_match(
-        dblp_index, core_rows, core_acronym_index
-    )
-    phase_write(
-        exact_matched,
-        dblp_unmatched,
-        core_available,
-        OUT_1_EXACT,
-        OUT_2_TODO,
-        OUT_3_CORE_POOL,
-    )
+    core_rows = phase_clean(core_path)
+    venues = phase_index(xml_path, args.reuse_index)
+    candidates, dblp_unmatched, core_available = phase_match(venues, core_rows)
+    phase_write(candidates, dblp_unmatched, core_available)
     print("━" * 70)
-    print("  Done.")
-    print("  → Use 1-exact-matched.csv directly")
-    print("  → Run b-match.py for remaining matches")
+    print("  Done.  → Run b-match.py next")
     print("━" * 70)
     print()
 

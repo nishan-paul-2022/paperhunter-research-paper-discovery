@@ -1,0 +1,93 @@
+title,acronym,ranking
+"ACM Conference on Applications, Technologies, Architectures, and Protocols for Computer Communication",SIGCOMM,A*
+ACM Multimedia,ACMMM,A*
+ACM SIGMOD-SIGACT-SIGART Conference on Principles of Database Systems,PODS,A*
+ACM Special Interest Group on Management of Data Conference,SIGMOD,A*
+ACM-SIGPLAN Conference on Programming Language Design and Implementation,PLDI,A*
+International Conference on Very Large Databases,VLDB,A*
+International World Wide Web Conference,WWW,A*
+National Conference of the American Association for Artificial Intelligence,AAAI,A*
+Usenix Security Symposium,USENIX-Security,A*
+ACM Conference on Object Oriented Programming Systems Languages and Applications,OOPSLA,A
+ACM Special Interest Group on Computer Science Education Conference,SIGCSE,A
+International Conference on Functional Programming,ICFP,A
+ACM Symposium on Mobile Ad Hoc Networking and Computing,MOBIHOC,B
+ACM-SIGRAPH Interactive 3D Graphics and Games,I3DG,B
+Computer Algebra in Scientific Computing,CASC,B
+"EMAS (merger of DALT, AOSE and PROMAS)",EMAS,B
+European SPI,EuroSPI,B
+IEEE Global Telecommunications Conference,GLOBECOM,B
+IEEE International Conference on e-Science and Grid Computing,e-Science,B
+IEEE International Enterprise Distributed Object Computing Conference,EDOC,B
+"International Conference on Availability, Reliability and Security",ARES,B
+International Conference on Generative Programming and Component Engineering,GPCE,B
+International Conference on Pattern Recognition,ICPR,B
+Network and Operating System Support for Digital Audio and Video,NOSSDAV,B
+Structural and Syntactical Pattern Recognition,SSPR,B
+Annual International Workshop on Presence,ISPR,C
+Applied Computing Conference,ACC,C
+Association for Computer-Aided Architectural Design Research in Asia (CAADRIA) annual conference,CAADRIA,C
+"Computer Animation, Information Visualisation, and Digital Effects",CAivDE,C
+Conference of the Association of Asian-Pacific Operational Research Societies,APORS,C
+"Conference on Software Engineering Education and Training (previously Conference is Software Engineering Education, CSEE, changed in 1997)",CSEET,C
+Digital Games Research Conference,DIGRA,C
+Euro XR International Conference (was Euro VR),Euro XR,C
+"EuroConference on Combinatorics, Graph Theory and Applications",EUroComb,C
+European Chapter on Combinatorial Optimization,ECCO,C
+European Conference on Computational Biology,ECCB,C
+European Conference on Digital Government (was European Conference on e-Government ECEG),ECDG,C
+European Conference on Operations Research,EURO,C
+Exploring Modelling Methods in Systems Analysis and Design,EMMSAD,C
+Heterogeneity in Computing Workshop,HCW,C
+IADIS International Conference Applied Computing,IADIS AC,C
+IEEE Global Internet Symposium,GI,C
+IEEE International Conference on Cognitive Informatics,ICCI,C
+IEEE International Symposium on Rapid System Prototyping (was IEEE Symposium on Rapid Prototyping),RSP,C
+IEEE LAN/MAN Workshop,LANMAN,C
+IFAC Conference on System Structure and Control,SSSC,C
+"IFIP Joint International Conference on Formal Description Techniques and Protocol Specification, Testing, And Verification",FORTE,C
+Industrial Simulation Conference,ISC,C
+Information Integration and Web-based Applications and Services,IIWAS,C
+Information Visualisation Theory and Practice,InfVis,C
+Information Visualization in Biomedical Informatics,IVBI,C
+Informing Science and Information Technology Education,InSITE,C
+Intenational Environmental Modelling and Software Society,iEMSs,C
+International Conference on Communication Systems and Applications,ICCSA,C
+International Conference on Computational Science and its Applications,ICCSA,C
+International Conference on Computing and Informatics,ICOCI,C
+International Conference on Internet Computing in Science and Engineering,ICICSE,C
+International Conference on Internet Monitoring and Protection,ICIMP,C
+International Conference on Knowledge Engineering and Ontology Development,KEOD,C
+"International Conference on Mobile Ubiquitous Computing, Systems, Services and Technologies",UBICOMM,C
+International Conference on Optimization: Techniques And Applications,ICOTA,C
+International Conference on Smart homes and health Telematics,ICOST,C
+International Conference on Software Quality Management,SQM,C
+International Conference on the Statistical Analysis of Textual Data,JADT,C
+International Congress on Computational and Applied Mathematics,ICCAM,C
+International FLINS Conference on Robotics and Artificial Intelligence (was International Fuzzy Logic and Intelligent technologies in Nuclear Science Conference),FLINS,C
+International Symposium on Algorithms and Experiments for Wireless Networks,Algosensors,C
+International Symposium on Artificial Life and Robotics,AROB,C
+International Symposium on Automation and Robotics in Construction,ISARC,C
+International Symposium on Grids and Clouds (was International Symposium on Grid Computing),ISGC,C
+International Symposium on Spatial Data Quality,ISSDQ,C
+International Symposium on the Mathematical Theory of Networks and Systems,MTNS,C
+International Workshop on Combinations of Intelligent Methods and Applications,CIMA,C
+International Workshop on Data Warehousing and OLAP,DOLAP,C
+International Workshop on Enterprise and Organizational Modelling and Simulation,EOMAS,C
+International Workshop on Formal Methods for interactive Systems,FMIS,C
+International workshop on High-Level Parallel Programming and Applications,HLPP,C
+International Workshop on Modelling in Software Engineering,MISE,C
+Knowledge Visualization and Visual Thinking,KV,C
+Pacific Rim Knowledge Acquisition Workshop,PKAW,C
+SIAM Conference on Discrete Mathematics,DM,C
+SIAM Conference on Optimization,OP,C
+Simulation and Synthesis in Medical Imaging,SASHIMI,C
+Symposium of Asian Association for Algorithms and Computation,AAAC,C
+Symposium on High Performance Chips,HOTCHIPS (HCS),C
+The Theory and Application of Diagrams,DIAGRAMS,C
+Visual Analytics,EuroVA,C
+Workshop on Algorithms And Models For The Web Graph,WAW,C
+Workshop on Applications of Graph Theory in Wireless Ad hoc Networks and Sensor Networks,Graph-hoc,C
+Workshop on Constraint Satisfaction for Planning and Scheduling,COPLAS,C
+Workshop on Domain Specific Modelling,DSM,C
+"World Conference on Educational Multimedia, Hypermedia and Telecommunications",ED-MEDIA,C
