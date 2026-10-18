@@ -1,282 +1,96 @@
-# Journal Matching Task: DBLP ↔ SJR
+# Master Prompt: Finish the Journal List (DBLP ↔ Scopus/SJR)
 
-## Objective
+You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-Build a comprehensive list of SJR-ranked journals by matching DBLP database entries to SJR rankings.
+The humans have already run `a-extract.py` and `b-match.py`, which loaded the database `x/journal-supplement/journal.db`. Your job is to fill the `decision` table until the view `needs_review` is empty. The view `list_of_journals` is then the final list: every DBLP journal key (`journals/<name>`) that belongs to a Scopus Q1–Q4 computer-science journal, with zero false positives and zero false negatives.
 
-## Workflow Overview
-
-**Automated Steps (Python):**
-1. `a_extract.py` - Scan DBLP XML, extract journals, match by ISSN → Generates exact matches
-2. `b_match.py` - Fuzzy match remaining journals → Generates HIGH/NONE confidence matches
-3. `c_merge.py` - Combine ISSN + HIGH confidence matches → Final journal list
-
-**Your Role (AI):**  
-Between steps 2 and 3, review `b_match.py` output and improve matching quality using:
-- Algorithm results as starting point
-- Web search to verify ISSNs and publisher details
-- Your reasoning to resolve ambiguous cases (renamed journals, publisher changes)
-
-**Goal:** Maximize correct matches, minimize false positives.
+Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `sqlite3 journal-supplement/journal.db` or Python's `sqlite3`. Start every connection with `PRAGMA foreign_keys = ON;`.
 
 ---
 
-## Strategy: Hybrid AI + Algorithm Approach
+## Database
 
-### Step 1: Run a_extract.py (Initial Extraction)
-```bash
-cd /home/nishan/Documents/paperhunter-research-paper-discovery
-python3 journal-hunter/a_extract.py
+| object | kind | you |
+|---|---|---|
+| `sjr_journal(id, title, issn_1, issn_2, publisher, quartile)` | table, from Scopus (`id` = Sourceid) | read |
+| `dblp_journal(dblp_key, papers, first_year, last_year)` | table, from DBLP | read |
+| `dblp_journal_name(dblp_key, name, papers)` | table, from DBLP | read: how articles of a key name their journal (ISO-4 abbreviations) |
+| `dblp_issn(dblp_key, issn, papers)` | table, from DBLP | read: checksum-valid ISSNs found in article links, the strongest evidence |
+| `dblp_doi_prefix(dblp_key, prefix, papers)` | table, from DBLP | read: publisher of the articles (10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global) |
+| `candidate(dblp_key, sjr_id, method, score, detail)` | table, from `b-match.py` | read: proposed pairs, not approved |
+| `decision(id, sjr_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
+| `journal_evidence` | view | read: one summary row per key (top names, ISSNs, DOI prefixes) |
+| `needs_review` | view | read: your to-do list |
+| `list_of_journals` | view | final output (empty until `needs_review` is empty) |
+
+Never modify any table other than `decision`, and never alter the schema.
+
+DBLP's XML has no ISSN field. `dblp_issn` holds only the ISSNs embedded in article links (old Elsevier DOIs and PIIs, Wiley SICI DOIs), so most keys have none. Absence of an ISSN proves nothing; a matching ISSN is near-proof.
+
+## Procedure
+
+1. `SELECT issue, count(*) FROM needs_review GROUP BY issue;`. If it returns nothing, go to step 5.
+2. Resolve every `INVALID` row by deleting the decision it names.
+3. Resolve every `UNREVIEWED` row (step 1 of "How to decide").
+4. Query `needs_review` again. Accepting a key also covers its SJR journal, so the `UNCOVERED` list shrinks. Resolve the remaining `UNCOVERED` rows. Repeat steps 1–4 until `needs_review` is empty.
+5. Report in five lines or fewer:
+   - `SELECT quartile, count(*) FROM list_of_journals GROUP BY quartile;`
+   - SJR journals covered vs `absent`
+   - number of decisions you added
+
+On a first run `decision` is empty, and every candidate and every SJR journal appears in `needs_review`. Work through all of them. You may use scripts to read and filter, but every decision must rest on the evidence for that row.
+
+## Writing decisions
+
+```sql
+INSERT INTO decision (sjr_id, dblp_key, verdict, reason)
+VALUES (12345, 'journals/csur', 'accept', 'ACM Comput. Surv. = ACM Computing Surveys, DOI prefix 10.1145');
+
+INSERT INTO decision (sjr_id, dblp_key, verdict, reason)
+VALUES (23456, 'journals/ai', 'reject', 'Artificial Intelligence (Elsevier), not Artificial Intelligence in Medicine');
+
+INSERT INTO decision (sjr_id, dblp_key, verdict, reason)
+VALUES (34567, NULL, 'absent', 'Not indexed in DBLP');
 ```
 
-**This extracts journals from DBLP XML and performs Phase 1 ISSN matching.**
-
-Generates:
-- `journal-supplement/1-exact-matched.csv` - ISSN exact matches (auto-approved)
-- `journal-supplement/2-dblp-unmatched.csv` - DBLP journals needing matching
-- `journal-supplement/3-source-pool.csv` - SJR journals available for matching
-
-### Step 2: Run b_match.py (Fuzzy Matching)
-```bash
-python3 journal-hunter/b_match.py
-```
-
-This generates `journal-supplement/4-fuzzy-matched.csv` with:
-- **HIGH confidence matches** - Algorithm found strong matches
-- **NONE matches** - No algorithmic match found
-
-### Step 3: Review Algorithm Results
-
-Examine `4-fuzzy-matched.csv`:
-- **HIGH confidence with score reasoning** → Likely correct, spot-check a few
-- **NONE (NO_MATCH)** → These need your intelligence
-
-### Step 4: AI Manual Review (Your Job)
-
-Focus on **NO_MATCH entries only**. For each:
-
-1. **Search online** for the DBLP journal:
-   - Query: `"[dblp_name]" ISSN computer science journal`
-   - Check: Official website, publisher page, DBLP.org entry
-
-2. **Find the ISSN**:
-   - Look in: Journal homepage, CrossRef, Google Scholar
-   - Format: XXXX-XXXX (e.g., 0001-0782)
-
-3. **Check if ISSN exists in 3-source-pool.csv**:
-   - If YES → Match found! Update entry with HIGH confidence
-   - If NO → Truly no match, keep as NO_MATCH
-
-4. **Use your intelligence**:
-   - Journal renamed? Search: "[old name] renamed [new name]"
-   - Regional edition? Check if main journal in SJR
-   - Conference proceedings? (Not in SJR, keep NO_MATCH)
-   - Defunct/obscure? (Not in SJR, keep NO_MATCH)
-
----
-
-## Input Files
-
-### 1. `journal-supplement/2-dblp-unmatched.csv`
-Columns: `dblp_key`, `dblp_name`
-
-DBLP journals that couldn't be matched by ISSN.
-
-### 2. `journal-supplement/3-source-pool.csv`  
-Columns: `title`, `issn_1`, `issn_2`, `quartile`
-
-SJR journals available for matching.
-
-### 3. `journal-supplement/4-fuzzy-matched.csv` (generated by b_match.py)
-Columns: `dblp_key`, `dblp_name`, `sjr_title`, `issn_1`, `issn_2`, `quartile`, `confidence`, `reasoning`
-
-Algorithm's best attempt at matching.
-
----
-
-## Output Format
-
-Update `4-fuzzy-matched.csv` where confidence is **NONE**:
-
-```csv
-dblp_key,dblp_name,sjr_title,issn_1,issn_2,quartile,confidence,reasoning
-journals/example1,J. Example,Journal of Examples,1234-5678,,Q1,HIGH,ISSN verified via journal website
-journals/example2,Obscure Rev.,NO_MATCH,,,,NONE,Not indexed in SJR (regional journal)
-```
-
----
-
-## Matching Rules
-
-### Definition: SAME Journal
-Two entries refer to the same journal if they share:
-- **Same ISSN** (most reliable), OR
-- **Same editorial scope + publisher** (for renamed journals)
-
-### NOT the Same:
-- Regional editions (IEEE Trans. US vs Europe)
-- Conference proceedings vs journal
-- Different topics (IEEE Trans. AI vs IEEE Trans. Robotics)
-
-### Confidence Levels
-
-**HIGH** - ISSN verified match OR official website confirms both names
-**MEDIUM** - Strong name similarity + same publisher, but no ISSN  
-**LOW** - Uncertain, needs expert review
-**NONE** - No match found in SJR pool
-
----
-
-## Tools & Resources
-
-### c_match.py Features:
-- 70+ curated ACM/IEEE/VLDB mappings
-- 100+ abbreviation expansions
-- ISO-4 abbreviation matching
-- Diacritic/accent normalization
-
-### Web Search Queries:
-```
-"[journal_name]" ISSN
-"[journal_name]" official website
-site:dblp.org/db/journals/[dblp_key]
-"[abbreviation]" full name journal
-"[old_name]" renamed "[new_name]"
-```
-
-### Recommended Sites:
-- https://dblp.org (for full DBLP journal names)
-- https://search.crossref.org (ISSN lookup)
-- https://scholar.google.com (verify publications)
-- Journal official websites (publisher pages)
-
----
-
-## Workflow
-
-### Phase 1: Algorithmic Matching
-```bash
-python3 journal-hunter/b_match.py
-```
-Output: `journal-supplement/4-fuzzy-matched.csv` with ~900+ HIGH confidence matches
-
-### Phase 2: AI Review (Your Task)
-1. **Count NO_MATCH entries**:
-   ```bash
-   grep "NO_MATCH" journal-supplement/4-fuzzy-matched.csv | wc -l
-   ```
-
-2. **For each NO_MATCH**:
-   - Search DBLP journal online
-   - Find ISSN
-   - Check if ISSN in `journal-supplement/3-source-pool.csv`
-   - Update row if match found
-
-3. **Quality check HIGH confidence**:
-   - Randomly sample 20 HIGH matches
-   - Verify they look correct
-   - Flag any suspicious ones
-
-### Phase 3: Generate Final List
-Once `journal-supplement/4-fuzzy-matched.csv` is complete:
-```bash
-python3 journal-hunter/c_merge.py
-```
-This merges:
-- `journal-supplement/1-exact-matched.csv` (ISSN auto-matches)
-- `journal-supplement/4-fuzzy-matched.csv` (your verified matches)
-
-Output: `journal-context/list-of-journals.csv` (final)
-
----
-
-## Special Cases
-
-### Case 1: Journal Renamed
-Example: "ACM TISSEC" → "ACM Transactions on Privacy and Security" (2016)
-- Search: "ACM TISSEC renamed"
-- If new name in SJR → Match with reasoning: "Journal renamed in YYYY"
-
-### Case 2: Ambiguous Abbreviations
-Example: "J. AI" could be multiple journals
-- Check DBLP key: `journals/jai` might reveal full name
-- Visit dblp.org/db/journals/jai for context
-
-### Case 3: Non-English Journals
-Example: "Computación y Sistemas" (Spanish)
-- Search both original + English translation
-- SJR might use translated title
-
-### Case 4: Conference vs Journal Confusion
-Some DBLP keys under `journals/` are actually conferences
-- PVLDB (Proceedings of VLDB) is a journal
-- But many others are conferences → NO_MATCH correct
-
----
-
-## Quality Checklist
-
-Before finalizing:
-- [ ] All HIGH confidence matches spot-checked (sample 20)
-- [ ] NO_MATCH entries searched online (or justified why not indexed)
-- [ ] No duplicate SJR journals assigned (each SJR matched at most once)
-- [ ] ISSN format validated (XXXX-XXXX)
-- [ ] Reasoning field filled for all entries
-- [ ] No empty cells except where appropriate (NO_MATCH has empty ISSN/quartile)
-
----
-
-## Expected Results
-
-- **HIGH confidence**: ~900-950 journals (algorithm + your additions)
-- **NO_MATCH**: ~900-1000 journals (legitimately not in SJR)
-- **Total DBLP processed**: ~1850 journals
-- **Final output**: ~950-1000 matched journals
-
----
-
-## Tips
-
-1. **Trust c_match.py for HIGH confidence** - It's very accurate for ACM/IEEE journals
-2. **Focus your time on NO_MATCH** - These need human intelligence
-3. **ISSN is king** - When found, it's definitive proof
-4. **Don't force matches** - If truly not in SJR, keep NO_MATCH
-5. **Document reasoning** - Future you will thank past you
-
----
-
-## Example Session
-
-```bash
-# Step 1: Run algorithm
-python3 journal-hunter/b_match.py
-# Output: 4-fuzzy-matched.csv created with 932 HIGH, 920 NONE
-
-# Step 2: Review NO_MATCH entries
-grep "NO_MATCH" journal-supplement/4-fuzzy-matched.csv | head -5
-# journals/obscure1,Obscure J.,NO_MATCH,,,,NONE,No matching journal found...
-
-# Step 3: Search one
-# Google: "Obscure J. ISSN computer science"
-# Found: ISSN 1234-5678
-
-# Step 4: Check if in SJR pool
-grep "1234-5678" journal-supplement/3-source-pool.csv
-# Result: Obscure Journal,1234-5678,,Q3
-
-# Step 5: Update journal-supplement/4-fuzzy-matched.csv
-# Change: journals/obscure1,Obscure J.,NO_MATCH,...
-# To: journals/obscure1,Obscure J.,Obscure Journal,1234-5678,,Q3,HIGH,ISSN verified online
-
-# Repeat for remaining NO_MATCH entries
-```
-
----
-
-## Final Output Location
-
-**File**: `context/list-of-journals.csv`
-
-**Columns**: `dblp_key`, `dblp_name`, `title`, `issn_1`, `issn_2`, `quartile`
-
-**Use**: This is the authoritative list for paper extraction from DBLP.
+| verdict | `dblp_key` | meaning |
+|---|---|---|
+| `accept` | the key | the key is this SJR journal (one key per row; a journal may have several keys) |
+| `reject` | the key | the proposed pair is a different journal |
+| `absent` | `NULL` | this SJR journal has no DBLP key of its own |
+
+- Take `sjr_id` from `needs_review.sjr_id` or `sjr_journal.id`.
+- `reason` is one line of evidence and is required.
+- The database rejects invalid writes:
+  - a key accepted for two journals
+  - a journal both accepted and absent
+  - duplicate pairs
+  - an empty reason
+  - an unknown key or journal
+
+  If an insert fails, fix the decision; never work around the constraint.
+- To correct a decision, `UPDATE` or `DELETE` it by `id`.
+
+## How to decide
+
+**`UNREVIEWED`** (`dblp_key` → `sjr_title`). Compare the row's `names`, `issns`, `doi_prefixes` and `detail` with `sjr_title`, `issn_1`, `issn_2` and `publisher`. If needed, open `https://dblp.org/db/journals/<name>/`, which shows the full title and ISSNs.
+- `method = 'issn'`: accept when the shared ISSN carries most of the key's ISSN-bearing links and the names agree. A low `score` means only a few links carry that ISSN: check that it is not a sister journal or a cited article.
+- `method = 'name'`: accept only if the DBLP name expands to the same title and the publisher (DOI prefix vs `publisher`) agrees. Renames count as the same journal, e.g. ACM TISSEC → ACM Transactions on Privacy and Security, J. Am. Soc. Inf. Sci. → JASIST.
+- Otherwise `reject`. Typical cases:
+  - a different journal whose title contains the DBLP name (`Artif. Intell.` vs `Artificial Intelligence in Medicine`; `Computers` vs `Computers and Security`)
+  - a namesake from another publisher or country
+  - sections or series of the same title with different ISSNs (`J. Comb. Theory A` vs `B`)
+- A key with several candidates gets at most one `accept`; `reject` the rest.
+
+**`UNCOVERED`** (SJR journal with no accepted key and not marked absent).
+1. Search `dblp_issn.issn` for its ISSNs, and `dblp_journal_name.name` for its title, its ISO-4 abbreviation and former names, e.g. `WHERE name LIKE '%Geosci%'`. Then search dblp.org.
+2. If you find its key, `accept` it. Add one row per key, including historic keys of renamed or merged predecessors.
+3. If it has no DBLP key of its own, add an `absent` row with the reason, e.g. `Not indexed in DBLP`. Many SJR computer-science journals (applied, regional, medical, engineering) are not in DBLP; that is expected.
+
+**`INVALID`.** A decision points to a key or journal that no longer exists, usually after a new DBLP dump or Scopus edition. Delete it; the affected pair or journal reappears as `UNREVIEWED` or `UNCOVERED` if it still needs a decision.
+
+## Rules
+
+- One DBLP key maps to at most one SJR journal.
+- Never accept on a short or generic name alone; the publisher or an ISSN must agree.
+- You are done only when `SELECT count(*) FROM needs_review;` returns 0.

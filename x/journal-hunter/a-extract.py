@@ -1,325 +1,336 @@
+#!/usr/bin/env python3
+"""Stage 1: load Scopus (SJR) rankings and DBLP journal evidence into journal.db.
+
+Creates the schema on first run. Reruns refresh the evidence in place and keep
+every decision whose SJR journal and DBLP key still exist.
+"""
 import argparse
 import csv
 import os
 import re
+import sqlite3
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
-from lxml import etree
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
-DATA_DIR = REPO_ROOT / "paper-database"
-CONTEXT_DIR = REPO_ROOT / "journal-context"
-SUPPLEMENT_DIR = REPO_ROOT / "journal-supplement"
-SJR_SRC = CONTEXT_DIR / "sjr-2025-cs.csv"
-XML_PATH = DATA_DIR / "dblp.xml"
-OUT_1_ISSN = SUPPLEMENT_DIR / "1-exact-matched.csv"
-OUT_2_DBLP_TODO = SUPPLEMENT_DIR / "2-dblp-unmatched.csv"
-OUT_3_SJR_POOL = SUPPLEMENT_DIR / "3-source-pool.csv"
-OUT_FINAL = CONTEXT_DIR / "list-of-journals.csv"
-OUT_FIELDS = ["dblp_key", "dblp_name", "title", "issn_1", "issn_2", "quartile"]
-OUT_FIELDS_DBLP = ["dblp_key", "dblp_name"]
-OUT_FIELDS_SJR = ["title", "issn_1", "issn_2", "quartile"]
-VALID_QUARTILES = {"Q1", "Q2", "Q3", "Q4"}
+ARCHIVE_DIR = REPO_ROOT / "archive"
+SJR_SRC = ARCHIVE_DIR / "publication-scopus-computer-science-journal-2025.csv"
+XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
+DB_PATH = REPO_ROOT / "journal-supplement" / "journal.db"
+VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
+
+SCHEMA = """
+PRAGMA journal_mode = DELETE;
+
+-- Scopus/SJR ranking, imported from publication-scopus-computer-science-journal-2025.csv (Q1–Q4 only).
+CREATE TABLE IF NOT EXISTS sjr_journal (
+    id        INTEGER PRIMARY KEY,            -- Scopus Sourceid, stable across editions
+    title     TEXT NOT NULL,
+    issn_1    TEXT,
+    issn_2    TEXT,
+    publisher TEXT,
+    quartile  TEXT NOT NULL CHECK (quartile IN ('Q1', 'Q2', 'Q3', 'Q4'))
+);
+
+-- One row per DBLP journal key (journals/<name>) that has articles.
+CREATE TABLE IF NOT EXISTS dblp_journal (
+    dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'journals/%'),
+    papers     INTEGER NOT NULL,
+    first_year INTEGER,
+    last_year  INTEGER
+) WITHOUT ROWID;
+
+-- How often each <journal> name occurs among a key's articles.
+CREATE TABLE IF NOT EXISTS dblp_journal_name (
+    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+    name     TEXT NOT NULL,
+    papers   INTEGER NOT NULL,
+    PRIMARY KEY (dblp_key, name)
+) WITHOUT ROWID;
+
+-- Checksum-valid ISSNs found in a key's article links (DOIs, Elsevier PIIs), the strongest evidence.
+CREATE TABLE IF NOT EXISTS dblp_issn (
+    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+    issn     TEXT NOT NULL,
+    papers   INTEGER NOT NULL,
+    PRIMARY KEY (dblp_key, issn)
+) WITHOUT ROWID;
+
+-- DOI prefixes of a key's articles (10.1145 = ACM, 10.1109 = IEEE, 10.1016 = Elsevier, 10.1007 = Springer, ...).
+CREATE TABLE IF NOT EXISTS dblp_doi_prefix (
+    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+    prefix   TEXT NOT NULL,
+    papers   INTEGER NOT NULL,
+    PRIMARY KEY (dblp_key, prefix)
+) WITHOUT ROWID;
+
+-- Pairs proposed by b-match.py (shared ISSN, or abbreviation-aware name agreement). Not approved.
+CREATE TABLE IF NOT EXISTS candidate (
+    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+    sjr_id   INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
+    method   TEXT NOT NULL CHECK (method IN ('issn', 'name')),
+    score    REAL NOT NULL,
+    detail   TEXT NOT NULL,
+    PRIMARY KEY (dblp_key, sjr_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS candidate_sjr ON candidate (sjr_id);
+
+-- Written only by the AI reviewer (run/c-journal-matching-guide.md).
+CREATE TABLE IF NOT EXISTS decision (
+    id         INTEGER PRIMARY KEY,
+    sjr_id     INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
+    dblp_key   TEXT REFERENCES dblp_journal ON DELETE CASCADE,
+    verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
+    reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+    decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((verdict = 'absent') = (dblp_key IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS decision_pair ON decision (dblp_key, sjr_id) WHERE dblp_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS decision_one_journal_per_key ON decision (dblp_key) WHERE verdict = 'accept';
+CREATE UNIQUE INDEX IF NOT EXISTS decision_one_absent ON decision (sjr_id) WHERE verdict = 'absent';
+CREATE INDEX IF NOT EXISTS decision_sjr ON decision (sjr_id);
+
+CREATE TRIGGER IF NOT EXISTS decision_accept_vs_absent_ins BEFORE INSERT ON decision
+WHEN EXISTS (
+    SELECT 1 FROM decision d WHERE d.sjr_id = NEW.sjr_id
+      AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
+        OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
+)
+BEGIN SELECT RAISE(ABORT, 'SJR journal cannot be both accepted and absent'); END;
+
+CREATE TRIGGER IF NOT EXISTS decision_accept_vs_absent_upd BEFORE UPDATE ON decision
+WHEN EXISTS (
+    SELECT 1 FROM decision d WHERE d.sjr_id = NEW.sjr_id AND d.id <> NEW.id
+      AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
+        OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
+)
+BEGIN SELECT RAISE(ABORT, 'SJR journal cannot be both accepted and absent'); END;
+
+-- One readable evidence row per DBLP key: top names, ISSNs and DOI prefixes.
+DROP VIEW IF EXISTS journal_evidence;
+CREATE VIEW journal_evidence AS
+SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
+       (SELECT group_concat(n.name || ' (' || n.papers || ')', ' | ')
+          FROM (SELECT name, papers FROM dblp_journal_name WHERE dblp_key = j.dblp_key
+                ORDER BY papers DESC, name LIMIT 3) n) AS names,
+       (SELECT group_concat(i.issn || ' (' || i.papers || ')', ' | ')
+          FROM (SELECT issn, papers FROM dblp_issn WHERE dblp_key = j.dblp_key
+                ORDER BY papers DESC, issn LIMIT 4) i) AS issns,
+       (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
+          FROM (SELECT prefix, papers FROM dblp_doi_prefix WHERE dblp_key = j.dblp_key
+                ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes
+FROM dblp_journal j;
+
+-- Everything the AI must resolve. Empty = review complete.
+DROP VIEW IF EXISTS needs_review;
+CREATE VIEW needs_review AS
+SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.sjr_id, s.title AS sjr_title, s.issn_1, s.issn_2,
+       s.publisher, s.quartile, c.method, c.score, c.detail,
+       e.papers, e.first_year, e.last_year, e.names, e.issns, e.doi_prefixes
+FROM candidate c
+JOIN sjr_journal s ON s.id = c.sjr_id
+JOIN journal_evidence e ON e.dblp_key = c.dblp_key
+WHERE NOT EXISTS (SELECT 1 FROM decision d WHERE d.dblp_key = c.dblp_key AND d.sjr_id = c.sjr_id)
+UNION ALL
+SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile,
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+FROM sjr_journal s
+WHERE NOT EXISTS (SELECT 1 FROM decision d WHERE d.sjr_id = s.id AND d.verdict IN ('accept', 'absent'))
+UNION ALL
+SELECT 'INVALID', d.dblp_key, d.sjr_id, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, 'decision ' || d.id || ' refers to a missing DBLP key or SJR journal: delete it',
+       NULL, NULL, NULL, NULL, NULL, NULL
+FROM decision d
+WHERE NOT EXISTS (SELECT 1 FROM sjr_journal s WHERE s.id = d.sjr_id)
+   OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dblp_journal k WHERE k.dblp_key = d.dblp_key));
+
+-- Final output. Stays empty until needs_review is empty.
+DROP VIEW IF EXISTS list_of_journals;
+CREATE VIEW list_of_journals AS
+SELECT d.dblp_key,
+       (SELECT name FROM dblp_journal_name n WHERE n.dblp_key = d.dblp_key
+         ORDER BY papers DESC, name LIMIT 1) AS dblp_name,
+       s.title, s.issn_1, s.issn_2, s.quartile
+FROM decision d
+JOIN sjr_journal s ON s.id = d.sjr_id
+JOIN dblp_journal k ON k.dblp_key = d.dblp_key
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM needs_review)
+ORDER BY s.quartile, lower(s.title), d.dblp_key;
+"""
+
+ISSN_HYPHEN = re.compile(r"(?<![\dA-Za-z])(\d{4})-(\d{3}[\dXx])(?![\dA-Za-z])")
+ISSN_PII = re.compile(r"(?:pii/|10\.1016/)S(\d{4})-?(\d{3}[\dXx])", re.I)
+DOI_PREFIX = re.compile(r"doi\.org/(10\.\d{4,9})/", re.I)
 
 
-def _format_issn(raw: str) -> str:
-    s = raw.strip().replace("-", "").replace(" ", "")
-    return f"{s[:4]}-{s[4:]}" if len(s) == 8 and s.isdigit() else raw.strip()
+def connect(path: Path = DB_PATH) -> sqlite3.Connection:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(SCHEMA)
+    return conn
 
 
-def _extract_issns(text: str) -> set[str]:
-    issn_pattern = r"\b\d{4}-?\d{3}[\dXx]\b"
-    matches = re.findall(issn_pattern, text)
-    return {_format_issn(m) for m in matches}
+def format_issn(raw: str) -> str:
+    s = raw.strip().replace("-", "").replace(" ", "").upper()
+    return f"{s[:4]}-{s[4:]}" if len(s) == 8 else ""
 
 
-def _split_issns(cell: str) -> tuple[str, str]:
-    parts = [p.strip() for p in cell.split(",") if p.strip()]
-    return (
-        _format_issn(parts[0]) if parts else "",
-        _format_issn(parts[1]) if len(parts) > 1 else "",
-    )
+def issn_valid(issn: str) -> bool:
+    digits = issn.replace("-", "")
+    if len(digits) != 8 or not digits[:7].isdigit():
+        return False
+    total = sum(int(d) * w for d, w in zip(digits[:7], range(8, 1, -1)))
+    check = (11 - total % 11) % 11
+    return digits[7] == ("X" if check == 10 else str(check))
 
 
-def phase_clean(sjr_path: Path) -> tuple[list[dict], dict[str, dict]]:
+def link_issns(url: str) -> set[str]:
+    found = {f"{a}-{b.upper()}" for a, b in ISSN_HYPHEN.findall(url)}
+    found |= {f"{a}-{b.upper()}" for a, b in ISSN_PII.findall(url)}
+    return {i for i in found if issn_valid(i)}
+
+
+def load_sjr(conn: sqlite3.Connection, sjr_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – Cleaning SJR CSV")
+    print("  Phase 1 – Scopus/SJR rankings → sjr_journal")
     print("━" * 70)
-    rows = []
-    issn_index = {}
-    dropped = 0
+    rows, dropped = [], 0
     with open(sjr_path, encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f, delimiter=";"):
-            q = row.get("SJR Best Quartile", "").strip()
+        for r in csv.DictReader(f, delimiter=";"):
+            q = r.get("SJR Best Quartile", "").strip()
             if q not in VALID_QUARTILES:
                 dropped += 1
                 continue
-            i1, i2 = _split_issns(row.get("Issn", ""))
-            record = {
-                "title": row["Title"].strip(),
-                "issn_1": i1,
-                "issn_2": i2,
-                "quartile": q,
-            }
-            rows.append(record)
-            if i1:
-                issn_index[i1] = record
-            if i2:
-                issn_index[i2] = record
-    print(f"  ✓  {len(rows)} valid journals  |  {dropped} malformed rows dropped")
-    print(f"  ✓  {len(issn_index)} ISSNs indexed for fast lookup\n")
-    return rows, issn_index
+            issns = [format_issn(p) for p in r.get("Issn", "").split(",") if p.strip()]
+            issns = [i for i in issns if i] + ["", ""]
+            rows.append((int(r["Sourceid"]), r["Title"].strip(), issns[0], issns[1], r["Publisher"].strip(), q))
+    with conn:
+        conn.executemany(
+            "INSERT INTO sjr_journal (id, title, issn_1, issn_2, publisher, quartile) VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (id) DO UPDATE SET title = excluded.title, issn_1 = excluded.issn_1, "
+            "issn_2 = excluded.issn_2, publisher = excluded.publisher, quartile = excluded.quartile",
+            rows,
+        )
+        conn.execute("CREATE TEMP TABLE sjr_ids (id INTEGER PRIMARY KEY)")
+        conn.executemany("INSERT INTO sjr_ids VALUES (?)", [(r[0],) for r in rows])
+        removed = conn.execute("DELETE FROM sjr_journal WHERE id NOT IN (SELECT id FROM sjr_ids)").rowcount
+        conn.execute("DROP TABLE sjr_ids")
+    print(f"  ✓  {len(rows)} SJR journals  |  {dropped} rows without Q1–Q4 skipped  |  {removed} removed\n")
 
 
-def _scan_xml(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
+def scan_xml(xml_path: Path):
+    from lxml import etree
+
     size = os.path.getsize(xml_path)
-    seen = index = 0
-    result: dict[str, tuple[str, set[str]]] = {}
+    seen = 0
+    papers: Counter = Counter()
+    names: dict[str, Counter] = defaultdict(Counter)
+    issns: dict[str, Counter] = defaultdict(Counter)
+    prefixes: dict[str, Counter] = defaultdict(Counter)
+    years: dict[str, list[int]] = {}
     f = open(xml_path, "rb")
-    ctx = etree.iterparse(
-        f,
-        events=("end",),
-        tag="article",
-        load_dtd=True,
-        resolve_entities=True,
-        huge_tree=True,
-    )
+    ctx = etree.iterparse(f, events=("end",), tag="article", load_dtd=True, resolve_entities=True, huge_tree=True)
     for _, el in ctx:
         seen += 1
         key = el.get("key", "")
-        journal = el.findtext("journal") or ""
-        if key.startswith("journals/") and journal:
-            prefix = "/".join(key.split("/")[:2])
-            if prefix not in result:
-                issns = set()
-                for ee_elem in el.findall("ee"):
-                    ee_text = ee_elem.text or ""
-                    issns.update(_extract_issns(ee_text))
-                result[prefix] = (journal.strip(), issns)
-                index += 1
+        parts = key.split("/")
+        if key.startswith("journals/") and len(parts) >= 3:
+            prefix = "/".join(parts[:2])
+            papers[prefix] += 1
+            name = (el.findtext("journal") or "").strip()
+            if name:
+                names[prefix][name] += 1
+            year_text = el.findtext("year") or ""
+            if year_text.isdigit():
+                year = int(year_text)
+                lo, hi = years.get(prefix, (year, year))
+                years[prefix] = [min(lo, year), max(hi, year)]
+            found, dois = set(), set()
+            for ee in el.findall("ee"):
+                url = ee.text or ""
+                found |= link_issns(url)
+                dois.update(DOI_PREFIX.findall(url))
+            for i in found:
+                issns[prefix][i] += 1
+            for p in dois:
+                prefixes[prefix][p] += 1
         if seen % 500_000 == 0:
             pct = f.tell() * 100 // size
-            print(
-                f"  {pct:3}%  |  articles scanned: {seen:,}"
-                f"  |  journal keys found: {index:,}",
-                end="\r",
-                flush=True,
-            )
+            print(f"  {pct:3}%  |  articles scanned: {seen:,}  |  journal keys: {len(papers):,}", end="\r", flush=True)
         el.clear()
         while el.getprevious() is not None:
             del el.getparent()[0]
     f.close()
-    print(f"  100%  |  articles scanned: {seen:,}  |  journal keys found: {index:,}")
-    return result
+    print(f"  100%  |  articles scanned: {seen:,}  |  journal keys: {len(papers):,}")
+    journals = [(k, n, *years.get(k, (None, None))) for k, n in papers.items()]
+    name_rows = [(k, v, n) for k in papers for v, n in names[k].items()]
+    issn_rows = [(k, v, n) for k in papers for v, n in issns[k].items()]
+    prefix_rows = [(k, v, n) for k in papers for v, n in prefixes[k].items()]
+    return journals, name_rows, issn_rows, prefix_rows
 
 
-def phase_index(xml_path: Path) -> dict[str, tuple[str, set[str]]]:
+def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 2 – DBLP Journal Index")
+    print("  Phase 2 – DBLP evidence → dblp_journal, dblp_journal_name, dblp_issn, dblp_doi_prefix")
     print("━" * 70)
-    print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB)")
-    print("  (This takes ~15–20 min.)\n")
-    idx = _scan_xml(xml_path)
-    issn_count = sum(1 for _, issns in idx.values() if issns)
-    print(f"\n  ✓  {len(idx):,} unique journal keys found")
-    print(f"  ✓  {issn_count:,} journals have ISSN data\n")
-    return idx
-
-
-def phase_match(
-    dblp_index: dict[str, tuple[str, set[str]]],
-    sjr_rows: list[dict],
-    sjr_issn_index: dict[str, dict],
-) -> tuple[list[dict], list[dict], list[dict]]:
-    print("━" * 70)
-    print("  Phase 3 – ISSN Matching Only")
-    print("━" * 70)
-    print("\n  ISSN Exact Matching (Auto-Approved)")
-    print("  " + "─" * 66)
-    issn_matched = []
-    dblp_matched_keys = set()
-    sjr_matched_titles = set()
-    for dblp_key, (dblp_name, dblp_issns) in dblp_index.items():
-        if not dblp_issns:
-            continue
-        for issn in dblp_issns:
-            if issn in sjr_issn_index:
-                sjr_record = sjr_issn_index[issn]
-                issn_matched.append(
-                    {
-                        "dblp_key": dblp_key,
-                        "dblp_name": dblp_name,
-                        "title": sjr_record["title"],
-                        "issn_1": sjr_record["issn_1"],
-                        "issn_2": sjr_record["issn_2"],
-                        "quartile": sjr_record["quartile"],
-                    }
-                )
-                dblp_matched_keys.add(dblp_key)
-                sjr_matched_titles.add(sjr_record["title"])
-                print(f"  ✓  {sjr_record['quartile']}  {dblp_name[:50]}")
-                break
-    print(f"\n  ✓  {len(issn_matched)} journals matched by ISSN (AUTO-APPROVED)\n")
-    dblp_unmatched = [
-        {"dblp_key": k, "dblp_name": dblp_name}
-        for k, (dblp_name, _) in dblp_index.items()
-        if k not in dblp_matched_keys
-    ]
-    sjr_available = [
-        {
-            "title": r["title"],
-            "issn_1": r["issn_1"],
-            "issn_2": r["issn_2"],
-            "quartile": r["quartile"],
-        }
-        for r in sjr_rows
-        if r["title"] not in sjr_matched_titles
-    ]
-    total_dblp = len(dblp_index)
-    total_sjr = len(sjr_rows)
-    print("  Unmatched Journals (Need AI Review)")
-    print("  " + "─" * 66)
-    print(f"  ├─ DBLP unmatched: {len(dblp_unmatched)}")
-    print(f"  └─ SJR available pool: {len(sjr_available)}")
-    print()
-    print("  Summary Statistics:")
-    print(f"  ├─ Total DBLP journals in XML: {total_dblp:,}")
-    print(f"  ├─ Total SJR journals (Q1-Q4): {total_sjr:,}")
-    print(
-        f"  ├─ ISSN auto-matched: {len(issn_matched):,} ({len(issn_matched) / total_dblp * 100:.1f}% of DBLP)"
-    )
-    print(
-        f"  ├─ DBLP needs matching: {len(dblp_unmatched):,} ({len(dblp_unmatched) / total_dblp * 100:.1f}% of DBLP)"
-    )
-    print(
-        f"  ├─ SJR available for matching: {len(sjr_available):,} ({len(sjr_available) / total_sjr * 100:.1f}% of SJR)"
-    )
-    print(
-        f"  └─ Potential comparisons: {len(dblp_unmatched):,} × {len(sjr_available):,} = {len(dblp_unmatched) * len(sjr_available):,}\n"
-    )
-    return issn_matched, dblp_unmatched, sjr_available
-
-
-def phase_write(
-    issn_matched: list[dict],
-    dblp_unmatched: list[dict],
-    sjr_available: list[dict],
-    out_issn: Path,
-    out_dblp: Path,
-    out_sjr: Path,
-) -> None:
-    print("━" * 70)
-    print("  Phase 4 – Writing Output Files")
-    print("━" * 70)
-    order = {"Q1": 0, "Q2": 1, "Q3": 2, "Q4": 3}
-    issn_sorted = sorted(
-        issn_matched, key=lambda r: (order.get(r["quartile"], 9), r["title"].lower())
-    )
-    out_issn.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_issn, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=OUT_FIELDS, delimiter=",", quoting=csv.QUOTE_MINIMAL
+    print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~15–20 min)\n")
+    journals, name_rows, issn_rows, prefix_rows = scan_xml(xml_path)
+    with conn:
+        conn.executemany(
+            "INSERT INTO dblp_journal (dblp_key, papers, first_year, last_year) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (dblp_key) DO UPDATE SET papers = excluded.papers, "
+            "first_year = excluded.first_year, last_year = excluded.last_year",
+            journals,
         )
-        writer.writeheader()
-        writer.writerows(issn_sorted)
-    qtrs = Counter(r["quartile"] for r in issn_matched)
-    print("\n  File 1: 1-exact-matched.csv (AUTO-APPROVED)")
-    print(f"  → {out_issn}")
-    print(f"  Total: {len(issn_matched)} journals")
+        conn.execute("CREATE TEMP TABLE scanned (dblp_key TEXT PRIMARY KEY)")
+        conn.executemany("INSERT INTO scanned VALUES (?)", [(j[0],) for j in journals])
+        removed = conn.execute(
+            "DELETE FROM dblp_journal WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
+        ).rowcount
+        conn.execute("DROP TABLE scanned")
+        for table in ("dblp_journal_name", "dblp_issn", "dblp_doi_prefix"):
+            conn.execute(f"DELETE FROM {table}")
+        conn.executemany("INSERT INTO dblp_journal_name VALUES (?, ?, ?)", name_rows)
+        conn.executemany("INSERT INTO dblp_issn VALUES (?, ?, ?)", issn_rows)
+        conn.executemany("INSERT INTO dblp_doi_prefix VALUES (?, ?, ?)", prefix_rows)
+    with_issn = len({r[0] for r in issn_rows})
     print(
-        f"  Q1: {qtrs['Q1']}   Q2: {qtrs['Q2']}   Q3: {qtrs['Q3']}   Q4: {qtrs['Q4']}\n"
-    )
-    dblp_sorted = sorted(dblp_unmatched, key=lambda r: r["dblp_key"])
-    with open(out_dblp, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=OUT_FIELDS_DBLP, delimiter=",", quoting=csv.QUOTE_MINIMAL
-        )
-        writer.writeheader()
-        writer.writerows(dblp_sorted)
-    print("  File 2: 2-dblp-unmatched.csv (Need Matching)")
-    print(f"  → {out_dblp}")
-    print(f"  Total: {len(dblp_unmatched)} journals\n")
-    sjr_sorted = sorted(
-        sjr_available, key=lambda r: (order.get(r["quartile"], 9), r["title"].lower())
-    )
-    with open(out_sjr, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=OUT_FIELDS_SJR, delimiter=",", quoting=csv.QUOTE_MINIMAL
-        )
-        writer.writeheader()
-        writer.writerows(sjr_sorted)
-    qtrs_sjr = Counter(r["quartile"] for r in sjr_available)
-    print("  File 3: 3-source-pool.csv (Available for Matching)")
-    print(f"  → {out_sjr}")
-    print(f"  Total: {len(sjr_available)} journals")
-    print(
-        f"  Q1: {qtrs_sjr['Q1']}   Q2: {qtrs_sjr['Q2']}   Q3: {qtrs_sjr['Q3']}   Q4: {qtrs_sjr['Q4']}\n"
-    )
-    print("  NEXT STEP:")
-    print("  → Run c_match.py to generate matches")
-    print("  → Or use AI prompt with files 2 & 3\n")
-    print("  Overall Statistics:")
-    print(f"  ├─ 1-exact-matched.csv: {len(issn_matched):,} journals (AUTO-APPROVED)")
-    print(
-        f"  ├─ 2-dblp-unmatched.csv: {len(dblp_unmatched):,} journals (NEED MATCHING)"
-    )
-    print(f"  ├─ 3-source-pool.csv: {len(sjr_available):,} journals (AVAILABLE)")
-    print(
-        f"  └─ Expected final output: ~{len(issn_matched) + int(len(dblp_unmatched) * 0.5):,} matched journals\n"
+        f"\n  ✓  {len(journals):,} keys  |  {len(name_rows):,} names  |  {with_issn:,} keys with ISSNs"
+        f"  |  {len(prefix_rows):,} DOI prefixes  |  {removed} keys removed\n"
     )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--xml",
-        default=str(XML_PATH),
-        help=f"Path to dblp.xml  (default: {XML_PATH.name})",
-    )
-    ap.add_argument(
-        "--sjr",
-        default=str(SJR_SRC),
-        help=f"Path to SJR CSV   (default: {SJR_SRC.name})",
-    )
-    ap.add_argument(
-        "--out",
-        default=str(OUT_FINAL),
-        help=f"Output CSV        (default: {OUT_FINAL.name})",
-    )
+    ap.add_argument("--xml", default=str(XML_PATH), help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})")
+    ap.add_argument("--sjr", default=str(SJR_SRC), help=f"Path to Scopus CSV  (default: {SJR_SRC.name})")
+    ap.add_argument("--skip-xml", action="store_true", help="Keep the DBLP evidence already in the database")
     args = ap.parse_args()
-    xml_path = Path(args.xml)
-    sjr_path = Path(args.sjr)
+    xml_path, sjr_path = Path(args.xml), Path(args.sjr)
     if not sjr_path.exists():
-        sys.exit(f"SJR CSV not found: {sjr_path}")
-    if not xml_path.exists():
-        sys.exit(f"dblp.xml not found: {xml_path}\nRun the downloader first.")
+        sys.exit(f"Scopus CSV not found: {sjr_path}")
+    if not args.skip_xml and not xml_path.exists():
+        sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Journal List Builder (AI-Ready)              ║")
-    print("║                                                                      ║")
-    print("║  Strategy: ISSN auto-match + AI-assisted manual matching             ║")
-    print("║  Output: 3 files (ISSN matches, DBLP unmatched, SJR pool)            ║")
+    print("║         paperhunter  ·  Journal Evidence Loader                      ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
-    print()
-    sjr_rows, sjr_issn_index = phase_clean(sjr_path)
-    dblp_index = phase_index(xml_path)
-    issn_matched, dblp_unmatched, sjr_available = phase_match(
-        dblp_index, sjr_rows, sjr_issn_index
-    )
-    phase_write(
-        issn_matched,
-        dblp_unmatched,
-        sjr_available,
-        OUT_1_ISSN,
-        OUT_2_DBLP_TODO,
-        OUT_3_SJR_POOL,
-    )
+    print(f"\n  Database: {DB_PATH}\n")
+    conn = connect()
+    load_sjr(conn, sjr_path)
+    if args.skip_xml:
+        n = conn.execute("SELECT count(*) FROM dblp_journal").fetchone()[0]
+        if not n:
+            sys.exit("--skip-xml given but the database has no DBLP evidence yet")
+        print(f"  Skipping XML scan: keeping {n:,} DBLP keys already loaded\n")
+    else:
+        load_dblp(conn, xml_path)
+    conn.close()
     print("━" * 70)
-    print("  Done.")
-    print("  → 1-exact-matched.csv ready to use")
-    print("  → Run c_match.py to process 2-dblp-unmatched.csv + 3-source-pool.csv")
+    print("  Done.  → Run b-match.py next")
     print("━" * 70)
     print()
 
