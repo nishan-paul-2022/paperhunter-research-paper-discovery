@@ -1156,7 +1156,7 @@ conf/collabtech,COLLABTECH,NO_MATCH,,,NONE,"Not in CORE rankings (regional works
 conf/collas,COLLAS,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/colog,COLOG,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/colognet,COLOGNET,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
-conf/colognetwente,COLOGNETWENTE,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
+conf/colognetwente,COLOGNETWENTE,Cologne-Twente Workshop on Graphs and Combinatorial Optimization,CTW,C,HIGH,Official DBLP key for Cologne-Twente Workshop on Graphs and Combinatorial Optimization (CTW)
 conf/comad,COMAD,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/comcomap,COMCOMAP,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/comgeo,COMGEO,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
@@ -2990,7 +2990,7 @@ conf/icsym,ICSYM,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defun
 conf/ict,ICT,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/ict-dm,ICT-DM,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/ict-eurasia,ICT-EURASIA,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
-conf/ict4ageingwell,ICT4AGEINGWELL,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
+conf/ict4ageingwell,ICT4AGEINGWELL,International Conference on Information and Communication Technologies for Ageing Well and e-Health,ICT4AWE,C,HIGH,Official DBLP key for ICT4AWE (indexed as ICT4AgeingWell on DBLP)
 conf/ict4d,ICT4D,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/ict4da,ICT4DA,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/ict4justice,ICT4JUSTICE,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
@@ -3315,7 +3315,7 @@ conf/iota,IOTA,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct
 conf/iotaai,IOTAAI,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/iotaas,IOTAAS,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/iotais,IOTAIS,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
-conf/iotbd,IOTBD,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
+conf/iotbd,IOTBD,"International Conference on Internet of Things, Big Data and Security",IoTBDS,C,HIGH,"Official DBLP key for IoTBDS (International Conference on Internet of Things, Big Data and Security)"
 conf/iotdcc,IOTDCC,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/iotdi,IOTDI,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"
 conf/iotml,IOTML,NO_MATCH,,,NONE,"Not in CORE rankings (regional workshop, defunct, or unranked venue)"

@@ -583,6 +583,21 @@ EXPLICIT_MAP = {
         "HIGH",
         "Official DBLP key for EuroVA (International EuroVis Workshop on Visual Analytics)",
     ),
+    "conf/colognetwente": (
+        "Cologne-Twente Workshop on Graphs and Combinatorial Optimization",
+        "HIGH",
+        "Official DBLP key for Cologne-Twente Workshop on Graphs and Combinatorial Optimization (CTW)",
+    ),
+    "conf/iotbd": (
+        "International Conference on Internet of Things, Big Data and Security",
+        "HIGH",
+        "Official DBLP key for IoTBDS (International Conference on Internet of Things, Big Data and Security)",
+    ),
+    "conf/ict4ageingwell": (
+        "International Conference on Information and Communication Technologies for Ageing Well and e-Health",
+        "HIGH",
+        "Official DBLP key for ICT4AWE (indexed as ICT4AgeingWell on DBLP)",
+    ),
 }
 
 

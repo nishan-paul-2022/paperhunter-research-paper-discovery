@@ -457,6 +457,7 @@ conf/apsec,APSEC,Asia-Pacific Software Engineering Conference,C
 conf/acml,ACML,Asian Conference on Machine Learning,C
 conf/ast,AST,Automation of Software Test,C
 conf/bsn,BSN,Body Sensor Networks,C
+conf/colognetwente,COLOGNETWENTE,Cologne-Twente Workshop on Graphs and Combinatorial Optimization,C
 conf/cie,CIE,Computability in Europe: Logic and Theory of Algorithms,C
 conf/cgi,CGI,Computer Graphics International,C
 conf/isaga,ISAGA,Conference for the International Simulation and Gaming Association,C
@@ -620,6 +621,7 @@ conf/ieaaie,IEAAIE,International Conference on Industrial and Engineering Applic
 conf/iddm,IDDM,International Conference on Informatics & Data-Driven Medicine,C
 conf/icinco,ICINCO,"International Conference on Informatics in Control, Automation and Robotics",C
 conf/ictd,ICTD,International Conference on Information and Communication Technologies and Development,C
+conf/ict4ageingwell,ICT4AGEINGWELL,International Conference on Information and Communication Technologies for Ageing Well and e-Health,C
 conf/enter,ENTER,International Conference on Information and Communication Technologies in Tourism,C
 conf/icics,ICICS,International Conference on Information and Communications Security,C
 conf/fusion,FUSION,International Conference on Information Fusion,C
@@ -635,6 +637,7 @@ conf/isda,ISDA,International Conference on Intelligent Systems Designs and Appli
 conf/cicling,CICLING,International Conference on Intelligent Text Processing and Computational Linguistics,C
 conf/icids,ICIDS,International Conference on Interactive Digital Storytelling (2008 merger of 'ICVS International Conference on Virtual Storytelling' and 'TIDSE Technology for Interactive Digital Storytelling'),C
 conf/iciw,ICIW,International Conference on Internet and Web Applications and Services,C
+conf/iotbd,IOTBD,"International Conference on Internet of Things, Big Data and Security",C
 conf/ksem,KSEM,"International Conference on Knowledge Science, Engineering and Management",C
 conf/lata,LATA,International Conference on Language and Automata Theory and Applications,C
 conf/jurix,JURIX,International Conference on Legal Knowledge and Information Systems,C
