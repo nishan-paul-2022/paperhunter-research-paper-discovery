@@ -13,12 +13,10 @@ Design principles:
 Caller rules:
   * Never load whole tables; use iter_papers() and keyed accessors
   * All writes through tx(conn) (short transactions, BEGIN IMMEDIATE)
-  * paper.id is the 1-based CSV row ordinal
+  * paper.id is the 1-based ordinal of the paper in its run; paper.dblp_key links it
+    to dblp_paper in archive/paperhunter.db
 """
 
-import csv
-import hashlib
-import io
 import os
 import re
 import sqlite3
@@ -27,7 +25,7 @@ import unicodedata
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 RULES_VERSION = 1
 LEASE_SECONDS = 900
 MAX_TRIES = 3
@@ -37,6 +35,10 @@ TOOLS_DIR = Path(__file__).resolve().parent
 ROOT = TOOLS_DIR.parent
 SUPPLEMENT_DIR = ROOT / "paper-supplement"
 REFERENCE_DIR = ROOT / "paper-reference"
+SOURCE_DB = ROOT / "archive" / "paperhunter.db"
+
+# A run is a slice of paper_inventory: "<rank>-<year>" (a-star-2025, q1-2024, ...) or "no-doi".
+RUN_RE = re.compile(r"^(a-star|a|b|c|q[1-4])-(\d{4})$")
 
 # fetch_state.tried bitmask
 TRIED_OPENALEX, TRIED_S2, TRIED_CROSSREF, TRIED_LANDING, TRIED_ARXIV = 1, 2, 4, 8, 16
@@ -45,12 +47,14 @@ DDL = """
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT NOT NULL) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS paper(
-  id     INTEGER PRIMARY KEY,
-  title  TEXT NOT NULL,
-  doi    TEXT,
-  link   TEXT,
-  dup_of INTEGER REFERENCES paper(id)
+  id       INTEGER PRIMARY KEY,
+  title    TEXT NOT NULL,
+  doi      TEXT,
+  link     TEXT,
+  dup_of   INTEGER REFERENCES paper(id),
+  dblp_key TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS paper_dblp_key ON paper(dblp_key);
 
 CREATE TABLE IF NOT EXISTS abstract(
   paper_id INTEGER PRIMARY KEY REFERENCES paper(id),
@@ -177,6 +181,9 @@ def extract_doi(*values):
 def open_db(path, create=False, readonly=False):
     """Open database. Sets pragmas; creates schema when create=True."""
     path = str(path)
+    if not create and os.path.exists(path) and user_version(path) < SCHEMA_VERSION:
+        raise SystemExit("ERROR: %s uses schema v%d (current v%d); rebuild it with `a_cli.py --run <run> init --force`"
+                         % (path, user_version(path), SCHEMA_VERSION))
     if readonly:
         conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True, isolation_level=None,
                                timeout=60, check_same_thread=False)
@@ -242,96 +249,99 @@ def meta_set(conn, k, v):
 
 # --------------------------------------------------------------------------- ingest
 
-def run_paths(csv_path=None):
-    """Resolve (csv_path, db_path) from an explicit CSV or the .current file."""
-    if not csv_path:
+def run_paths(run=None):
+    """Resolve (run, db_path) from an explicit run name or the .current file."""
+    if not run:
         cur = TOOLS_DIR / ".current"
         if not cur.exists():
-            raise SystemExit("ERROR: no CSV given and paper-hunter/.current does not exist")
-        csv_path = cur.read_text().strip()
-    src = Path(csv_path).expanduser()
-    return src, SUPPLEMENT_DIR / ("%s.db" % src.stem)
+            raise SystemExit("ERROR: no --run given and paper-hunter/.current does not exist")
+        run = cur.read_text().strip()
+    return run, SUPPLEMENT_DIR / ("%s.db" % run)
 
 
-def init_from_csv(csv_path, db_path, handle_cols=("ee", "url", "doi"), fresh=False):
-    """Parse CSV and create database.
+def source_papers(run):
+    """Rows (dblp_key, title, ee, url, doi) of a run's slice of paper_inventory, in DBLP order."""
+    if not SOURCE_DB.exists():
+        raise SystemExit("ERROR: paper source not found: %s (run run/d-extract.py)" % SOURCE_DB)
+    if RUN_RE.match(run):
+        where, params = "i.slice = ?", (run,)
+    elif run == "no-doi":
+        where, params = "i.doi IS NULL", ()
+    else:
+        raise SystemExit("ERROR: unknown run '%s'; use <rank>-<year> (a-star-2025, q1-2024, ...) or no-doi" % run)
+    src = sqlite3.connect("file:%s?mode=ro" % SOURCE_DB, uri=True)
+    try:
+        if not src.execute("SELECT 1 FROM sqlite_master WHERE name='paper_inventory'").fetchone():
+            raise SystemExit("ERROR: %s has no paper_inventory (run run/d-extract.py)" % SOURCE_DB)
+        sql = ("SELECT i.dblp_key, i.title, i.ee, i.url, i.doi FROM paper_inventory i "
+               "JOIN dblp_paper p ON p.dblp_key = i.dblp_key WHERE " + where + " ORDER BY p.rowid")
+        return src.execute(sql, params).fetchall()
+    finally:
+        src.close()
 
-    Only title and handle columns are read. Every other column is pass-through.
+
+def source_rows(keys, columns):
+    """{dblp_key: tuple(columns)} from dblp_paper for the given keys (missing keys are absent)."""
+    src = sqlite3.connect("file:%s?mode=ro" % SOURCE_DB, uri=True)
+    try:
+        out, keys = {}, list(keys)
+        for i in range(0, len(keys), 500):
+            chunk = keys[i:i + 500]
+            sql = "SELECT dblp_key, %s FROM dblp_paper WHERE dblp_key IN (%s)" % (
+                ", ".join(columns), ",".join("?" * len(chunk)))
+            for r in src.execute(sql, chunk):
+                out[r[0]] = r[1:]
+        return out
+    finally:
+        src.close()
+
+
+def init_from_table(run, db_path, fresh=False):
+    """Create the run database from the run's slice of paper_inventory.
+
     Returns stats dict. Raises FileExistsError if database exists unless fresh=True.
     """
-    csv_path, db_path = Path(csv_path), Path(db_path)
-    if not csv_path.exists():
-        raise SystemExit("ERROR: CSV not found: %s" % csv_path)
-    raw = csv_path.read_bytes()
-    sha1 = hashlib.sha1(raw).hexdigest()
+    db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    legacy_renamed = None
+    if db_path.exists() and not fresh:
+        raise FileExistsError(str(db_path))
+    papers = source_papers(run)  # before deleting anything, so a bad run name keeps the old DB
     if db_path.exists():
-        ver = user_version(db_path)
-        if ver >= SCHEMA_VERSION and not fresh:
-            raise FileExistsError(str(db_path))
-        if ver >= SCHEMA_VERSION and fresh:
-            for suf in ("", "-wal", "-shm"):
-                p = Path(str(db_path) + suf)
-                if p.exists():
-                    p.unlink()
-        else:
-            target = db_path.with_name(db_path.stem + ".legacy.db")
-            n = 1
-            while target.exists():
-                n += 1
-                target = db_path.with_name("%s.legacy%d.db" % (db_path.stem, n))
-            db_path.rename(target)
-            for suf in ("-wal", "-shm"):
-                p = Path(str(db_path) + suf)
-                if p.exists():
-                    p.rename(Path(str(target) + suf))
-            legacy_renamed = str(target)
-
-    text = raw.decode("utf-8-sig", errors="replace")
-    rdr = csv.DictReader(io.StringIO(text))
-    if not rdr.fieldnames:
-        raise SystemExit("ERROR: CSV has no header row")
-    cols = {c.strip().lower(): c for c in rdr.fieldnames if c is not None}
-    if "title" not in cols:
-        raise SystemExit("ERROR: CSV needs a 'title' column; found %s" % list(cols))
-    hcols = [cols[h.lower()] for h in handle_cols if h.lower() in cols]
-    doi_col = cols.get("doi")
+        for suf in ("", "-wal", "-shm"):
+            p = Path(str(db_path) + suf)
+            if p.exists():
+                p.unlink()
 
     rows, seen = [], {}
-    n_data = 0
-    for i, row in enumerate(rdr, 1):
-        n_data = i
-        title = clean_title(row.get(cols["title"]) or "")
+    for i, (key, title, ee, url, doi) in enumerate(papers, 1):
+        title = clean_title(title)
         if not title:
             continue
-        hv = [(row.get(c) or "").strip() for c in hcols]
-        doi = extract_doi(*(([row.get(doi_col) or ""] if doi_col else []) + hv))
+        hv = [(v or "").strip() for v in (ee, url)]
+        doi = doi or extract_doi(*hv)
         link = next((v for v in hv if v.lower().startswith("http")), None)
         if link and doi and link.lower().rstrip("/") == ("https://doi.org/" + doi):
             link = None
-        key = norm_title(title)
-        dup = seen.get(key)
+        norm = norm_title(title)
+        dup = seen.get(norm)
         if dup is None:
-            seen[key] = i
-        rows.append((i, title, doi, link, dup))
+            seen[norm] = i
+        rows.append((i, title, doi, link, dup, key))
 
     conn = open_db(db_path, create=True)
     with tx(conn):
-        conn.executemany("INSERT INTO paper(id,title,doi,link,dup_of) VALUES(?,?,?,?,NULL)",
-                         [(r[0], r[1], r[2], r[3]) for r in rows])
+        conn.executemany("INSERT INTO paper(id,title,doi,link,dup_of,dblp_key) VALUES(?,?,?,?,NULL,?)",
+                         [(r[0], r[1], r[2], r[3], r[5]) for r in rows])
         conn.executemany("UPDATE paper SET dup_of=? WHERE id=?",
                          [(r[4], r[0]) for r in rows if r[4] is not None])
-    for k, v in (("csv_path", str(csv_path.resolve())), ("csv_sha1", sha1), ("n_rows", n_data),
+    for k, v in (("run", run), ("source_db", str(SOURCE_DB)), ("n_rows", len(papers)),
                  ("rules_version", RULES_VERSION), ("created_at", now())):
         meta_set(conn, k, v)
     conn.close()
     return {
-        "db": str(db_path), "rows": n_data, "papers": len(rows),
+        "db": str(db_path), "rows": len(papers), "papers": len(rows),
         "duplicates": sum(1 for r in rows if r[4] is not None),
         "with_doi": sum(1 for r in rows if r[2]),
-        "legacy_renamed_to": legacy_renamed,
     }
 
 

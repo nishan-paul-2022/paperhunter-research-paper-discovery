@@ -153,7 +153,7 @@ def judge(d, stage):
 
 
 def run():
-    csv_path, db_path = b_db.run_paths()
+    run, db_path = b_db.run_paths()
     conn = b_db.open_db(db_path)
     print("Opened DB:", db_path)
 

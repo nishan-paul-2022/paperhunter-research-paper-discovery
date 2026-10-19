@@ -101,9 +101,9 @@ def cmd_doctor(a):
 # --------------------------------------------------------------------------- init
 
 def cmd_init(a):
-    """Initialize database from CSV."""
-    csv_path, db_path = b_db.run_paths(a.csv)
-    
+    """Initialize the run database from its slice of paper_inventory."""
+    run, db_path = b_db.run_paths(a.run)
+
     if db_path.exists() and not a.force:
         # Check version
         ver = b_db.user_version(db_path)
@@ -116,38 +116,35 @@ def cmd_init(a):
         elif ver == b_db.SCHEMA_VERSION:
             # Resume
             conn = b_db.open_db(db_path)
-            existing_csv = b_db.meta_get(conn, "csv_path")
-            if str(csv_path) != existing_csv:
-                die("DB exists for a different CSV: %s (wanted %s); use --force or a new DB" % (existing_csv, csv_path))
+            existing_run = b_db.meta_get(conn, "run")
+            if run != existing_run:
+                die("DB exists for a different run: %s (wanted %s); use --force or a new DB" % (existing_run, run))
             print("Resuming existing run: %d papers" % b_db.count_papers(conn, canonical=False))
             conn.close()
+            (b_db.TOOLS_DIR / ".current").write_text(run)
             return
         else:
             die("DB has unknown version %d (expected %d)" % (ver, b_db.SCHEMA_VERSION))
-    
+
     # Create fresh
-    if db_path.exists() and a.force:
-        db_path.unlink()
-    
-    conn = b_db.open_db(db_path, create=True)
-    handle_cols = a.handle_cols.split(",") if a.handle_cols else ("ee", "url", "doi")
-    stats = b_db.init_from_csv(csv_path, db_path, handle_cols=handle_cols, fresh=True)
+    stats = b_db.init_from_table(run, db_path, fresh=True)
     print("Initialized: %(rows)d rows, %(papers)d papers, %(duplicates)d duplicates" % stats)
-    
+
     if a.reuse_abstracts_from:
+        conn = b_db.open_db(db_path)
         copied = b_db.reuse_abstracts(conn, a.reuse_abstracts_from)
         print("Reused %d abstracts from legacy DB" % copied)
-    
+        conn.close()
+
     # Write .current
-    (b_db.TOOLS_DIR / ".current").write_text(str(csv_path))
-    conn.close()
+    (b_db.TOOLS_DIR / ".current").write_text(run)
 
 
 # --------------------------------------------------------------------------- fetch
 
 def cmd_fetch(a):
     """Run fetch passes."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     if a.deep:
         print("Running deep fetch (tier >= 1, no abstract)...")
@@ -171,7 +168,7 @@ def cmd_fetch(a):
 
 def cmd_triage(a):
     """Compute cues, tier, prior for all canonical papers."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     print("Running triage (cues, tier, prior)...")
     result = f_cues.run_triage(conn, workers=a.workers)
@@ -189,12 +186,12 @@ def cmd_triage(a):
 
 def cmd_run_deterministic(a):
     """Convenience: init (if needed) → fetch → triage → deep fetch → triage → advance."""
-    csv_path, db_path = b_db.run_paths(a.csv)
+    run, db_path = b_db.run_paths(a.run)
     
     # Init if needed
     if not db_path.exists():
         print("=== INIT ===")
-        a_init = argparse.Namespace(csv=a.csv, force=False, reuse_abstracts_from=None, handle_cols=None)
+        a_init = argparse.Namespace(run=a.run, force=False, reuse_abstracts_from=None)
         cmd_init(a_init)
     
     conn = b_db.open_db(db_path)
@@ -235,7 +232,7 @@ def cmd_run_deterministic(a):
 
 def cmd_advance(a):
     """Create tasks, finalize reviews, print status."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     status = h_flow.advance(conn)
     print(json.dumps(status))
     conn.close()
@@ -245,7 +242,7 @@ def cmd_advance(a):
 
 def cmd_claim(a):
     """Atomic lease of tasks; print dossiers."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     pids = b_db.claim(conn, a.stage, a.owner, n=a.n, needs_web=a.needs_web)
     
@@ -303,7 +300,7 @@ def _render_dossier(d, stage):
 
 def cmd_submit(a):
     """Validate and store reviews from a JSON file."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     if a.file:
         records = json.loads(Path(a.file).read_text())
@@ -334,7 +331,7 @@ def cmd_submit(a):
 
 def cmd_fill(a):
     """Store a web-fetched abstract."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     text = Path(a.abstract_file).read_text(encoding="utf-8")
     text = text.strip()
@@ -355,7 +352,7 @@ def cmd_fill(a):
 
 def cmd_fulltext(a):
     """Fetch or import full text; print outline + excerpts."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     if a.file:
         text = Path(a.file).read_text(encoding="utf-8")
@@ -391,7 +388,7 @@ def cmd_fulltext(a):
 
 def cmd_show(a):
     """Display dossier for any paper."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     dossiers = b_db.dossiers(conn, [a.id], blind=a.blind, with_reviews=True)
     
@@ -407,7 +404,7 @@ def cmd_show(a):
 
 def cmd_status(a):
     """Print phase counts, task counts, tier histogram, result counts."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     n_papers = b_db.count_papers(conn, canonical=True)
     n_abstracts = conn.execute("SELECT COUNT(*) FROM abstract a JOIN paper p ON a.paper_id=p.id WHERE p.dup_of IS NULL").fetchone()[0]
@@ -450,7 +447,7 @@ def cmd_status(a):
 
 def cmd_export(a):
     """Write the filtered CSV to paper-reference/."""
-    conn = b_db.open_db(b_db.run_paths(a.csv)[1])
+    conn = b_db.open_db(b_db.run_paths(a.run)[1])
     
     try:
         result = i_export.export(conn, out_dir=a.out_dir)
@@ -472,7 +469,8 @@ def cmd_export(a):
 
 def main():
     p = argparse.ArgumentParser(description="Paper classification workflow CLI")
-    p.add_argument("--csv", help="CSV path (default: from .current)")
+    p.add_argument("--run", help="Run name: a paper_inventory slice such as a-star-2025 or q1-2024, "
+                                 "or no-doi (default: from .current)")
     
     sub = p.add_subparsers(dest="command", required=True)
     
@@ -480,10 +478,9 @@ def main():
     sub.add_parser("doctor", help="Check prerequisites")
     
     # init
-    p_init = sub.add_parser("init", help="Initialize database from CSV")
+    p_init = sub.add_parser("init", help="Initialize the run database from paper_inventory")
     p_init.add_argument("--force", action="store_true", help="Recreate DB even if it exists")
     p_init.add_argument("--reuse-abstracts-from", metavar="DB", help="Copy abstracts from legacy DB")
-    p_init.add_argument("--handle-cols", default="ee,url,doi", help="CSV columns to search for DOI/links")
     
     # fetch
     p_fetch = sub.add_parser("fetch", help="Fetch abstracts from providers")

@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-import csv
+"""Stage 3: load the papers of every listed venue into the dblp_paper table.
+
+Reads list_of_conferences and list_of_journals from archive/paperhunter.db, scans
+the DBLP XML once, and replaces dblp_paper with every paper of a listed venue in
+YEARS. The view paper_inventory adds each paper's rank and slice (e.g. a-star-2025),
+which is how paper-hunter selects the papers of a run.
+"""
 import os
+import re
 import sqlite3
 import sys
-from collections import defaultdict
+from collections import Counter
 from pathlib import Path
 from lxml import etree
 
@@ -12,9 +19,39 @@ REPO_ROOT = SCRIPT_DIR.parent
 ARCHIVE_DIR = REPO_ROOT / "archive"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = ARCHIVE_DIR / "paperhunter.db"
-OUTPUT_DIR = REPO_ROOT / "paper-inventory"
 YEARS = [2023, 2024, 2025, 2026]
-FIELDS = ["dblp_key", "title", "authors", "year", "venue", "ee", "url"]
+
+SCHEMA = """
+-- One row per DBLP paper of a listed venue (rowid keeps DBLP order). Replaced on every run.
+CREATE TABLE IF NOT EXISTS dblp_paper (
+    dblp_key  TEXT PRIMARY KEY,                 -- e.g. conf/ics/YangLWHT23
+    venue_key TEXT NOT NULL,                    -- conf/ics or journals/tse
+    kind      TEXT NOT NULL CHECK (kind IN ('conference', 'journal')),
+    year      INTEGER NOT NULL,
+    title     TEXT NOT NULL,
+    authors   TEXT NOT NULL,                    -- "; "-separated, DBLP disambiguation suffixes kept
+    venue     TEXT NOT NULL,                    -- booktitle or journal name as in DBLP
+    ee        TEXT,                             -- first electronic edition link
+    url       TEXT,                             -- DBLP table-of-contents path
+    doi       TEXT                              -- lowercased DOI from any ee link, else NULL
+);
+CREATE INDEX IF NOT EXISTS dblp_paper_venue ON dblp_paper (venue_key);
+CREATE INDEX IF NOT EXISTS dblp_paper_year ON dblp_paper (year);
+
+-- dblp_paper with each paper's current rank and slice. Rank follows the final lists,
+-- so a venue dropped from a list drops out here without re-extracting.
+DROP VIEW IF EXISTS paper_inventory;
+CREATE VIEW paper_inventory AS
+SELECT p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venue, p.ee, p.url, p.doi,
+       r.rank,
+       CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
+FROM dblp_paper p
+JOIN (SELECT dblp_key, ranking AS rank FROM list_of_conferences
+      UNION ALL
+      SELECT dblp_key, quartile AS rank FROM list_of_journals) r ON r.dblp_key = p.venue_key;
+"""
+
+DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>]+", re.IGNORECASE)
 
 
 def load_list(conn, view, rank_column):
@@ -23,14 +60,6 @@ def load_list(conn, view, rank_column):
     if not index:
         sys.exit(f"ERROR: {view} is empty — finish its review first (see run/ matching guides)")
     return index
-
-
-def load_journal_list(conn):
-    return load_list(conn, "list_of_journals", "quartile")
-
-
-def load_conference_list(conn):
-    return load_list(conn, "list_of_conferences", "ranking")
 
 
 def extract_text(element, tag):
@@ -45,35 +74,36 @@ def extract_authors(element):
     return "; ".join(a.text.strip() for a in authors if a.text)
 
 
-def parse_paper(element, paper_type):
-    key = element.get("key", "")
+def extract_doi(element):
+    for ee in element.findall("ee"):
+        m = DOI_RE.search(ee.text or "")
+        if m:
+            return m.group(0).rstrip(".,;)").lower()
+    return None
+
+
+def parse_paper(element, venue_key, kind):
     year_str = extract_text(element, "year")
-    try:
-        year = int(year_str)
-    except (ValueError, TypeError):
+    if not year_str.isdigit() or int(year_str) not in YEARS:
         return None
-    if year not in YEARS:
-        return None
-    return {
-        "dblp_key": key,
-        "title": extract_text(element, "title"),
-        "authors": extract_authors(element),
-        "year": year,
-        "venue": extract_text(element, "journal") or extract_text(element, "booktitle"),
-        "ee": extract_text(element, "ee"),
-        "url": extract_text(element, "url"),
-    }
+    return (
+        element.get("key", ""),
+        venue_key,
+        kind,
+        int(year_str),
+        " ".join("".join(element.find("title").itertext()).split()) if element.find("title") is not None else "",
+        extract_authors(element),
+        extract_text(element, "journal") or extract_text(element, "booktitle"),
+        extract_text(element, "ee") or None,
+        extract_text(element, "url") or None,
+        extract_doi(element),
+    )
 
 
 def scan_xml(xml_path, journal_index, conf_index):
     size = os.path.getsize(xml_path)
-    papers = defaultdict(list)
-    stats = {
-        "scanned": 0,
-        "matched": 0,
-        "journals": {"Q1": 0, "Q2": 0, "Q3": 0, "Q4": 0},
-        "conferences": {"A*": 0, "A": 0, "B": 0, "C": 0},
-    }
+    papers, ranks = [], Counter()
+    scanned = 0
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║             paperhunter  ·  Paper Extractor                          ║")
@@ -92,83 +122,44 @@ def scan_xml(xml_path, journal_index, conf_index):
         resolve_entities=True,
         huge_tree=True,
     )
-    for event, elem in ctx:
-        stats["scanned"] += 1
-        key = elem.get("key", "")
-        tag_name = elem.tag
-        if tag_name == "article":
-            parts = key.split("/")
-            if len(parts) >= 2:
-                journal_key = "/".join(parts[:2])
-                if journal_key in journal_index:
-                    paper = parse_paper(elem, "journal")
-                    if paper:
-                        quartile = journal_index[journal_key]
-                        year = paper["year"]
-                        file_key = f"{quartile.lower()}-{year}"
-                        papers[file_key].append(paper)
-                        stats["matched"] += 1
-                        stats["journals"][quartile] += 1
-        elif tag_name == "inproceedings":
-            parts = key.split("/")
-            if len(parts) >= 2:
-                conf_key = "/".join(parts[:2])
-                if conf_key in conf_index:
-                    paper = parse_paper(elem, "conference")
-                    if paper:
-                        ranking = conf_index[conf_key]
-                        year = paper["year"]
-                        if ranking == "A*":
-                            file_key = f"a-star-{year}"
-                        else:
-                            file_key = f"{ranking.lower()}-{year}"
-                        papers[file_key].append(paper)
-                        stats["matched"] += 1
-                        stats["conferences"][ranking] += 1
-        if stats["scanned"] % 500_000 == 0:
+    for _, elem in ctx:
+        scanned += 1
+        parts = elem.get("key", "").split("/")
+        if len(parts) >= 3:
+            venue_key = "/".join(parts[:2])
+            index, kind = (journal_index, "journal") if elem.tag == "article" else (conf_index, "conference")
+            if venue_key in index:
+                paper = parse_paper(elem, venue_key, kind)
+                if paper:
+                    papers.append(paper)
+                    ranks[index[venue_key]] += 1
+        if scanned % 500_000 == 0:
             pct = f.tell() * 100 // size
-            print(
-                f"\r[Progress: {pct:3}%] Scanned: {stats['scanned']:,} papers | "
-                f"Matched: {stats['matched']:,} papers",
-                end="",
-                flush=True,
-            )
+            print(f"\r[Progress: {pct:3}%] Scanned: {scanned:,} papers | Matched: {len(papers):,} papers",
+                  end="", flush=True)
         elem.clear()
         while elem.getprevious() is not None:
             del elem.getparent()[0]
     f.close()
-    print(
-        f"\r[Progress: 100%] Scanned: {stats['scanned']:,} papers | "
-        f"Matched: {stats['matched']:,} papers"
-    )
+    print(f"\r[Progress: 100%] Scanned: {scanned:,} papers | Matched: {len(papers):,} papers")
     print()
     print("Statistics:")
-    print(
-        f"  Journals:     Q1={stats['journals']['Q1']:,}   Q2={stats['journals']['Q2']:,}   "
-        f"Q3={stats['journals']['Q3']:,}   Q4={stats['journals']['Q4']:,}"
-    )
-    print(
-        f"  Conferences:  A*={stats['conferences']['A*']:,}   A={stats['conferences']['A']:,}   "
-        f"B={stats['conferences']['B']:,}   C={stats['conferences']['C']:,}"
-    )
+    print("  Journals:     " + "   ".join(f"{q}={ranks[q]:,}" for q in ("Q1", "Q2", "Q3", "Q4")))
+    print("  Conferences:  " + "   ".join(f"{r}={ranks[r]:,}" for r in ("A*", "A", "B", "C")))
     print()
     return papers
 
 
-def write_papers(papers, output_dir):
-    output_dir.mkdir(parents=True, exist_ok=True)
-    print("Writing CSV files...")
-    file_counts = {}
-    for file_key, paper_list in sorted(papers.items()):
-        csv_path = output_dir / f"{file_key}.csv"
-        with open(csv_path, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDS)
-            writer.writeheader()
-            writer.writerows(paper_list)
-        file_counts[file_key] = len(paper_list)
-        print(f"  ✓ {file_key}.csv: {len(paper_list):,} papers")
+def write_papers(conn, papers):
+    print("Writing dblp_paper...")
+    with conn:
+        conn.execute("DELETE FROM dblp_paper")
+        conn.executemany("INSERT INTO dblp_paper VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", papers)
+    print(f"  ✓ {len(papers):,} papers")
     print()
-    print(f"Total: {len(papers)} files written to {output_dir}/")
+    print("Papers per slice (paper_inventory):")
+    for s, n in conn.execute("SELECT slice, count(*) FROM paper_inventory GROUP BY slice ORDER BY slice"):
+        print(f"  {s:<14} {n:>8,}")
     print()
 
 
@@ -177,17 +168,18 @@ def main():
         sys.exit(f"ERROR: paper-dblp.xml not found at {XML_PATH}")
     if not DB_PATH.exists():
         sys.exit(f"ERROR: database not found at {DB_PATH}")
-    print("Loading journal and conference lists...")
     conn = sqlite3.connect(DB_PATH)
-    journal_index = load_journal_list(conn)
-    conf_index = load_conference_list(conn)
-    conn.close()
+    conn.executescript(SCHEMA)
+    print("Loading journal and conference lists...")
+    journal_index = load_list(conn, "list_of_journals", "quartile")
+    conf_index = load_list(conn, "list_of_conferences", "ranking")
     print(f"  ✓ {len(journal_index)} journals loaded")
     print(f"  ✓ {len(conf_index)} conferences loaded")
     papers = scan_xml(XML_PATH, journal_index, conf_index)
-    write_papers(papers, OUTPUT_DIR)
+    write_papers(conn, papers)
+    conn.close()
     print("━" * 70)
-    print("  Done! Papers extracted to paper-inventory/ directory.")
+    print("  Done! Papers are in dblp_paper (view: paper_inventory) of archive/paperhunter.db")
     print("━" * 70)
     print()
 
