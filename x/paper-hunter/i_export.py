@@ -36,7 +36,7 @@ def export(conn, out_dir=None):
     missing = [keys[a["id"]] for a in acc if keys.get(a["id"]) not in rows]
     if missing:
         raise ExportError("%d accepted papers are no longer in dblp_paper (e.g. %s); re-run "
-                          "run/d-extract.py or re-check the venue lists" % (len(missing), missing[0]))
+                          "run/d_extract.py or re-check the venue lists" % (len(missing), missing[0]))
 
     out_rows, by_role = [], dict.fromkeys(ROLES, 0)
     for a in acc:

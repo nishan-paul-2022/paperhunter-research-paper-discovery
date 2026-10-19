@@ -125,11 +125,11 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
 
 def main() -> None:
     if not DB_PATH.exists():
-        sys.exit(f"Database not found: {DB_PATH}  (run a-extract.py first)")
+        sys.exit(f"Database not found: {DB_PATH}  (run a_extract.py first)")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
     if not conn.execute("SELECT count(*) FROM dblp_journal").fetchone()[0]:
-        sys.exit("No DBLP evidence in the database  (run a-extract.py first)")
+        sys.exit("No DBLP evidence in the database  (run a_extract.py first)")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║         paperhunter  ·  Journal Candidate Matcher                    ║")

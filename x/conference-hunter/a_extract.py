@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS dblp_proceedings (
     PRIMARY KEY (dblp_key, year, title)
 ) WITHOUT ROWID;
 
--- Pairs proposed by b-match.py (acronym AND proceedings-title agreement). Not approved.
+-- Pairs proposed by b_match.py (acronym AND proceedings-title agreement). Not approved.
 CREATE TABLE IF NOT EXISTS conf_candidate (
     dblp_key          TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
     core_id           INTEGER NOT NULL REFERENCES core_venue ON DELETE CASCADE,
@@ -289,7 +289,7 @@ def main() -> None:
         load_dblp(conn, xml_path)
     conn.close()
     print("━" * 70)
-    print("  Done.  → Run b-match.py next")
+    print("  Done.  → Run b_match.py next")
     print("━" * 70)
     print()
 

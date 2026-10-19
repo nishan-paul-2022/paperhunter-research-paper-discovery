@@ -262,7 +262,7 @@ def run_paths(run=None):
 def source_papers(run):
     """Rows (dblp_key, title, ee, url, doi) of a run's slice of paper_inventory, in DBLP order."""
     if not SOURCE_DB.exists():
-        raise SystemExit("ERROR: paper source not found: %s (run run/d-extract.py)" % SOURCE_DB)
+        raise SystemExit("ERROR: paper source not found: %s (run run/d_extract.py)" % SOURCE_DB)
     if RUN_RE.match(run):
         where, params = "i.slice = ?", (run,)
     elif run == "no-doi":
@@ -272,7 +272,7 @@ def source_papers(run):
     src = sqlite3.connect("file:%s?mode=ro" % SOURCE_DB, uri=True)
     try:
         if not src.execute("SELECT 1 FROM sqlite_master WHERE name='paper_inventory'").fetchone():
-            raise SystemExit("ERROR: %s has no paper_inventory (run run/d-extract.py)" % SOURCE_DB)
+            raise SystemExit("ERROR: %s has no paper_inventory (run run/d_extract.py)" % SOURCE_DB)
         sql = ("SELECT i.dblp_key, i.title, i.ee, i.url, i.doi FROM paper_inventory i "
                "JOIN dblp_paper p ON p.dblp_key = i.dblp_key WHERE " + where + " ORDER BY p.rowid")
         return src.execute(sql, params).fetchall()

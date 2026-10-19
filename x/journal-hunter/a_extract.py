@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS dblp_doi_prefix (
     PRIMARY KEY (dblp_key, prefix)
 ) WITHOUT ROWID;
 
--- Pairs proposed by b-match.py (shared ISSN, or abbreviation-aware name agreement). Not approved.
+-- Pairs proposed by b_match.py (shared ISSN, or abbreviation-aware name agreement). Not approved.
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
     sjr_id   INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
@@ -330,7 +330,7 @@ def main() -> None:
         load_dblp(conn, xml_path)
     conn.close()
     print("━" * 70)
-    print("  Done.  → Run b-match.py next")
+    print("  Done.  → Run b_match.py next")
     print("━" * 70)
     print()
 

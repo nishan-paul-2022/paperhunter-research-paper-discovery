@@ -2,7 +2,7 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-The humans have already run `a-extract.py` and `b-match.py`, which loaded the database `x/archive/paperhunter.db`. Your job is to fill the `journal_decision` table until the view `journal_needs_review` is empty. The view `list_of_journals` is then the final list: every DBLP journal key (`journals/<name>`) that belongs to a Scopus Q1–Q4 computer-science journal, with zero false positives and zero false negatives.
+The humans have already run `a_extract.py` and `b_match.py`, which loaded the database `x/archive/paperhunter.db`. Your job is to fill the `journal_decision` table until the view `journal_needs_review` is empty. The view `list_of_journals` is then the final list: every DBLP journal key (`journals/<name>`) that belongs to a Scopus Q1–Q4 computer-science journal, with zero false positives and zero false negatives.
 
 Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`. Start every connection with `PRAGMA foreign_keys = ON;`.
 
@@ -17,7 +17,7 @@ Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `
 | `dblp_journal_name(dblp_key, name, papers)` | table, from DBLP | read: how articles of a key name their journal (ISO-4 abbreviations) |
 | `dblp_issn(dblp_key, issn, papers)` | table, from DBLP | read: checksum-valid ISSNs found in article links, the strongest evidence |
 | `dblp_doi_prefix(dblp_key, prefix, papers)` | table, from DBLP | read: publisher of the articles (10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global) |
-| `journal_candidate(dblp_key, sjr_id, method, score, detail)` | table, from `b-match.py` | read: proposed pairs, not approved |
+| `journal_candidate(dblp_key, sjr_id, method, score, detail)` | table, from `b_match.py` | read: proposed pairs, not approved |
 | `journal_decision(id, sjr_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
 | `journal_evidence` | view | read: one summary row per key (top names, ISSNs, DOI prefixes) |
 | `journal_needs_review` | view | read: your to-do list |

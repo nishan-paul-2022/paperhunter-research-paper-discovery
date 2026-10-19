@@ -2,7 +2,7 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-The humans have already run `a-extract.py` and `b-match.py`, which loaded the database `x/archive/paperhunter.db`. Your job is to fill the `conf_decision` table until the view `conf_needs_review` is empty. The view `list_of_conferences` is then the final list: every DBLP conference key (`conf/<name>`) that belongs to a CORE A*–C venue, with zero false positives and zero false negatives.
+The humans have already run `a_extract.py` and `b_match.py`, which loaded the database `x/archive/paperhunter.db`. Your job is to fill the `conf_decision` table until the view `conf_needs_review` is empty. The view `list_of_conferences` is then the final list: every DBLP conference key (`conf/<name>`) that belongs to a CORE A*–C venue, with zero false positives and zero false negatives.
 
 Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`. Start every connection with `PRAGMA foreign_keys = ON;`.
 
@@ -16,7 +16,7 @@ Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `
 | `dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | table, from DBLP | read |
 | `dblp_booktitle(dblp_key, booktitle, papers)` | table, from DBLP | read: how papers of a key name their venue |
 | `dblp_proceedings(dblp_key, year, title)` | table, from DBLP | read: full proceedings titles, the strongest evidence |
-| `conf_candidate(dblp_key, core_id, score, proceedings_title)` | table, from `b-match.py` | read: proposed pairs, not approved |
+| `conf_candidate(dblp_key, core_id, score, proceedings_title)` | table, from `b_match.py` | read: proposed pairs, not approved |
 | `conf_decision(id, core_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
 | `venue_evidence` | view | read: one summary row per key (top booktitles, latest proceedings) |
 | `conf_needs_review` | view | read: your to-do list |
