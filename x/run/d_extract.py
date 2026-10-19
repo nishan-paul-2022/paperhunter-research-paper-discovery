@@ -4,7 +4,7 @@
 Reads list_of_conferences and list_of_journals from archive/paperhunter.db, scans
 the DBLP XML once, and syncs dblp_paper with every paper of a listed venue in YEARS:
 new papers are added, existing ones updated in place (their id never changes), and
-papers no longer extracted are removed unless paper-hunter already uses them.
+papers no longer extracted are removed unless paper-hunter or detail-hunter already uses them.
 The view paper_inventory adds each paper's rank and slice (e.g. a-star-2025),
 which is how paper-hunter selects the papers of a run.
 """
@@ -157,7 +157,10 @@ def scan_xml(xml_path, journal_index, conf_index):
 def write_papers(conn, papers):
     print("Syncing dblp_paper...")
     before = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
-    hunted = conn.execute("SELECT 1 FROM sqlite_master WHERE name='hunt_paper'").fetchone() is not None
+    # papers paper-hunter judged or detail-hunter fetched stay even when DBLP drops them
+    users = [t for t in ("hunt_paper", "paper_source")
+             if conn.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone()]
+    used = " OR ".join(f"id IN (SELECT paper_id FROM {t})" for t in users)
     with conn:
         conn.executemany(
             "INSERT INTO dblp_paper (dblp_key, venue_key, kind, year, title, authors, venue, ee, url, doi) "
@@ -171,16 +174,14 @@ def write_papers(conn, papers):
         conn.executemany("INSERT INTO extracted VALUES (?)", [(p[0],) for p in papers])
         stale = "dblp_key NOT IN (SELECT dblp_key FROM extracted)"
         kept = 0
-        if hunted:  # papers paper-hunter already holds content or judgements for stay
-            kept = conn.execute(
-                f"SELECT count(*) FROM dblp_paper WHERE {stale} AND id IN (SELECT paper_id FROM hunt_paper)"
-            ).fetchone()[0]
-            stale += " AND id NOT IN (SELECT paper_id FROM hunt_paper)"
+        if used:
+            kept = conn.execute(f"SELECT count(*) FROM dblp_paper WHERE {stale} AND ({used})").fetchone()[0]
+            stale += f" AND NOT ({used})"
         removed = conn.execute(f"DELETE FROM dblp_paper WHERE {stale}").rowcount
         conn.execute("DROP TABLE extracted")
     after = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
     print(f"  ✓ {len(papers):,} papers extracted  |  {after - before + removed:,} new  |  {removed:,} removed"
-          + (f"  |  {kept:,} no longer in DBLP but kept (used by paper-hunter)" if kept else ""))
+          + (f"  |  {kept:,} no longer in DBLP but kept (used by paper-hunter or detail-hunter)" if kept else ""))
     print()
     print("Papers per slice (paper_inventory):")
     for s, n in conn.execute("SELECT slice, count(*) FROM paper_inventory GROUP BY slice ORDER BY slice"):

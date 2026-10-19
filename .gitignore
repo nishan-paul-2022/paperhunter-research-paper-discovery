@@ -28,3 +28,6 @@ paperhunter.db-wal
 paperhunter.db-shm
 
 paper-supplement/
+
+# API keys
+.env
