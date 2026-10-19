@@ -31,3 +31,4 @@ paper-supplement/
 
 # API keys
 .env
+.fetch.lock

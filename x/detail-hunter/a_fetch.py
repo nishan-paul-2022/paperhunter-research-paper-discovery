@@ -18,8 +18,8 @@ Keys come from the environment or from detail-hunter/.env (KEY=value lines):
                      used in number order: when one key's daily budget is used up the next
                      takes over; when all are, the run stops (re-run tomorrow to continue)
   S2_API_KEY         OPENALEX_MAILTO (optional contact address)
-Semantic Scholar runs without a key on its shared public pool: slower, with routine 429s
-that are retried patiently.
+Semantic Scholar: one request every 1.1 s from a single thread (batch and title lookups share
+it), and a 429 resends the same request after a wait. Only one fetch process may run at a time.
 
 Commands:
   python3 a_fetch.py fetch                       every paper in dblp_paper
@@ -31,6 +31,7 @@ Commands:
 """
 import argparse
 import difflib
+import fcntl
 import gzip
 import json
 import os
@@ -53,7 +54,10 @@ DB_PATH = SCRIPT_DIR.parent / "archive" / "paperhunter.db"
 
 OPENALEX = "https://api.openalex.org"
 S2 = "https://api.semanticscholar.org/graph/v1"
-OA_BATCH, S2_BATCH = 100, 500     # 500 is the Semantic Scholar batch maximum
+OA_BATCH, S2_BATCH = 100, 500     # per request; 500 is the Semantic Scholar batch maximum
+S2_INTERVAL = 1.1                 # S2 key: 1 request/s across all endpoints; 1.1 s leaves room for jitter
+S2_TRIES = 10                     # a 429 means "wait and send the same batch again"
+LOCK_PATH = SCRIPT_DIR / ".fetch.lock"
 OA_SELECT = ",".join((
     "id", "doi", "title", "publication_year", "publication_date", "ids", "language", "type", "indexed_in",
     "open_access", "primary_location", "best_oa_location", "locations", "is_retracted", "is_paratext",
@@ -66,7 +70,7 @@ S2_FIELDS = ",".join((
     "references.paperId", "references.externalIds"))
 TITLE_MATCH = 0.93          # title similarity needed to accept a title-search hit
 YEAR_SLACK = 2              # ... and a publication year at most this far from DBLP's
-MAX_FAILED_BATCHES = 3      # consecutive failed requests before a source gives up (keyless S2: 10)
+MAX_FAILED_BATCHES = 3      # consecutive failed requests before a source gives up for this run
 
 SCHEMA = """
 -- One row per (paper, source): the API's record as returned, or a miss (found = 0, raw NULL).
@@ -179,8 +183,6 @@ class Source:
     """One API. lookup_dois / lookup_title return raw records; nothing here touches the DB."""
     name = ""
     doi_batch = 1
-    tries = 6                   # attempts per request (429/5xx/network errors are retried)
-    max_failed = MAX_FAILED_BATCHES
 
     def lookup_dois(self, dois):
         raise NotImplementedError
@@ -261,20 +263,19 @@ class OpenAlex(Source):
 class SemanticScholar(Source):
     name, doi_batch = "s2", S2_BATCH
 
+    # One thread sends every S2 request (batch and title match) through one throttle, one at a
+    # time, so the key's 1 request/s limit holds across endpoints. The fetch lock keeps a second
+    # process off the key.
     def __init__(self):
-        # Without a key requests share Semantic Scholar's public pool, where 429s are routine:
-        # space requests out, retry long, and give up only after many failures in a row.
         key = os.environ.get("S2_API_KEY")
         self.headers = {"x-api-key": key} if key else {}
-        self.throttle = Throttle(1.05 if key else 2.0)    # a personal key allows 1 request/s
+        self.throttle = Throttle(S2_INTERVAL if key else 3.0)
         self.keyed = bool(key)
-        if not key:
-            self.tries, self.max_failed = 10, 10
 
     def lookup_dois(self, dois):
         body = json.dumps({"ids": [f"DOI:{d}" for d in dois]}).encode()
         recs = request(f"{S2}/paper/batch?fields={S2_FIELDS}", self.throttle, self.headers, data=body,
-                       tries=self.tries)
+                       tries=S2_TRIES)
         if not isinstance(recs, list) or len(recs) != len(dois):
             raise FetchError("unexpected batch answer")
         return {d: r for d, r in zip(dois, recs) if r}
@@ -282,7 +283,7 @@ class SemanticScholar(Source):
     def lookup_title(self, paper):
         q = urllib.parse.quote(paper["title"].rstrip("."))
         hit = request(f"{S2}/paper/search/match?query={q}&fields={S2_FIELDS}", self.throttle, self.headers,
-                      tries=self.tries)
+                      tries=S2_TRIES)
         for r in (hit or {}).get("data") or []:
             if (r.get("externalIds") or {}).get("DBLP") == paper["dblp_key"] or \
                     title_ok(paper["title"], paper["year"], r.get("title"), r.get("year")):
@@ -338,7 +339,7 @@ class Worker(threading.Thread):
         except FetchError as e:
             self.failed += 1
             self.log(f"request failed: {e}")
-            if self.failed >= self.source.max_failed:
+            if self.failed >= MAX_FAILED_BATCHES:
                 raise
             return FAILED
 
@@ -349,7 +350,7 @@ class Worker(threading.Thread):
             self.title_phase(conn)
         except FetchError as e:
             self.error = str(e) if isinstance(e, BudgetExhausted) else \
-                f"stopped after {self.source.max_failed} failed requests in a row: {e}"
+                f"stopped after {MAX_FAILED_BATCHES} failed requests in a row: {e}"
             self.log(self.error)
         finally:
             conn.close()
@@ -424,7 +425,18 @@ def select_targets(conn, slices, keys, limit):
     return [dict(zip(cols, r)) for r in conn.execute(sql, args)]
 
 
+def take_lock():
+    """Allow one fetch process at a time: a second one would break the S2 key's 1 request/s."""
+    f = open(LOCK_PATH, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit("ERROR: another a_fetch.py fetch is already running (the S2 key allows one process)")
+    return f
+
+
 def cmd_fetch(a):
+    lock = take_lock()  # noqa: F841  held until the process exits
     conn = open_db()
     targets = select_targets(conn, a.slice, a.key, a.limit)
     conn.close()
