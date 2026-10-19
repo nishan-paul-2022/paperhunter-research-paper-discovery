@@ -5,14 +5,19 @@ Both APIs run at the same time, each in its own thread with its own rate limit, 
 works through two phases:
   1. DOI   batches of DOIs (OpenAlex 100 per request, Semantic Scholar 250 per request);
   2. title one title lookup per paper, for papers without a DOI or whose DOI the API did not
-           know; a hit is kept only if the title matches (and the year is close).
+           know; a hit is kept only if the title matches (and the year is close). OpenAlex
+           title search costs 10x a DOI batch, so it waits for Semantic Scholar and only
+           searches papers that still have no abstract.
 Every answer is stored verbatim (zlib-compressed JSON) in paper_source, one row per
 (paper, source). A miss is stored too, so it is not asked again. After each batch,
 b_build turns the raw records into paper_detail, paper_term and paper_reference.
 Interrupt and re-run at any time: papers that already have an answer are skipped.
 
 Keys come from the environment or from detail-hunter/.env (KEY=value lines):
-  OPENALEX_API_KEY   S2_API_KEY   OPENALEX_MAILTO (optional contact address)
+  OPENALEX_API_KEY_1, OPENALEX_API_KEY_2, ...   (or a single OPENALEX_API_KEY)
+                     used in number order: when one key's daily budget is used up the next
+                     takes over; when all are, the run stops (re-run tomorrow to continue)
+  S2_API_KEY         OPENALEX_MAILTO (optional contact address)
 Both APIs work without keys, but Semantic Scholar is then very slow (shared pool, many 429s).
 
 Commands:
@@ -81,6 +86,10 @@ class FetchError(Exception):
     pass
 
 
+class BudgetExhausted(FetchError):
+    """The API key's daily budget is used up; retrying today is pointless."""
+
+
 FAILED = object()           # Worker.attempt's answer when the request itself failed
 
 
@@ -108,8 +117,12 @@ class Throttle:
         self.last = time.time()
 
 
-def request(url, throttle, headers, data=None, tries=6):
-    """GET (or POST with data) -> parsed JSON, None on 404. Retries 429/5xx and network errors."""
+def request(url, throttle, headers, data=None, tries=6, meta=None):
+    """GET (or POST with data) -> parsed JSON, None on 404. Retries 429/5xx and network errors.
+
+    meta, if given, receives the response headers. A 429 whose X-RateLimit-Remaining is 0
+    raises BudgetExhausted at once.
+    """
     hdrs = {"User-Agent": "paperhunter-detail/1.0", "Accept-Encoding": "gzip", **headers}
     if data is not None:
         hdrs["Content-Type"] = "application/json"
@@ -119,6 +132,8 @@ def request(url, throttle, headers, data=None, tries=6):
         try:
             req = urllib.request.Request(url, data=data, headers=hdrs)
             with urllib.request.urlopen(req, timeout=90) as r:
+                if meta is not None:
+                    meta.update(r.headers)
                 body = r.read()
                 if r.headers.get("Content-Encoding") == "gzip":
                     body = gzip.decompress(body)
@@ -129,6 +144,9 @@ def request(url, throttle, headers, data=None, tries=6):
             if e.code not in (429, 500, 502, 503, 504):
                 raise FetchError(f"HTTP {e.code}: {e.read()[:300].decode(errors='replace')}")
             problem = f"HTTP {e.code}"
+            left = e.headers.get("X-RateLimit-Remaining") if e.headers else None
+            if e.code == 429 and left is not None and left.strip() in ("0", "-1"):
+                raise BudgetExhausted("daily budget used up")
             after = e.headers.get("Retry-After", "") if e.headers else ""
             delay = float(after) if after.replace(".", "").isdigit() else 5 * 2 ** attempt
         except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as e:
@@ -167,22 +185,52 @@ class Source:
     def lookup_title(self, paper):
         raise NotImplementedError
 
+    def note(self):
+        """Extra text for progress lines."""
+        return ""
+
 
 class OpenAlex(Source):
     name, doi_batch = "openalex", OA_BATCH
 
+    # Each key has a daily budget (10,000 credits on a free key). A DOI batch of 100 costs 1 credit,
+    # a title search 10, so title search only fills the gaps Semantic Scholar leaves (see Worker).
     def __init__(self):
-        key = os.environ.get("OPENALEX_API_KEY")
-        self.headers = {"Authorization": f"Bearer {key}"} if key else {}
+        numbered = sorted((int(m.group(1)), v.strip()) for k, v in os.environ.items()
+                          if (m := re.fullmatch(r"OPENALEX_API_KEY_(\d+)", k)) and v.strip())
+        plain = os.environ.get("OPENALEX_API_KEY", "").strip()
+        self.keys = ([plain] if plain else []) + [v for _, v in numbered]
+        self.key_no = 0
         mail = os.environ.get("OPENALEX_MAILTO")
         self.mailto = f"&mailto={urllib.parse.quote(mail)}" if mail else ""
-        self.throttle = Throttle(0.25 if key else 1.1)   # OR-filters: 5/s with a key, 1/s without
-        self.keyed = bool(key)
+        self.throttle = Throttle(0.25 if self.keys else 1.1)   # OR-filters: 5/s with a key, 1/s without
+        self.keyed = bool(self.keys)
+        self.meta = {}
+
+    def _get(self, url):
+        """request() with the current key; on a used-up budget move to the next key."""
+        while True:
+            headers = {"Authorization": f"Bearer {self.keys[self.key_no]}"} if self.keys else {}
+            try:
+                return request(url, self.throttle, headers, meta=self.meta)
+            except BudgetExhausted:
+                if self.key_no + 1 >= len(self.keys):
+                    raise BudgetExhausted(f"daily budget used up on all {len(self.keys) or 'keyless'} key(s); "
+                                          "re-run tomorrow to continue")
+                self.key_no += 1
+                print(f"[openalex] key {self.key_no} used up its daily budget; switching to key {self.key_no + 1}",
+                      flush=True)
+
+    def note(self):
+        left = self.meta.get("X-RateLimit-Remaining") or self.meta.get("x-ratelimit-remaining")
+        if left is None:
+            return ""
+        return f"  | credits left {int(left):,}" + (f" (key {self.key_no + 1}/{len(self.keys)})" if self.keys else "")
 
     def _works(self, filt, n):
         url = (f"{OPENALEX}/works?filter={urllib.parse.quote(filt, safe=':|')}&per-page={n}"
                f"&select={OA_SELECT}{self.mailto}")
-        return (request(url, self.throttle, self.headers) or {}).get("results") or []
+        return (self._get(url) or {}).get("results") or []
 
     def lookup_dois(self, dois):
         out = {}
@@ -194,8 +242,7 @@ class OpenAlex(Source):
             out[d] = w
         for d in dois:                                    # DOIs a filter cannot carry: one by one
             if d not in plain:
-                w = request(f"{OPENALEX}/works/doi:{urllib.parse.quote(d)}?select={OA_SELECT}{self.mailto}",
-                            self.throttle, self.headers)
+                w = self._get(f"{OPENALEX}/works/doi:{urllib.parse.quote(d)}?select={OA_SELECT}{self.mailto}")
                 if w:
                     out[d] = w
         return out
@@ -255,9 +302,11 @@ def store(conn, src, via, results):
 class Worker(threading.Thread):
     """Runs both phases for one source over the target papers, with its own DB connection."""
 
-    def __init__(self, source, targets, retry_missing):
+    def __init__(self, source, targets, retry_missing, gaps_only=False, after=None):
+        """gaps_only: title-search only papers that still have no abstract, after `after` finished."""
         super().__init__(name=source.name)
         self.source, self.targets, self.retry_missing = source, targets, retry_missing
+        self.gaps_only, self.after = gaps_only, after
         self.stats = {"doi_asked": 0, "doi_found": 0, "title_asked": 0, "title_found": 0}
         self.error = None
         self.failed = 0
@@ -275,6 +324,8 @@ class Worker(threading.Thread):
             out = call(*args)
             self.failed = 0
             return out
+        except BudgetExhausted:
+            raise
         except FetchError as e:
             self.failed += 1
             self.log(f"request failed: {e}")
@@ -288,7 +339,8 @@ class Worker(threading.Thread):
             self.doi_phase(conn)
             self.title_phase(conn)
         except FetchError as e:
-            self.error = f"stopped after {MAX_FAILED_BATCHES} failed requests in a row: {e}"
+            self.error = str(e) if isinstance(e, BudgetExhausted) else \
+                f"stopped after {MAX_FAILED_BATCHES} failed requests in a row: {e}"
             self.log(self.error)
         finally:
             conn.close()
@@ -312,15 +364,22 @@ class Worker(threading.Thread):
             self.stats["doi_asked"] += len(batch)
             self.stats["doi_found"] += sum(d in found for d in batch)
             if (i // step) % 20 == 0 or i + step >= len(dois):
-                self.log(f"DOI {min(i + step, len(dois)):,}/{len(dois):,}  found {self.stats['doi_found']:,}")
+                self.log(f"DOI {min(i + step, len(dois)):,}/{len(dois):,}  found {self.stats['doi_found']:,}"
+                         + self.source.note())
 
     def title_phase(self, conn):
+        if self.after is not None:
+            self.log(f"title phase waits for {self.after.name} to finish")
+            self.after.join()
         done = self.state(conn)
         # no DOI, or the DOI was asked and unknown; a DOI whose request failed waits for the next run
         todo = [p for p in self.targets if (not p["doi"] and p["id"] not in done)
                 or done.get(p["id"]) == ("doi", 0)
                 or (self.retry_missing and done[p["id"]] == ("title", 0))]
-        self.log(f"title phase: {len(todo):,} papers")
+        if self.gaps_only:
+            have = {r[0] for r in conn.execute("SELECT paper_id FROM paper_detail WHERE abstract IS NOT NULL")}
+            todo = [p for p in todo if p["id"] not in have]
+        self.log(f"title phase: {len(todo):,} papers" + (" (still without an abstract)" if self.gaps_only else ""))
         pending = []
         for n, p in enumerate(todo, 1):
             rec = self.attempt(self.source.lookup_title, p)
@@ -333,7 +392,7 @@ class Worker(threading.Thread):
                 store(conn, self.source.name, "title", pending)
                 pending = []
             if n % 500 == 0 or n == len(todo):
-                self.log(f"title {n:,}/{len(todo):,}  found {self.stats['title_found']:,}")
+                self.log(f"title {n:,}/{len(todo):,}  found {self.stats['title_found']:,}" + self.source.note())
         if pending:
             store(conn, self.source.name, "title", pending)
 
@@ -367,7 +426,10 @@ def cmd_fetch(a):
     for s in sources:
         if not s.keyed:
             print(f"WARNING: no API key for {s.name}; running at the keyless rate limit")
-    workers = [Worker(s, targets, a.retry_missing) for s in sources]
+    s2 = next((Worker(s, targets, a.retry_missing) for s in sources if s.name == "s2"), None)
+    oa = next((Worker(s, targets, a.retry_missing, gaps_only=True, after=s2)
+               for s in sources if s.name == "openalex"), None)
+    workers = [w for w in (oa, s2) if w]
     t0 = time.time()
     for w in workers:
         w.start()
