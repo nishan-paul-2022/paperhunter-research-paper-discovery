@@ -18,7 +18,6 @@ import e_fetch
 import f_cues
 import g_prior
 import h_flow
-import i_export
 
 TOOLS_DIR = Path(__file__).resolve().parent
 
@@ -101,50 +100,19 @@ def cmd_doctor(a):
 # --------------------------------------------------------------------------- init
 
 def cmd_init(a):
-    """Initialize the run database from its slice of paper_inventory."""
-    run, db_path = b_db.run_paths(a.run)
-
-    if db_path.exists() and not a.force:
-        # Check version
-        ver = b_db.user_version(db_path)
-        if ver < b_db.SCHEMA_VERSION:
-            legacy = db_path.with_name(db_path.stem + ".legacy.db")
-            print("Renaming old DB (v%d) to %s" % (ver, legacy))
-            db_path.rename(legacy)
-            if a.reuse_abstracts_from:
-                a.reuse_abstracts_from = str(legacy)
-        elif ver == b_db.SCHEMA_VERSION:
-            # Resume
-            conn = b_db.open_db(db_path)
-            existing_run = b_db.meta_get(conn, "run")
-            if run != existing_run:
-                die("DB exists for a different run: %s (wanted %s); use --force or a new DB" % (existing_run, run))
-            print("Resuming existing run: %d papers" % b_db.count_papers(conn, canonical=False))
-            conn.close()
-            (b_db.TOOLS_DIR / ".current").write_text(run)
-            return
-        else:
-            die("DB has unknown version %d (expected %d)" % (ver, b_db.SCHEMA_VERSION))
-
-    # Create fresh
-    stats = b_db.init_from_table(run, db_path, fresh=True)
-    print("Initialized: %(rows)d rows, %(papers)d papers, %(duplicates)d duplicates" % stats)
-
-    if a.reuse_abstracts_from:
-        conn = b_db.open_db(db_path)
-        copied = b_db.reuse_abstracts(conn, a.reuse_abstracts_from)
-        print("Reused %d abstracts from legacy DB" % copied)
-        conn.close()
-
-    # Write .current
-    (b_db.TOOLS_DIR / ".current").write_text(run)
+    """Add one or more runs (paper_inventory slices) to the hunt. Re-running a run is safe."""
+    conn = b_db.open_db()
+    for run in a.runs:
+        stats = b_db.add_run(conn, run)
+        print("Run %(run)s: %(papers)d papers, %(added)d newly added to the hunt, %(duplicates)d duplicates" % stats)
+    conn.close()
 
 
 # --------------------------------------------------------------------------- fetch
 
 def cmd_fetch(a):
     """Run fetch passes."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     if a.deep:
         print("Running deep fetch (tier >= 1, no abstract)...")
@@ -168,7 +136,7 @@ def cmd_fetch(a):
 
 def cmd_triage(a):
     """Compute cues, tier, prior for all canonical papers."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     print("Running triage (cues, tier, prior)...")
     result = f_cues.run_triage(conn, workers=a.workers)
@@ -185,16 +153,15 @@ def cmd_triage(a):
 # --------------------------------------------------------------------------- run-deterministic
 
 def cmd_run_deterministic(a):
-    """Convenience: init (if needed) → fetch → triage → deep fetch → triage → advance."""
-    run, db_path = b_db.run_paths(a.run)
-    
-    # Init if needed
-    if not db_path.exists():
+    """Convenience: init (given runs) → fetch → triage → deep fetch → triage → advance."""
+    if a.runs:
         print("=== INIT ===")
-        a_init = argparse.Namespace(run=a.run, force=False, reuse_abstracts_from=None)
-        cmd_init(a_init)
-    
-    conn = b_db.open_db(db_path)
+        cmd_init(a)
+
+    conn = b_db.open_db()
+    if not b_db.count_papers(conn):
+        conn.close()
+        die("the hunt has no papers; give runs, e.g. `a_cli.py run-deterministic a-star-2025`")
     
     # Initial fetch
     print("\n=== FETCH (initial) ===")
@@ -232,7 +199,7 @@ def cmd_run_deterministic(a):
 
 def cmd_advance(a):
     """Create tasks, finalize reviews, print status."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     status = h_flow.advance(conn)
     print(json.dumps(status))
     conn.close()
@@ -242,7 +209,7 @@ def cmd_advance(a):
 
 def cmd_claim(a):
     """Atomic lease of tasks; print dossiers."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     pids = b_db.claim(conn, a.stage, a.owner, n=a.n, needs_web=a.needs_web)
     
@@ -300,7 +267,7 @@ def _render_dossier(d, stage):
 
 def cmd_submit(a):
     """Validate and store reviews from a JSON file."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     if a.file:
         records = json.loads(Path(a.file).read_text())
@@ -331,7 +298,7 @@ def cmd_submit(a):
 
 def cmd_fill(a):
     """Store a web-fetched abstract."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     text = Path(a.abstract_file).read_text(encoding="utf-8")
     text = text.strip()
@@ -339,12 +306,11 @@ def cmd_fill(a):
     if len(text) < b_db.MIN_ABSTRACT:
         die("Abstract too short: %d chars (need >= %d)" % (len(text), b_db.MIN_ABSTRACT))
     
-    b_db.put_abstract(conn, a.id, text, "web", replace=True)
+    if not b_db.get_paper(conn, a.id):
+        die("Paper %d is not in the hunt" % a.id)
+    b_db.put_abstract(conn, a.id, text, "web", replace=True, url=a.url)
     print("Stored abstract for paper %d (%d chars)" % (a.id, len(text)))
-    
-    if a.url:
-        b_db.meta_set(conn, "fill_%d_url" % a.id, a.url)
-    
+
     conn.close()
 
 
@@ -352,7 +318,7 @@ def cmd_fill(a):
 
 def cmd_fulltext(a):
     """Fetch or import full text; print outline + excerpts."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     if a.file:
         text = Path(a.file).read_text(encoding="utf-8")
@@ -388,7 +354,7 @@ def cmd_fulltext(a):
 
 def cmd_show(a):
     """Display dossier for any paper."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     dossiers = b_db.dossiers(conn, [a.id], blind=a.blind, with_reviews=True)
     
@@ -404,16 +370,22 @@ def cmd_show(a):
 
 def cmd_status(a):
     """Print phase counts, task counts, tier histogram, result counts."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
+    conn = b_db.open_db()
     
     n_papers = b_db.count_papers(conn, canonical=True)
-    n_abstracts = conn.execute("SELECT COUNT(*) FROM abstract a JOIN paper p ON a.paper_id=p.id WHERE p.dup_of IS NULL").fetchone()[0]
-    n_fulltext = conn.execute("SELECT COUNT(*) FROM fulltext f JOIN paper p ON f.paper_id=p.id WHERE p.dup_of IS NULL").fetchone()[0]
-    
-    print("=== DATABASE ===")
+    n_abstracts = conn.execute("SELECT COUNT(*) FROM paper_abstract a JOIN hunt_paper p ON p.paper_id=a.paper_id WHERE p.dup_of IS NULL").fetchone()[0]
+    n_fulltext = conn.execute("SELECT COUNT(*) FROM paper_fulltext f JOIN hunt_paper p ON p.paper_id=f.paper_id WHERE p.dup_of IS NULL").fetchone()[0]
+
+    print("=== HUNT ===")
     print("Papers (canonical): %d" % n_papers)
     print("Abstracts: %d (%.1f%%)" % (n_abstracts, 100 * n_abstracts / n_papers if n_papers else 0))
     print("Fulltext: %d" % n_fulltext)
+
+    runs = b_db.runs(conn)
+    if runs:
+        print("\n=== RUNS ===")
+        for r in runs:
+            print("%-14s %7d papers  deep fetch %s" % (r["name"], r["n_papers"], "done" if r["deep_fetch_done"] else "pending"))
     
     tier_hist = b_db.tier_histogram(conn)
     if tier_hist:
@@ -428,13 +400,13 @@ def cmd_status(a):
             if stage in task_counts:
                 print("%s: %s" % (stage, ", ".join("%s=%d" % (st, n) for st, n in sorted(task_counts[stage].items()))))
     
-    results = conn.execute("SELECT verdict, COUNT(*) FROM result GROUP BY verdict").fetchall()
+    results = conn.execute("SELECT verdict, COUNT(*) FROM hunt_result GROUP BY verdict").fetchall()
     if results:
         print("\n=== RESULTS ===")
         for verdict, count in results:
             print("%s: %d" % (verdict, count))
         
-        roles = conn.execute("SELECT role, COUNT(*) FROM result WHERE verdict='accept' GROUP BY role").fetchall()
+        roles = conn.execute("SELECT role, COUNT(*) FROM hunt_result WHERE verdict='accept' GROUP BY role").fetchall()
         if roles:
             print("Accepted by role:")
             for role, count in roles:
@@ -443,44 +415,35 @@ def cmd_status(a):
     conn.close()
 
 
-# --------------------------------------------------------------------------- export
+# --------------------------------------------------------------------------- reference
 
-def cmd_export(a):
-    """Write the filtered CSV to paper-reference/."""
-    conn = b_db.open_db(b_db.run_paths(a.run)[1])
-    
-    try:
-        result = i_export.export(conn, out_dir=a.out_dir)
-        print("Exported to: %(path)s" % result)
-        print("Total input rows: %(total)d" % result)
-        print("Accepted: %(accepted)d" % result)
-        print("By role:")
-        for role in ("baseline", "benchmark", "evaluation", "survey"):
-            count = result["by_role"].get(role, 0)
-            if count:
-                print("  %s: %d" % (role, count))
-    except i_export.ExportError as e:
-        die(str(e))
-    
+def cmd_reference(a):
+    """Print the reference_paper view: the accepted papers with their DBLP record."""
+    conn = b_db.open_db(readonly=True)
+    rows = b_db.reference_papers(conn)
     conn.close()
+    by_role = {}
+    for r in rows:
+        by_role[r["role"]] = by_role.get(r["role"], 0) + 1
+        print("%-10s p=%.2f  %-4s %d  %-38s %s" % (r["role"], r["p"], r["rank"] or "-", r["year"], r["dblp_key"], r["title"]))
+    print("\n%d reference papers%s  (view: reference_paper in %s)" % (
+        len(rows), (": " + ", ".join("%s=%d" % kv for kv in by_role.items())) if rows else "", b_db.DB_PATH))
 
 
 # --------------------------------------------------------------------------- main
 
 def main():
-    p = argparse.ArgumentParser(description="Paper classification workflow CLI")
-    p.add_argument("--run", help="Run name: a paper_inventory slice such as a-star-2025 or q1-2024, "
-                                 "or no-doi (default: from .current)")
-    
+    p = argparse.ArgumentParser(description="Paper classification workflow CLI (database: %s)" % b_db.DB_PATH)
+    run_help = "paper_inventory slice such as a-star-2025 or q1-2024, or no-doi"
+
     sub = p.add_subparsers(dest="command", required=True)
-    
+
     # doctor
     sub.add_parser("doctor", help="Check prerequisites")
-    
+
     # init
-    p_init = sub.add_parser("init", help="Initialize the run database from paper_inventory")
-    p_init.add_argument("--force", action="store_true", help="Recreate DB even if it exists")
-    p_init.add_argument("--reuse-abstracts-from", metavar="DB", help="Copy abstracts from legacy DB")
+    p_init = sub.add_parser("init", help="Add runs (paper_inventory slices) to the hunt")
+    p_init.add_argument("runs", nargs="+", metavar="RUN", help=run_help)
     
     # fetch
     p_fetch = sub.add_parser("fetch", help="Fetch abstracts from providers")
@@ -493,6 +456,7 @@ def main():
     
     # run-deterministic
     p_rd = sub.add_parser("run-deterministic", help="Run init→fetch→triage→deep→triage→advance")
+    p_rd.add_argument("runs", nargs="*", metavar="RUN", help=run_help + " (optional: runs to add first)")
     p_rd.add_argument("--workers", type=int, default=16, help="Thread/process count")
     
     # advance
@@ -531,9 +495,8 @@ def main():
     # status
     sub.add_parser("status", help="Print statistics")
     
-    # export
-    p_export = sub.add_parser("export", help="Write filtered CSV")
-    p_export.add_argument("--out-dir", help="Output directory (default: paper-reference/)")
+    # reference
+    sub.add_parser("reference", help="Print the reference papers (view reference_paper)")
     
     a = p.parse_args()
     

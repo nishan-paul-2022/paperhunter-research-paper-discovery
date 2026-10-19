@@ -236,14 +236,14 @@ def validate_review(conn, rec, stage, owner):
 
     if pid is None:
         return errs
-    paper = _one(conn, "SELECT id, title, dup_of FROM paper WHERE id=?", pid)
+    paper = _one(conn, "SELECT id, title, dup_of FROM hunt_item WHERE id=?", pid)
     if paper is None:
         return errs + ["unknown paper id %d" % pid]
     if paper["dup_of"] is not None:
         return errs + ["paper %d is a duplicate of %d and is not reviewed" % (pid, paper["dup_of"])]
 
     if stage in STAGES:
-        task = _one(conn, "SELECT state, owner FROM task WHERE paper_id=? AND stage=?", pid, stage)
+        task = _one(conn, "SELECT state, owner FROM hunt_task WHERE paper_id=? AND stage=?", pid, stage)
         if task is None:
             errs.append("no '%s' task exists for paper %d" % (stage, pid))
         elif task["state"] != "leased":
@@ -252,13 +252,13 @@ def validate_review(conn, rec, stage, owner):
             errs.append("the '%s' task for paper %d is leased to another owner" % (stage, pid))
 
     if isinstance(reason, str) and reason and _one(
-            conn, "SELECT COUNT(*) FROM review WHERE by=? AND reason=?", owner, reason)[0] > MAX_SAME_REASON:
+            conn, "SELECT COUNT(*) FROM hunt_review WHERE by=? AND reason=?", owner, reason)[0] > MAX_SAME_REASON:
         errs.append("this exact reason was already submitted more than %d times; write a specific reason"
                     % MAX_SAME_REASON)
 
-    abs_row = _one(conn, "SELECT text FROM abstract WHERE paper_id=?", pid)
-    has_ft = _one(conn, "SELECT 1 FROM fulltext WHERE paper_id=?", pid) is not None
-    tri = _one(conn, "SELECT tier, prior FROM triage WHERE paper_id=?", pid)
+    abs_row = _one(conn, "SELECT text FROM paper_abstract WHERE paper_id=?", pid)
+    has_ft = _one(conn, "SELECT 1 FROM paper_fulltext WHERE paper_id=?", pid) is not None
+    tri = _one(conn, "SELECT tier, prior FROM hunt_triage WHERE paper_id=?", pid)
     tier = tri["tier"] if tri else 0
     prior = tri["prior"] if tri else None
 
@@ -283,7 +283,7 @@ def validate_review(conn, rec, stage, owner):
         row, errs, required=accept or (reject and tier >= 2),
         paper_title=paper["title"],
         abstract=abs_row["text"] if abs_row else None,
-        fulltext=(_one(conn, "SELECT text FROM fulltext WHERE paper_id=?", pid)["text"]
+        fulltext=(_one(conn, "SELECT text FROM paper_fulltext WHERE paper_id=?", pid)["text"]
                   if has_ft and qsrc == "fulltext" else None),
     )
 

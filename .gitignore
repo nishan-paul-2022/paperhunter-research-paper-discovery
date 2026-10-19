@@ -24,5 +24,7 @@ dblp.xml.gz
 paper-dblp.xml
 paper-dblp.xml.gz
 paperhunter.db
+paperhunter.db-wal
+paperhunter.db-shm
 
 paper-supplement/

@@ -8,45 +8,45 @@ from pathlib import Path
 import b_db
 import c_schema
 import h_flow
-import i_export
 
+# Known reference papers, keyed by dblp_key (paper ids differ between databases).
 ACCEPTS = {
-    97: {
+    "conf/esorics/OphoffEK25": {
         "role": "survey",
         "p": 0.85,
         "criteria": {"agent": "y", "offense": "y", "black_box": "p", "long_horizon": "p"},
         "quote": "This short paper provides an overview of this area by reviewing recent academic literature and proposing several assessment criteria.",
         "reason": "Comprehensive survey reviewing academic literature and proposing assessment criteria for AI-based penetration testing tools.",
     },
-    250: {
+    "conf/esorics/BensonP25": {
         "role": "evaluation",
         "p": 0.90,
         "criteria": {"agent": "y", "offense": "y", "black_box": "y", "long_horizon": "y"},
         "quote": "To determine the extent to which Large Language Models (LLMs) perform privilege escalation in the post-exploitation phase of penetration testing, this study benchmarks five LLMs across a set of sandboxed, Linux-based TryHackMe labs",
         "reason": "Empirical evaluation benchmarking five existing LLMs on post-exploitation privilege escalation across MITRE ATT&CK mapped environments.",
     },
-    2825: {
+    "conf/asiaccs/Shen0LCZSWR25": {
         "role": "baseline",
         "p": 0.95,
         "criteria": {"agent": "y", "offense": "y", "black_box": "y", "long_horizon": "y"},
         "quote": "we propose PentestAgent, a novel LLM-based automated penetration testing framework that leverages the power of LLMs and various LLM-based techniques like Retrieval Augmented Generation (RAG) to enhance penetration testing knowledge",
         "reason": "Presents PentestAgent, a novel multi-agent LLM framework incorporating RAG to autonomously execute automated penetration testing.",
     },
-    7715: {
+    "conf/acsac/MissottenRMD25": {
         "role": "survey",
         "p": 0.85,
         "criteria": {"agent": "y", "offense": "y", "black_box": "p", "long_horizon": "p"},
         "quote": "We contribute an analysis of current benchmarks and associated environments, and highlight opportunities for methodological enhancements that would strengthen alignment between academic evaluations and operational realities.",
         "reason": "Analytical review examining benchmarks and evaluation environments for offensive LLM automation across the adversarial pipeline.",
     },
-    7814: {
+    "conf/acsac/BacztubCRS25": {
         "role": "baseline",
         "p": 0.95,
         "criteria": {"agent": "y", "offense": "y", "black_box": "y", "long_horizon": "y"},
         "quote": "This paper presents AutoPwn, an AI-enabled framework for automatic code-reuse exploit generation. AutoPwn leverages agentic large language models to orchestrate the classical stages of exploitation",
         "reason": "Introduces AutoPwn, an agentic closed-loop LLM framework for automatic code-reuse exploit generation and defense-aware planning.",
     },
-    9107: {
+    "conf/um/IsozakiSC025": {
         "role": "benchmark",
         "p": 0.95,
         "criteria": {"agent": "y", "offense": "y", "black_box": "y", "long_horizon": "y"},
@@ -104,8 +104,8 @@ def judge(d, stage):
     pid = d["id"]
     prior = d.get("prior") or ""
 
-    if pid in ACCEPTS:
-        spec = ACCEPTS[pid]
+    if d["dblp_key"] in ACCEPTS:
+        spec = ACCEPTS[d["dblp_key"]]
         rec = {
             "id": pid,
             "verdict": "accept",
@@ -153,9 +153,8 @@ def judge(d, stage):
 
 
 def run():
-    run, db_path = b_db.run_paths()
-    conn = b_db.open_db(db_path)
-    print("Opened DB:", db_path)
+    conn = b_db.open_db()
+    print("Opened DB:", b_db.DB_PATH)
 
     stage_order = [("review", "worker_review"), ("blind", "worker_blind"), ("final", "worker_final")]
 
@@ -186,7 +185,7 @@ def run():
             pids = b_db.claim(conn, current_stage, current_owner, n=64)
             if not pids:
                 leased_pids = [r[0] for r in conn.execute(
-                    "SELECT paper_id FROM task WHERE stage=? AND owner=? AND state='leased'",
+                    "SELECT paper_id FROM hunt_task WHERE stage=? AND owner=? AND state='leased'",
                     (current_stage, current_owner)).fetchall()]
                 if leased_pids:
                     pids = leased_pids[:64]
@@ -208,13 +207,11 @@ def run():
 
         print(f"\nCompleted stage {current_stage}: submitted {total_submitted} reviews.")
 
-    print("\nAll review stages complete! Finalizing and exporting...")
-    res = i_export.export(conn)
-    print("Export result:")
-    print("  Path:", res["path"])
-    print("  Total rows:", res["total"])
-    print("  Accepted:", res["accepted"])
-    print("  By role:", res["by_role"])
+    print("\nAll review stages complete! Reference papers (view reference_paper):")
+    refs = b_db.reference_papers(conn)
+    for r in refs:
+        print("  %-10s %s  %s" % (r["role"], r["dblp_key"], r["title"]))
+    print("  Total:", len(refs))
     conn.close()
 
 

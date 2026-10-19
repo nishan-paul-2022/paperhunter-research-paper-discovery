@@ -22,7 +22,7 @@ ESCALATION_FACTOR = 10
 ESCALATION_CAP = 5000
 EVAL_BATCH = 200
 
-_ABSTRACT = "EXISTS(SELECT 1 FROM abstract a WHERE a.paper_id=t.paper_id)"
+_ABSTRACT = "EXISTS(SELECT 1 FROM paper_abstract a WHERE a.paper_id=t.paper_id)"
 # tier -> (escalation meta key, audit `why`, stratum condition over alias t, base sampling rate)
 STRATA = {
     0: ("escalated_t0", "audit0", "t.tier=0", 0.005),
@@ -30,14 +30,14 @@ STRATA = {
 }
 
 _HASH = "((t.paper_id*2654435761) % 10000)"
-_NO_RESULT = "NOT EXISTS(SELECT 1 FROM result x WHERE x.paper_id=t.paper_id)"
-_NO_REVIEW = "NOT EXISTS(SELECT 1 FROM review r WHERE r.paper_id=t.paper_id)"
-_NO_TASK = "NOT EXISTS(SELECT 1 FROM task k WHERE k.paper_id=t.paper_id)"
+_NO_RESULT = "NOT EXISTS(SELECT 1 FROM hunt_result x WHERE x.paper_id=t.paper_id)"
+_NO_REVIEW = "NOT EXISTS(SELECT 1 FROM hunt_review r WHERE r.paper_id=t.paper_id)"
+_NO_TASK = "NOT EXISTS(SELECT 1 FROM hunt_task k WHERE k.paper_id=t.paper_id)"
 # papers with a review that still lack a result; blind-only rejects are the exempt audit hits
 _PENDING = (
-    "SELECT g.paper_id FROM (SELECT paper_id FROM review GROUP BY paper_id "
+    "SELECT g.paper_id FROM (SELECT paper_id FROM hunt_review GROUP BY paper_id "
     "HAVING SUM(stage<>'blind' OR verdict='accept')>0) g "
-    "WHERE NOT EXISTS(SELECT 1 FROM result x WHERE x.paper_id=g.paper_id)"
+    "WHERE NOT EXISTS(SELECT 1 FROM hunt_result x WHERE x.paper_id=g.paper_id)"
 )
 
 
@@ -129,7 +129,7 @@ def _evaluate(conn, pid):
     f = b_db.latest_review(conn, pid, "final")
     if f:
         return _from_review(conn, pid, f, "final")
-    tri = conn.execute("SELECT tier, prior FROM triage WHERE paper_id=?", (pid,)).fetchone()
+    tri = conn.execute("SELECT tier, prior FROM hunt_triage WHERE paper_id=?", (pid,)).fetchone()
     tier, prior = (tri["tier"], tri["prior"]) if tri else (0, None)
     if r and b:
         if _agree(r, b):
@@ -154,7 +154,7 @@ def _stratum_rate(conn, tier):
     """Sampling rate of a stratum: the base rate, raised so small strata still yield MIN_AUDIT papers."""
     _key, _why, cond, base = STRATA[tier]
     n = conn.execute(
-        "SELECT COUNT(*) FROM triage t JOIN paper p ON p.id=t.paper_id WHERE p.dup_of IS NULL AND " + cond
+        "SELECT COUNT(*) FROM hunt_triage t JOIN hunt_paper p ON p.paper_id=t.paper_id WHERE p.dup_of IS NULL AND " + cond
     ).fetchone()[0]
     return max(base, min(1.0, MIN_AUDIT / n)) if n else 0.0
 
@@ -166,8 +166,8 @@ def _add_audits(conn, tier, rate, why, limit=-1):
     cond = STRATA[tier][2]
     with b_db.tx(conn):
         conn.execute(
-            "INSERT OR IGNORE INTO task(paper_id,stage,state,prio,why) "
-            "SELECT t.paper_id,'blind','todo',?,? FROM triage t JOIN paper p ON p.id=t.paper_id "
+            "INSERT OR IGNORE INTO hunt_task(paper_id,stage,state,prio,why) "
+            "SELECT t.paper_id,'blind','todo',?,? FROM hunt_triage t JOIN hunt_paper p ON p.paper_id=t.paper_id "
             "WHERE p.dup_of IS NULL AND " + cond + " AND CAST(" + _HASH + " AS REAL)/10000.0 < ? AND "
             + _NO_TASK + " AND " + _NO_REVIEW + " AND " + _NO_RESULT +
             " ORDER BY " + _HASH + ", t.paper_id LIMIT ?",
@@ -181,7 +181,7 @@ def _escalate(conn, tier):
     with b_db.tx(conn):
         b_db.meta_set(conn, STRATA[tier][0], 1)
         used = conn.execute(
-            "SELECT COUNT(*) FROM task k JOIN triage t ON t.paper_id=k.paper_id WHERE k.stage='blind' "
+            "SELECT COUNT(*) FROM hunt_task k JOIN hunt_triage t ON t.paper_id=k.paper_id WHERE k.stage='blind' "
             "AND k.why IN ('audit0','audit1','escalate') AND t.tier=?", (tier,)).fetchone()[0]
         rate = min(1.0, ESCALATION_FACTOR * _stratum_rate(conn, tier))
         _add_audits(conn, tier, rate, "escalate", max(0, ESCALATION_CAP - used))
@@ -193,22 +193,26 @@ def _resolve_failed(conn, now_ts):
     """Mark exhausted leases failed, then resolve every failed task that has no result yet."""
     b_db.fail_exhausted(conn, now_ts)
     pids = [r[0] for r in conn.execute(
-        "SELECT DISTINCT paper_id FROM task WHERE state='failed' AND "
-        "NOT EXISTS(SELECT 1 FROM result x WHERE x.paper_id=task.paper_id)")]
+        "SELECT DISTINCT paper_id FROM hunt_task WHERE state='failed' AND "
+        "NOT EXISTS(SELECT 1 FROM hunt_result x WHERE x.paper_id=hunt_task.paper_id)")]
     _evaluate_all(conn, pids)
 
 
+# tier-1 papers without an abstract wait until a deep fetch has covered one of their runs
+_DEEP_DONE = ("EXISTS(SELECT 1 FROM hunt_run_paper rp JOIN hunt_run u ON u.name=rp.run "
+              "WHERE rp.paper_id=t.paper_id AND u.deep_fetch_done=1)")
+
+
 def _create_review_tasks(conn):
-    deep = b_db.meta_get(conn, "deep_fetch_done") == "1"
     with b_db.tx(conn):
         conn.execute(
-            "INSERT OR IGNORE INTO task(paper_id,stage,state,prio,why) "
+            "INSERT OR IGNORE INTO hunt_task(paper_id,stage,state,prio,why) "
             "SELECT t.paper_id,'review','todo',"
             "CASE t.tier WHEN 3 THEN 0 WHEN 2 THEN 3 ELSE 4 END,"
             "CASE t.tier WHEN 3 THEN 'strong' WHEN 2 THEN 'gate' ELSE 'noabs' END "
-            "FROM triage t JOIN paper p ON p.id=t.paper_id "
+            "FROM hunt_triage t JOIN hunt_paper p ON p.paper_id=t.paper_id "
             "WHERE t.tier>=1 AND p.dup_of IS NULL AND " + _NO_RESULT + " AND " + _NO_REVIEW +
-            " AND (t.tier>=2 OR (? AND NOT " + _ABSTRACT + "))", (1 if deep else 0,))
+            " AND (t.tier>=2 OR (" + _DEEP_DONE + " AND NOT " + _ABSTRACT + "))")
 
 
 def _sample_audits(conn):
@@ -242,15 +246,15 @@ def advance(conn, now_ts=None):
 def _status(conn):
     open_ = {"review": 0, "blind": 0, "final": 0}
     leased = failed = 0
-    for stage, state, n in conn.execute("SELECT stage, state, COUNT(*) FROM task GROUP BY 1,2"):
+    for stage, state, n in conn.execute("SELECT stage, state, COUNT(*) FROM hunt_task GROUP BY 1,2"):
         if state in ("todo", "leased"):
             open_[stage] += n
         if state == "leased":
             leased += n
         elif state == "failed":
             failed += n
-    finalized = conn.execute("SELECT COUNT(*) FROM result").fetchone()[0]
-    has_triage = conn.execute("SELECT 1 FROM triage LIMIT 1").fetchone() is not None
+    finalized = conn.execute("SELECT COUNT(*) FROM hunt_result").fetchone()[0]
+    has_triage = conn.execute("SELECT 1 FROM hunt_triage LIMIT 1").fetchone() is not None
     unresolved = conn.execute("SELECT EXISTS(%s)" % _PENDING).fetchone()[0]
     return {
         "open": open_, "leased": leased, "failed": failed, "finalized": finalized,
@@ -273,7 +277,7 @@ def _submit_one(conn, c_schema, rec, owner, stage):
     try:
         with b_db.tx(conn):
             if isinstance(pid, int) and conn.execute(
-                    "SELECT 1 FROM review WHERE paper_id=? AND stage=? AND by=?", (pid, stage, owner)).fetchone():
+                    "SELECT 1 FROM hunt_review WHERE paper_id=? AND stage=? AND by=?", (pid, stage, owner)).fetchone():
                 out.update(ok=True, duplicate=True)
                 return out
             errors = c_schema.validate_review(conn, rec, stage, owner)

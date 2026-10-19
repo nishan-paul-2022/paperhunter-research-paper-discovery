@@ -22,7 +22,6 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 
 SCHEMA = """
-PRAGMA journal_mode = DELETE;
 
 -- Scopus/SJR ranking, imported from publication-scopus-computer-science-journal-2025.csv (Q1–Q4 only).
 CREATE TABLE IF NOT EXISTS sjr_journal (

@@ -6,7 +6,7 @@ This is the **master prompt** for AI reviewers and for the orchestrator that run
 
 ## 1. Mission
 
-Judge papers that *might* belong in a **reference list of offensive-security LLM-agent systems and their benchmarks and evaluations**. Decisions use title, abstract and full text only. Never use venue, year, authors, citation count, preprint status, or any bibliographic field. The run (a slice of `paper_inventory`, e.g. `a-star-2025`) defines scope.
+Judge papers that *might* belong in a **reference list of offensive-security LLM-agent systems and their benchmarks and evaluations**. Decisions use title, abstract and full text only. Never use venue, year, authors, citation count, preprint status, or any bibliographic field. The runs added to the hunt (slices of `paper_inventory`, e.g. `a-star-2025`) define scope.
 
 **Role contract:** You are a researcher in offensive LLM-agent automation (penetration testing, CTF-solving, CVE exploitation, attack-graph planners) who maintains a reference list and knows how to draw the boundary against defensive/detection work, static code analysis, jailbreak/safety research and non-LLM security. You read English-language papers from computer-security and AI venues, along with a long tail from theory, networking, IoT, control-systems and other conferences where offensive automation occasionally appears.
 
@@ -74,8 +74,7 @@ Accept requires `agent=y` and `offense=y`. A `baseline` additionally needs `blac
 
 ```bash
 python3 a_cli.py doctor
-python3 a_cli.py --run <RUN> init        # <RUN>: a paper_inventory slice such as a-star-2025 or q1-2024, or no-doi
-python3 a_cli.py run-deterministic
+python3 a_cli.py run-deterministic <RUN>   # <RUN>: a paper_inventory slice such as a-star-2025 or q1-2024, or no-doi
 python3 a_cli.py status
 ```
 
@@ -89,17 +88,17 @@ If you cannot spawn sub-agents, run the worker loop yourself in the order review
 
 Then:
 ```bash
-python3 a_cli.py export
+python3 a_cli.py reference
 ```
-and do a short self-audit: open `paper-reference/<RUN>.csv`, check the role distribution and that no title is duplicated. If something is wrong, fix it through `final` tasks (re-queue with `advance`) and export again.
+and do a short self-audit of the view `reference_paper` in `archive/paperhunter.db` (what `reference` prints): check the role distribution and that no title is duplicated. If something is wrong, fix it through `final` tasks (re-queue with `advance`); the view updates by itself.
 
 ## 9. Worker procedure (give this to each sub-agent)
 
-> You are a PAPER-HUNTER reviewer. Read sections 1–7 of `run/e-paper-matching-guide.md`. Run: `<RUN>`. Your owner name: `<NAME>`. Stage: `<STAGE>`.
+> You are a PAPER-HUNTER reviewer. Read sections 1–7 of `run/e-paper-matching-guide.md`. Your owner name: `<NAME>`. Stage: `<STAGE>`.
 > Loop until `claim` returns no papers:
-> 1. `python3 a_cli.py --run <RUN> claim --stage <STAGE> --owner <NAME> --n 8`
+> 1. `python3 a_cli.py claim --stage <STAGE> --owner <NAME> --n 8`
 > 2. For every paper in that batch that needs outside evidence, fetch it **in parallel** (parallel tool calls), `fill` or `fulltext` as needed.
-> 3. Judge each paper individually. Write one JSON array and run `python3 a_cli.py --run <RUN> submit --owner <NAME> --file /tmp/<NAME>.json`.
+> 3. Judge each paper individually. Write one JSON array and run `python3 a_cli.py submit --owner <NAME> --file /tmp/<NAME>.json`.
 > 4. If `submit` rejects a record, fix exactly what it says and resubmit only that record. Do not fabricate to satisfy a validator; read more instead.
 > 5. Every 20 papers, re-read sections 2–5.
 > Finish by printing the number of papers you submitted.
@@ -149,7 +148,7 @@ Reject: replace `role` with `"reject_class": "<class>"` and `p < 0.5`; `criteria
 
 ## 13. Final message
 
-At most four short lines: the path of `paper-reference/<RUN>.csv`, the number of papers in the run, and the accepted counts by role (`baseline`, `benchmark`, `evaluation`, `survey`).
+At most four short lines: the runs in the hunt and their paper counts (`status`), the number of rows in `reference_paper`, and the accepted counts by role (`baseline`, `benchmark`, `evaluation`, `survey`).
 
 ---
 

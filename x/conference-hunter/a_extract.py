@@ -21,7 +21,6 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_RANKS = ("A*", "A", "B", "C")
 
 SCHEMA = """
-PRAGMA journal_mode = DELETE;
 
 -- CORE ranking, imported from publication-core-2026.csv (A*–C only).
 CREATE TABLE IF NOT EXISTS core_venue (

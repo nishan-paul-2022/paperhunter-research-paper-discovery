@@ -2,7 +2,7 @@
 
 Pass 1 (shallow): OpenAlex and Semantic Scholar batches run concurrently.
 Pass 2 (deep): tier >= 1 papers with no abstract try Crossref, landing pages, and arXiv.
-Resumability via fetch_state.tried bitmask. Only content and retrieval handles used.
+Resumability via paper_fetch.tried bitmask. Only content and retrieval handles used.
 """
 
 import queue
@@ -39,7 +39,7 @@ class _Probe:
 
 
 class _Sink:
-    """Thread-safe buffered writer: abstracts + fetch_state marks, committed in chunks."""
+    """Thread-safe buffered writer: abstracts + paper_fetch marks, committed in chunks."""
 
     def __init__(self, conn, total, progress):
         self.conn, self.total, self.progress = conn, total, progress
@@ -236,7 +236,7 @@ def _deep_one(c, plan, probe):
 
 def _pass2(conn, workers, progress):
     probe = _Probe()
-    if not conn.execute("SELECT 1 FROM triage LIMIT 1").fetchone():
+    if not conn.execute("SELECT 1 FROM hunt_triage LIMIT 1").fetchone():
         progress("fetch --deep needs triage first: run `triage` (no triage rows found).")
         return _Sink(conn, 0, progress).counts(0, probe)
     todo = [(c, p) for c in b_db.fetch_candidates(conn, deep=True, min_tier=1) if (p := _plan(c))]
@@ -255,7 +255,7 @@ def _pass2(conn, workers, progress):
     if probe.stop.is_set():
         _abort_message(progress)
     else:
-        b_db.meta_set(conn, "deep_fetch_done", "1")
+        b_db.mark_deep_fetch_done(conn)
     return sink.counts(len(todo), probe)
 
 
@@ -263,6 +263,6 @@ def run_fetch(conn, *, deep=False, workers=16, progress=print):
     """Fetch missing abstracts. Returns {"candidates", "abstracts_found", "by_src", "aborted"}.
 
     deep=False: OpenAlex then S2 batches by DOI. deep=True: Crossref, landing page, arXiv (and
-    OpenAlex title search) for tier >= 1 papers; sets meta `deep_fetch_done` on a complete run.
+    OpenAlex title search) for tier >= 1 papers; a complete pass marks every run deep_fetch_done.
     """
     return (_pass2 if deep else _pass1)(conn, workers, progress)

@@ -2,8 +2,10 @@
 """Stage 3: load the papers of every listed venue into the dblp_paper table.
 
 Reads list_of_conferences and list_of_journals from archive/paperhunter.db, scans
-the DBLP XML once, and replaces dblp_paper with every paper of a listed venue in
-YEARS. The view paper_inventory adds each paper's rank and slice (e.g. a-star-2025),
+the DBLP XML once, and syncs dblp_paper with every paper of a listed venue in YEARS:
+new papers are added, existing ones updated in place (their id never changes), and
+papers no longer extracted are removed unless paper-hunter already uses them.
+The view paper_inventory adds each paper's rank and slice (e.g. a-star-2025),
 which is how paper-hunter selects the papers of a run.
 """
 import os
@@ -22,9 +24,11 @@ DB_PATH = ARCHIVE_DIR / "paperhunter.db"
 YEARS = [2023, 2024, 2025, 2026]
 
 SCHEMA = """
--- One row per DBLP paper of a listed venue (rowid keeps DBLP order). Replaced on every run.
+-- One row per DBLP paper of a listed venue. id is the stable paper id paper-hunter uses;
+-- new papers get ids in DBLP order.
 CREATE TABLE IF NOT EXISTS dblp_paper (
-    dblp_key  TEXT PRIMARY KEY,                 -- e.g. conf/ics/YangLWHT23
+    id        INTEGER PRIMARY KEY,
+    dblp_key  TEXT NOT NULL UNIQUE,             -- e.g. conf/ics/YangLWHT23
     venue_key TEXT NOT NULL,                    -- conf/ics or journals/tse
     kind      TEXT NOT NULL CHECK (kind IN ('conference', 'journal')),
     year      INTEGER NOT NULL,
@@ -42,7 +46,7 @@ CREATE INDEX IF NOT EXISTS dblp_paper_year ON dblp_paper (year);
 -- so a venue dropped from a list drops out here without re-extracting.
 DROP VIEW IF EXISTS paper_inventory;
 CREATE VIEW paper_inventory AS
-SELECT p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venue, p.ee, p.url, p.doi,
+SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venue, p.ee, p.url, p.doi,
        r.rank,
        CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
 FROM dblp_paper p
@@ -151,11 +155,32 @@ def scan_xml(xml_path, journal_index, conf_index):
 
 
 def write_papers(conn, papers):
-    print("Writing dblp_paper...")
+    print("Syncing dblp_paper...")
+    before = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
+    hunted = conn.execute("SELECT 1 FROM sqlite_master WHERE name='hunt_paper'").fetchone() is not None
     with conn:
-        conn.execute("DELETE FROM dblp_paper")
-        conn.executemany("INSERT INTO dblp_paper VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", papers)
-    print(f"  ✓ {len(papers):,} papers")
+        conn.executemany(
+            "INSERT INTO dblp_paper (dblp_key, venue_key, kind, year, title, authors, venue, ee, url, doi) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (dblp_key) DO UPDATE SET "
+            "venue_key = excluded.venue_key, kind = excluded.kind, year = excluded.year, title = excluded.title, "
+            "authors = excluded.authors, venue = excluded.venue, ee = excluded.ee, url = excluded.url, "
+            "doi = excluded.doi",
+            papers,
+        )
+        conn.execute("CREATE TEMP TABLE extracted (dblp_key TEXT PRIMARY KEY)")
+        conn.executemany("INSERT INTO extracted VALUES (?)", [(p[0],) for p in papers])
+        stale = "dblp_key NOT IN (SELECT dblp_key FROM extracted)"
+        kept = 0
+        if hunted:  # papers paper-hunter already holds content or judgements for stay
+            kept = conn.execute(
+                f"SELECT count(*) FROM dblp_paper WHERE {stale} AND id IN (SELECT paper_id FROM hunt_paper)"
+            ).fetchone()[0]
+            stale += " AND id NOT IN (SELECT paper_id FROM hunt_paper)"
+        removed = conn.execute(f"DELETE FROM dblp_paper WHERE {stale}").rowcount
+        conn.execute("DROP TABLE extracted")
+    after = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
+    print(f"  ✓ {len(papers):,} papers extracted  |  {after - before + removed:,} new  |  {removed:,} removed"
+          + (f"  |  {kept:,} no longer in DBLP but kept (used by paper-hunter)" if kept else ""))
     print()
     print("Papers per slice (paper_inventory):")
     for s, n in conn.execute("SELECT slice, count(*) FROM paper_inventory GROUP BY slice ORDER BY slice"):

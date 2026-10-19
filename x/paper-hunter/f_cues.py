@@ -202,8 +202,8 @@ def run_triage(conn, workers=0, chunk=5000):
     rv = b_db.RULES_VERSION
     workers = workers or os.cpu_count() or 1
     pending = conn.execute(
-        "SELECT COUNT(*) FROM paper p LEFT JOIN abstract a ON a.paper_id=p.id "
-        "LEFT JOIN triage t ON t.paper_id=p.id WHERE p.dup_of IS NULL AND (%s)" % _PENDING,
+        "SELECT COUNT(*) FROM hunt_item p LEFT JOIN paper_abstract a ON a.paper_id=p.id "
+        "LEFT JOIN hunt_triage t ON t.paper_id=p.id WHERE p.dup_of IS NULL AND (%s)" % _PENDING,
         (rv,)).fetchone()[0]
     use_pool = workers > 1 and pending >= _POOL_MIN
     processed = 0
