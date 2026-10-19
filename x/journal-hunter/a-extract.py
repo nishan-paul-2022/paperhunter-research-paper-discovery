@@ -18,7 +18,7 @@ REPO_ROOT = HUNTER_DIR.parent
 ARCHIVE_DIR = REPO_ROOT / "archive"
 SJR_SRC = ARCHIVE_DIR / "publication-scopus-computer-science-journal-2025.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
-DB_PATH = REPO_ROOT / "journal-supplement" / "journal.db"
+DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 
 SCHEMA = """
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS dblp_doi_prefix (
 ) WITHOUT ROWID;
 
 -- Pairs proposed by b-match.py (shared ISSN, or abbreviation-aware name agreement). Not approved.
-CREATE TABLE IF NOT EXISTS candidate (
+CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
     sjr_id   INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('issn', 'name')),
@@ -75,10 +75,10 @@ CREATE TABLE IF NOT EXISTS candidate (
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, sjr_id)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS candidate_sjr ON candidate (sjr_id);
+CREATE INDEX IF NOT EXISTS journal_candidate_sjr ON journal_candidate (sjr_id);
 
 -- Written only by the AI reviewer (run/c-journal-matching-guide.md).
-CREATE TABLE IF NOT EXISTS decision (
+CREATE TABLE IF NOT EXISTS journal_decision (
     id         INTEGER PRIMARY KEY,
     sjr_id     INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES dblp_journal ON DELETE CASCADE,
@@ -87,22 +87,22 @@ CREATE TABLE IF NOT EXISTS decision (
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK ((verdict = 'absent') = (dblp_key IS NULL))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS decision_pair ON decision (dblp_key, sjr_id) WHERE dblp_key IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS decision_one_journal_per_key ON decision (dblp_key) WHERE verdict = 'accept';
-CREATE UNIQUE INDEX IF NOT EXISTS decision_one_absent ON decision (sjr_id) WHERE verdict = 'absent';
-CREATE INDEX IF NOT EXISTS decision_sjr ON decision (sjr_id);
+CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_pair ON journal_decision (dblp_key, sjr_id) WHERE dblp_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_journal_per_key ON journal_decision (dblp_key) WHERE verdict = 'accept';
+CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_absent ON journal_decision (sjr_id) WHERE verdict = 'absent';
+CREATE INDEX IF NOT EXISTS journal_decision_sjr ON journal_decision (sjr_id);
 
-CREATE TRIGGER IF NOT EXISTS decision_accept_vs_absent_ins BEFORE INSERT ON decision
+CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_ins BEFORE INSERT ON journal_decision
 WHEN EXISTS (
-    SELECT 1 FROM decision d WHERE d.sjr_id = NEW.sjr_id
+    SELECT 1 FROM journal_decision d WHERE d.sjr_id = NEW.sjr_id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
 BEGIN SELECT RAISE(ABORT, 'SJR journal cannot be both accepted and absent'); END;
 
-CREATE TRIGGER IF NOT EXISTS decision_accept_vs_absent_upd BEFORE UPDATE ON decision
+CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_upd BEFORE UPDATE ON journal_decision
 WHEN EXISTS (
-    SELECT 1 FROM decision d WHERE d.sjr_id = NEW.sjr_id AND d.id <> NEW.id
+    SELECT 1 FROM journal_decision d WHERE d.sjr_id = NEW.sjr_id AND d.id <> NEW.id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
@@ -124,39 +124,39 @@ SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
 FROM dblp_journal j;
 
 -- Everything the AI must resolve. Empty = review complete.
-DROP VIEW IF EXISTS needs_review;
-CREATE VIEW needs_review AS
+DROP VIEW IF EXISTS journal_needs_review;
+CREATE VIEW journal_needs_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.sjr_id, s.title AS sjr_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, c.method, c.score, c.detail,
        e.papers, e.first_year, e.last_year, e.names, e.issns, e.doi_prefixes
-FROM candidate c
+FROM journal_candidate c
 JOIN sjr_journal s ON s.id = c.sjr_id
 JOIN journal_evidence e ON e.dblp_key = c.dblp_key
-WHERE NOT EXISTS (SELECT 1 FROM decision d WHERE d.dblp_key = c.dblp_key AND d.sjr_id = c.sjr_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.sjr_id = c.sjr_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM sjr_journal s
-WHERE NOT EXISTS (SELECT 1 FROM decision d WHERE d.sjr_id = s.id AND d.verdict IN ('accept', 'absent'))
+WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.sjr_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.sjr_id, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, 'decision ' || d.id || ' refers to a missing DBLP key or SJR journal: delete it',
+       NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or SJR journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL
-FROM decision d
+FROM journal_decision d
 WHERE NOT EXISTS (SELECT 1 FROM sjr_journal s WHERE s.id = d.sjr_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dblp_journal k WHERE k.dblp_key = d.dblp_key));
 
--- Final output. Stays empty until needs_review is empty.
+-- Final output. Stays empty until journal_needs_review is empty.
 DROP VIEW IF EXISTS list_of_journals;
 CREATE VIEW list_of_journals AS
 SELECT d.dblp_key,
        (SELECT name FROM dblp_journal_name n WHERE n.dblp_key = d.dblp_key
          ORDER BY papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
-FROM decision d
+FROM journal_decision d
 JOIN sjr_journal s ON s.id = d.sjr_id
 JOIN dblp_journal k ON k.dblp_key = d.dblp_key
-WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM needs_review)
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_needs_review)
 ORDER BY s.quartile, lower(s.title), d.dblp_key;
 """
 

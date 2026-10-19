@@ -17,7 +17,7 @@ REPO_ROOT = HUNTER_DIR.parent
 ARCHIVE_DIR = REPO_ROOT / "archive"
 CORE_SRC = ARCHIVE_DIR / "publication-core-2026.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
-DB_PATH = REPO_ROOT / "conference-supplement" / "conference.db"
+DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_RANKS = ("A*", "A", "B", "C")
 
 SCHEMA = """
@@ -56,17 +56,17 @@ CREATE TABLE IF NOT EXISTS dblp_proceedings (
 ) WITHOUT ROWID;
 
 -- Pairs proposed by b-match.py (acronym AND proceedings-title agreement). Not approved.
-CREATE TABLE IF NOT EXISTS candidate (
+CREATE TABLE IF NOT EXISTS conf_candidate (
     dblp_key          TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
     core_id           INTEGER NOT NULL REFERENCES core_venue ON DELETE CASCADE,
     score             REAL NOT NULL,
     proceedings_title TEXT NOT NULL,
     PRIMARY KEY (dblp_key, core_id)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS candidate_core ON candidate (core_id);
+CREATE INDEX IF NOT EXISTS conf_candidate_core ON conf_candidate (core_id);
 
 -- Written only by the AI reviewer (run/b-conference-matching-guide.md).
-CREATE TABLE IF NOT EXISTS decision (
+CREATE TABLE IF NOT EXISTS conf_decision (
     id         INTEGER PRIMARY KEY,
     core_id    INTEGER NOT NULL REFERENCES core_venue ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES dblp_venue ON DELETE CASCADE,
@@ -75,22 +75,22 @@ CREATE TABLE IF NOT EXISTS decision (
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK ((verdict = 'absent') = (dblp_key IS NULL))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS decision_pair ON decision (dblp_key, core_id) WHERE dblp_key IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS decision_one_venue_per_key ON decision (dblp_key) WHERE verdict = 'accept';
-CREATE UNIQUE INDEX IF NOT EXISTS decision_one_absent ON decision (core_id) WHERE verdict = 'absent';
-CREATE INDEX IF NOT EXISTS decision_core ON decision (core_id);
+CREATE UNIQUE INDEX IF NOT EXISTS conf_decision_pair ON conf_decision (dblp_key, core_id) WHERE dblp_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS conf_decision_one_venue_per_key ON conf_decision (dblp_key) WHERE verdict = 'accept';
+CREATE UNIQUE INDEX IF NOT EXISTS conf_decision_one_absent ON conf_decision (core_id) WHERE verdict = 'absent';
+CREATE INDEX IF NOT EXISTS conf_decision_core ON conf_decision (core_id);
 
-CREATE TRIGGER IF NOT EXISTS decision_accept_vs_absent_ins BEFORE INSERT ON decision
+CREATE TRIGGER IF NOT EXISTS conf_decision_accept_vs_absent_ins BEFORE INSERT ON conf_decision
 WHEN EXISTS (
-    SELECT 1 FROM decision d WHERE d.core_id = NEW.core_id
+    SELECT 1 FROM conf_decision d WHERE d.core_id = NEW.core_id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
 BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 
-CREATE TRIGGER IF NOT EXISTS decision_accept_vs_absent_upd BEFORE UPDATE ON decision
+CREATE TRIGGER IF NOT EXISTS conf_decision_accept_vs_absent_upd BEFORE UPDATE ON conf_decision
 WHEN EXISTS (
-    SELECT 1 FROM decision d WHERE d.core_id = NEW.core_id AND d.id <> NEW.id
+    SELECT 1 FROM conf_decision d WHERE d.core_id = NEW.core_id AND d.id <> NEW.id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
@@ -109,36 +109,36 @@ SELECT v.dblp_key, upper(substr(v.dblp_key, 6)) AS acronym, v.papers, v.first_ye
 FROM dblp_venue v;
 
 -- Everything the AI must resolve. Empty = review complete.
-DROP VIEW IF EXISTS needs_review;
-CREATE VIEW needs_review AS
+DROP VIEW IF EXISTS conf_needs_review;
+CREATE VIEW conf_needs_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.title AS core_title, v.acronym, v.rank,
        c.score, c.proceedings_title AS detail,
        e.papers, e.first_year, e.last_year, e.booktitles, e.proceedings_titles
-FROM candidate c
+FROM conf_candidate c
 JOIN core_venue v ON v.id = c.core_id
 JOIN venue_evidence e ON e.dblp_key = c.dblp_key
-WHERE NOT EXISTS (SELECT 1 FROM decision d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
+WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, v.id, v.title, v.acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM core_venue v
-WHERE NOT EXISTS (SELECT 1 FROM decision d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
+WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.core_id, NULL, NULL, NULL,
-       NULL, 'decision ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
+       NULL, 'conf_decision ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
        NULL, NULL, NULL, NULL, NULL
-FROM decision d
+FROM conf_decision d
 WHERE NOT EXISTS (SELECT 1 FROM core_venue v WHERE v.id = d.core_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
--- Final output. Stays empty until needs_review is empty.
+-- Final output. Stays empty until conf_needs_review is empty.
 DROP VIEW IF EXISTS list_of_conferences;
 CREATE VIEW list_of_conferences AS
 SELECT d.dblp_key, upper(substr(d.dblp_key, 6)) AS dblp_acronym, v.title, v.rank AS ranking
-FROM decision d
+FROM conf_decision d
 JOIN core_venue v ON v.id = d.core_id
 JOIN dblp_venue k ON k.dblp_key = d.dblp_key
-WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM needs_review)
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_needs_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
          lower(v.title), d.dblp_key;
 """

@@ -2,9 +2,9 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-The humans have already run `a-extract.py` and `b-match.py`, which loaded the database `x/journal-supplement/journal.db`. Your job is to fill the `decision` table until the view `needs_review` is empty. The view `list_of_journals` is then the final list: every DBLP journal key (`journals/<name>`) that belongs to a Scopus Q1–Q4 computer-science journal, with zero false positives and zero false negatives.
+The humans have already run `a-extract.py` and `b-match.py`, which loaded the database `x/archive/paperhunter.db`. Your job is to fill the `journal_decision` table until the view `journal_needs_review` is empty. The view `list_of_journals` is then the final list: every DBLP journal key (`journals/<name>`) that belongs to a Scopus Q1–Q4 computer-science journal, with zero false positives and zero false negatives.
 
-Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `sqlite3 journal-supplement/journal.db` or Python's `sqlite3`. Start every connection with `PRAGMA foreign_keys = ON;`.
+Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`. Start every connection with `PRAGMA foreign_keys = ON;`.
 
 ---
 
@@ -17,39 +17,39 @@ Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `
 | `dblp_journal_name(dblp_key, name, papers)` | table, from DBLP | read: how articles of a key name their journal (ISO-4 abbreviations) |
 | `dblp_issn(dblp_key, issn, papers)` | table, from DBLP | read: checksum-valid ISSNs found in article links, the strongest evidence |
 | `dblp_doi_prefix(dblp_key, prefix, papers)` | table, from DBLP | read: publisher of the articles (10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global) |
-| `candidate(dblp_key, sjr_id, method, score, detail)` | table, from `b-match.py` | read: proposed pairs, not approved |
-| `decision(id, sjr_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
+| `journal_candidate(dblp_key, sjr_id, method, score, detail)` | table, from `b-match.py` | read: proposed pairs, not approved |
+| `journal_decision(id, sjr_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
 | `journal_evidence` | view | read: one summary row per key (top names, ISSNs, DOI prefixes) |
-| `needs_review` | view | read: your to-do list |
-| `list_of_journals` | view | final output (empty until `needs_review` is empty) |
+| `journal_needs_review` | view | read: your to-do list |
+| `list_of_journals` | view | final output (empty until `journal_needs_review` is empty) |
 
-Never modify any table other than `decision`, and never alter the schema.
+Never modify any table other than `journal_decision`, and never alter the schema.
 
 DBLP's XML has no ISSN field. `dblp_issn` holds only the ISSNs embedded in article links (old Elsevier DOIs and PIIs, Wiley SICI DOIs), so most keys have none. Absence of an ISSN proves nothing; a matching ISSN is near-proof.
 
 ## Procedure
 
-1. `SELECT issue, count(*) FROM needs_review GROUP BY issue;`. If it returns nothing, go to step 5.
+1. `SELECT issue, count(*) FROM journal_needs_review GROUP BY issue;`. If it returns nothing, go to step 5.
 2. Resolve every `INVALID` row by deleting the decision it names.
 3. Resolve every `UNREVIEWED` row (step 1 of "How to decide").
-4. Query `needs_review` again. Accepting a key also covers its SJR journal, so the `UNCOVERED` list shrinks. Resolve the remaining `UNCOVERED` rows. Repeat steps 1–4 until `needs_review` is empty.
+4. Query `journal_needs_review` again. Accepting a key also covers its SJR journal, so the `UNCOVERED` list shrinks. Resolve the remaining `UNCOVERED` rows. Repeat steps 1–4 until `journal_needs_review` is empty.
 5. Report in five lines or fewer:
    - `SELECT quartile, count(*) FROM list_of_journals GROUP BY quartile;`
    - SJR journals covered vs `absent`
    - number of decisions you added
 
-On a first run `decision` is empty, and every candidate and every SJR journal appears in `needs_review`. Work through all of them. You may use scripts to read and filter, but every decision must rest on the evidence for that row.
+On a first run `journal_decision` is empty, and every candidate and every SJR journal appears in `journal_needs_review`. Work through all of them. You may use scripts to read and filter, but every decision must rest on the evidence for that row.
 
 ## Writing decisions
 
 ```sql
-INSERT INTO decision (sjr_id, dblp_key, verdict, reason)
+INSERT INTO journal_decision (sjr_id, dblp_key, verdict, reason)
 VALUES (12345, 'journals/csur', 'accept', 'ACM Comput. Surv. = ACM Computing Surveys, DOI prefix 10.1145');
 
-INSERT INTO decision (sjr_id, dblp_key, verdict, reason)
+INSERT INTO journal_decision (sjr_id, dblp_key, verdict, reason)
 VALUES (23456, 'journals/ai', 'reject', 'Artificial Intelligence (Elsevier), not Artificial Intelligence in Medicine');
 
-INSERT INTO decision (sjr_id, dblp_key, verdict, reason)
+INSERT INTO journal_decision (sjr_id, dblp_key, verdict, reason)
 VALUES (34567, NULL, 'absent', 'Not indexed in DBLP');
 ```
 
@@ -59,7 +59,7 @@ VALUES (34567, NULL, 'absent', 'Not indexed in DBLP');
 | `reject` | the key | the proposed pair is a different journal |
 | `absent` | `NULL` | this SJR journal has no DBLP key of its own |
 
-- Take `sjr_id` from `needs_review.sjr_id` or `sjr_journal.id`.
+- Take `sjr_id` from `journal_needs_review.sjr_id` or `sjr_journal.id`.
 - `reason` is one line of evidence and is required.
 - The database rejects invalid writes:
   - a key accepted for two journals
@@ -93,4 +93,4 @@ VALUES (34567, NULL, 'absent', 'Not indexed in DBLP');
 
 - One DBLP key maps to at most one SJR journal.
 - Never accept on a short or generic name alone; the publisher or an ISSN must agree.
-- You are done only when `SELECT count(*) FROM needs_review;` returns 0.
+- You are done only when `SELECT count(*) FROM journal_needs_review;` returns 0.

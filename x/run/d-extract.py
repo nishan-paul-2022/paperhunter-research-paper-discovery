@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import csv
 import os
+import sqlite3
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -8,30 +9,28 @@ from lxml import etree
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-XML_PATH = REPO_ROOT / "paper-database" / "dblp.xml"
+ARCHIVE_DIR = REPO_ROOT / "archive"
+XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
+DB_PATH = ARCHIVE_DIR / "paperhunter.db"
 OUTPUT_DIR = REPO_ROOT / "paper-inventory"
-JOURNAL_LIST = REPO_ROOT / "journal-context" / "list-of-journals.csv"
-CONF_LIST = REPO_ROOT / "conference-context" / "list-of-conferences.csv"
 YEARS = [2023, 2024, 2025, 2026]
 FIELDS = ["dblp_key", "title", "authors", "year", "venue", "ee", "url"]
 
 
-def load_journal_list():
-    journal_index = {}
-    with open(JOURNAL_LIST, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            journal_index[row["dblp_key"]] = row["quartile"]
-    return journal_index
+def load_list(conn, view, rank_column):
+    """dblp_key → rank from a final-list view; the view is empty until its review is complete."""
+    index = dict(conn.execute(f"SELECT dblp_key, {rank_column} FROM {view}"))
+    if not index:
+        sys.exit(f"ERROR: {view} is empty — finish its review first (see run/ matching guides)")
+    return index
 
 
-def load_conference_list():
-    conf_index = {}
-    with open(CONF_LIST, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            conf_index[row["dblp_key"]] = row["ranking"]
-    return conf_index
+def load_journal_list(conn):
+    return load_list(conn, "list_of_journals", "quartile")
+
+
+def load_conference_list(conn):
+    return load_list(conn, "list_of_conferences", "ranking")
 
 
 def extract_text(element, tag):
@@ -175,14 +174,14 @@ def write_papers(papers, output_dir):
 
 def main():
     if not XML_PATH.exists():
-        sys.exit(f"ERROR: dblp.xml not found at {XML_PATH}")
-    if not JOURNAL_LIST.exists():
-        sys.exit(f"ERROR: Journal list not found at {JOURNAL_LIST}")
-    if not CONF_LIST.exists():
-        sys.exit(f"ERROR: Conference list not found at {CONF_LIST}")
+        sys.exit(f"ERROR: paper-dblp.xml not found at {XML_PATH}")
+    if not DB_PATH.exists():
+        sys.exit(f"ERROR: database not found at {DB_PATH}")
     print("Loading journal and conference lists...")
-    journal_index = load_journal_list()
-    conf_index = load_conference_list()
+    conn = sqlite3.connect(DB_PATH)
+    journal_index = load_journal_list(conn)
+    conf_index = load_conference_list(conn)
+    conn.close()
     print(f"  ✓ {len(journal_index)} journals loaded")
     print(f"  ✓ {len(conf_index)} conferences loaded")
     papers = scan_xml(XML_PATH, journal_index, conf_index)

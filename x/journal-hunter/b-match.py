@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Stage 2: propose DBLP key ↔ SJR journal pairs into the candidate table.
+"""Stage 2: propose DBLP key ↔ SJR journal pairs into the journal_candidate table.
 
 A pair is proposed when a key's article links carry one of the journal's ISSNs,
 or when the key's journal name abbreviates the SJR title word by word
 (ISO-4 style: "Comput. Surv." ↔ "Computing Surveys").
-Proposals are not approvals: the AI reviewer decides each one (needs_review).
+Proposals are not approvals: the AI reviewer decides each one (see journal_needs_review).
 """
 import re
 import sqlite3
@@ -14,7 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = REPO_ROOT / "journal-supplement" / "journal.db"
+DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 MIN_NAME_SCORE = 0.6
 MIN_NAME_SHARE = 0.15
 STOPWORDS = set(
@@ -137,12 +137,12 @@ def main() -> None:
     print()
     pairs = propose(conn)
     with conn:
-        conn.execute("DELETE FROM candidate")
-        conn.executemany("INSERT INTO candidate VALUES (?, ?, ?, ?, ?)", pairs)
-    issues = dict(conn.execute("SELECT issue, count(*) FROM needs_review GROUP BY issue").fetchall())
-    decisions = conn.execute("SELECT count(*) FROM decision").fetchone()[0]
+        conn.execute("DELETE FROM journal_candidate")
+        conn.executemany("INSERT INTO journal_candidate VALUES (?, ?, ?, ?, ?)", pairs)
+    issues = dict(conn.execute("SELECT issue, count(*) FROM journal_needs_review GROUP BY issue").fetchall())
+    decisions = conn.execute("SELECT count(*) FROM journal_decision").fetchone()[0]
     final = conn.execute("SELECT count(*) FROM list_of_journals").fetchone()[0]
-    by_method = dict(conn.execute("SELECT method, count(*) FROM candidate GROUP BY method").fetchall())
+    by_method = dict(conn.execute("SELECT method, count(*) FROM journal_candidate GROUP BY method").fetchall())
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)"
           f"  |  ISSN {by_method.get('issn', 0)}  |  name {by_method.get('name', 0)}")
     print(f"  ├─ decisions:   {decisions}")
