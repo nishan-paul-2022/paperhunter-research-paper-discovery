@@ -20,6 +20,7 @@ ARCHIVE_DIR = REPO_ROOT / "archive"
 SCOPUS_SRC = ARCHIVE_DIR / "publication-scopus-computer-science-journal-2025.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
+ENV_PATH = REPO_ROOT / ".env"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 
 ISSN_DOI = re.compile(r"doi\.org/10\.\d{4,9}/(?:\(SICI\)|j\.issn\.|issn\.|j\.)?(\d{4})-(\d{3}[\dX])(?![\dA-Z])", re.I)
@@ -27,8 +28,18 @@ ISSN_PII = re.compile(r"(?:pii/|10\.1016/)S(\d{4})-?(\d{3}[\dXx])", re.I)
 DOI_PREFIX = re.compile(r"doi\.org/(10\.\d{4,9})/", re.I)
 DOI_FULL = re.compile(r"doi\.org/(10\.\d{4,9}/\S+)", re.I)
 CROSSREF_API = "https://api.crossref.org/works/"
-CROSSREF_WORKERS = 5
+CROSSREF_POLITE_WORKERS = 3
+CROSSREF_PUBLIC_WORKERS = 1
+CROSSREF_AGENT = "paperhunter-journal-hunter/1.0"
 CROSSREF_PASSES = 3
+
+
+def load_env() -> None:
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text().splitlines():
+            k, sep, v = line.strip().partition("=")
+            if sep and not k.startswith("#"):
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
@@ -207,11 +218,15 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     )
 
 
-def crossref_lookup(doi: str) -> tuple | None:
+def crossref_lookup(doi: str, mailto: str | None) -> tuple | None:
     url = CROSSREF_API + urllib.parse.quote(doi, safe="/")
+    agent = CROSSREF_AGENT
+    if mailto:
+        url += "?mailto=" + urllib.parse.quote(mailto)
+        agent += f" (mailto:{mailto})"
     for attempt in range(4):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "paperhunter-journal-hunter/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": agent})
             with urllib.request.urlopen(req, timeout=30) as resp:
                 m = json.load(resp)["message"]
         except urllib.error.HTTPError as e:
@@ -235,6 +250,10 @@ def load_crossref(conn: sqlite3.Connection) -> None:
     print("━" * 70)
     print("  Phase 3 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
     print("━" * 70)
+    mailto = os.environ.get("CROSSREF_MAILTO", "").strip() or None
+    workers = CROSSREF_POLITE_WORKERS if mailto else CROSSREF_PUBLIC_WORKERS
+    print(f"  Crossref pool: {'polite (' + mailto + ')' if mailto else 'public (set CROSSREF_MAILTO in .env)'}"
+          f"  |  {workers} parallel requests\n")
     for attempt in range(1, CROSSREF_PASSES + 1):
         pending = [r[0] for r in conn.execute("SELECT doi FROM journal_dblp_crossref WHERE status IS NULL")]
         if not pending:
@@ -243,8 +262,8 @@ def load_crossref(conn: sqlite3.Connection) -> None:
             time.sleep(60)
         print(f"  Pass {attempt}: {len(pending):,} DOIs to look up (answers already in the database are kept)\n")
         done = failed = 0
-        with ThreadPoolExecutor(CROSSREF_WORKERS) as pool:
-            for doi, row in zip(pending, pool.map(crossref_lookup, pending)):
+        with ThreadPoolExecutor(workers) as pool:
+            for doi, row in zip(pending, pool.map(lambda d: crossref_lookup(d, mailto), pending)):
                 if row is None:
                     failed += 1
                 else:
@@ -275,6 +294,7 @@ def main() -> None:
     print("║         paperhunter  ·  Journal Evidence Loader                      ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {DB_PATH}\n")
+    load_env()
     conn = connect()
     load_scopus(conn, scopus_path)
     load_dblp(conn, xml_path)

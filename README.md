@@ -42,7 +42,13 @@ python3 journal-hunter/a_extract.py
 python3 journal-hunter/b_match.py
 ```
 
-`a_extract.py` scans the XML, then looks up about 5.5k sampled DOIs in Crossref (about 1 hour the first time; answers stay in the database, so later runs only look up new DOIs).
+Put a contact e-mail in `.env` at the repository root, so Crossref serves the lookups from its faster polite pool:
+
+```
+CROSSREF_MAILTO=you@example.org
+```
+
+`a_extract.py` scans the XML, then looks up about 5.5k sampled DOIs in Crossref. Answers stay in the database, so later runs only look up new DOIs.
 
 Give `journal-hunter/c_journal_matching_guide.md` to the AI.
 
