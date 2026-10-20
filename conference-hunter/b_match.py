@@ -120,9 +120,6 @@ def main_booktitles(conn: sqlite3.Connection) -> dict[str, set[str]]:
 
 def related_keys(keys: set[str], all_keys: list[str], booktitles: dict[str, set[str]],
                  by_booktitle: dict[str, set[str]]) -> set[str]:
-    # Renamed or split-off series the acronym match cannot see:
-    # track keys named after a matched key (conf/icse -> conf/icse-seip) and
-    # keys sharing a main booktitle with it (conf/imc -> conf/imw).
     related = set()
     for key in keys:
         if key.startswith("conf/"):
@@ -133,7 +130,6 @@ def related_keys(keys: set[str], all_keys: list[str], booktitles: dict[str, set[
 
 
 def full_title_keys(title: str, title_blobs: dict[str, str]) -> set[str]:
-    # Keys whose proceedings titles contain the CORE full title (conf/fpca for ICFP).
     name = fold(strip_parens(title)).strip()
     if len(name) < MIN_FULL_TITLE_LEN:
         return set()

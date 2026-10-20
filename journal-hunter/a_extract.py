@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import argparse
 import csv
 import html
 import json
@@ -23,15 +22,13 @@ XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 
-# An ISSN counts only at the start of a DOI suffix: 10.1016/0020-0190(..), 10.1002/(SICI)1097-4571(..),
-# 10.1111/j.1467-8640.., 10.1186/1687-1499-2012-55, 10.2352/ISSN.2470-1173.., 10.11896/j.issn.1002-137X..
-# Anywhere else "dddd-dddd" is a year and article number (10.1108/K-03-2018-0123, 10.1515/jisys-2018-0004).
 ISSN_DOI = re.compile(r"doi\.org/10\.\d{4,9}/(?:\(SICI\)|j\.issn\.|issn\.|j\.)?(\d{4})-(\d{3}[\dX])(?![\dA-Z])", re.I)
 ISSN_PII = re.compile(r"(?:pii/|10\.1016/)S(\d{4})-?(\d{3}[\dXx])", re.I)
 DOI_PREFIX = re.compile(r"doi\.org/(10\.\d{4,9})/", re.I)
 DOI_FULL = re.compile(r"doi\.org/(10\.\d{4,9}/\S+)", re.I)
 CROSSREF_API = "https://api.crossref.org/works/"
 CROSSREF_WORKERS = 5
+CROSSREF_PASSES = 3
 
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
@@ -157,8 +154,6 @@ def widen(span: dict, key, year: int) -> None:
 
 
 def doi_samples(dois_by_year: dict[tuple[str, str, int], str]) -> list[tuple[str, str, str, int]]:
-    # Per key: the oldest and newest DOI under each journal name, plus the two newest years,
-    # so Crossref sees every name the key used and its current ISSNs.
     by_key: dict[str, list[tuple[int, str, str]]] = defaultdict(list)
     for (key, name, year), doi in dois_by_year.items():
         by_key[key].append((year, name, doi))
@@ -198,7 +193,6 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
                          "VALUES (?, ?, ?, ?, ?)", name_rows)
         conn.executemany("INSERT INTO journal_dblp_issn VALUES (?, ?, ?)", issn_rows)
         conn.executemany("INSERT INTO journal_dblp_doi VALUES (?, ?, ?)", prefix_rows)
-        # Keep Crossref answers for DOIs still sampled; new samples wait for phase 3.
         conn.execute("CREATE TEMP TABLE sampled (doi TEXT PRIMARY KEY, dblp_key TEXT, name TEXT, year INTEGER)")
         conn.executemany("INSERT INTO sampled VALUES (?, ?, ?, ?)", samples)
         conn.execute("DELETE FROM journal_dblp_crossref WHERE doi NOT IN (SELECT doi FROM sampled)")
@@ -213,10 +207,8 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     )
 
 
-def crossref_lookup(doi: str, mailto: str | None) -> tuple | None:
+def crossref_lookup(doi: str) -> tuple | None:
     url = CROSSREF_API + urllib.parse.quote(doi, safe="/")
-    if mailto:
-        url += "?mailto=" + urllib.parse.quote(mailto)
     for attempt in range(4):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "paperhunter-journal-hunter/1.0"})
@@ -239,45 +231,44 @@ def crossref_lookup(doi: str, mailto: str | None) -> tuple | None:
     return None
 
 
-def load_crossref(conn: sqlite3.Connection, mailto: str | None) -> None:
+def load_crossref(conn: sqlite3.Connection) -> None:
     print("━" * 70)
     print("  Phase 3 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
     print("━" * 70)
-    pending = [r[0] for r in conn.execute("SELECT doi FROM journal_dblp_crossref WHERE status IS NULL")]
-    print(f"  {len(pending):,} DOIs to look up (answers are cached; failed lookups retry on the next run)\n")
-    done = failed = 0
-    with ThreadPoolExecutor(CROSSREF_WORKERS) as pool:
-        for doi, row in zip(pending, pool.map(lambda d: crossref_lookup(d, mailto), pending)):
-            if row is None:
-                failed += 1
-            else:
-                conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, title = ?, "
-                             "publisher = ? WHERE doi = ?", (*row, doi))
-            done += 1
-            if done % 100 == 0:
-                conn.commit()
-                print(f"  {done:,}/{len(pending):,}  |  failed: {failed}", end="\r", flush=True)
-    conn.commit()
+    for attempt in range(1, CROSSREF_PASSES + 1):
+        pending = [r[0] for r in conn.execute("SELECT doi FROM journal_dblp_crossref WHERE status IS NULL")]
+        if not pending:
+            break
+        if attempt > 1:
+            time.sleep(60)
+        print(f"  Pass {attempt}: {len(pending):,} DOIs to look up (answers already in the database are kept)\n")
+        done = failed = 0
+        with ThreadPoolExecutor(CROSSREF_WORKERS) as pool:
+            for doi, row in zip(pending, pool.map(crossref_lookup, pending)):
+                if row is None:
+                    failed += 1
+                else:
+                    conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, title = ?, "
+                                 "publisher = ? WHERE doi = ?", (*row, doi))
+                done += 1
+                if done % 100 == 0:
+                    conn.commit()
+                    print(f"  {done:,}/{len(pending):,}  |  failed: {failed}", end="\r", flush=True)
+        conn.commit()
+        print()
     stats = dict(conn.execute("SELECT coalesce(status, 0), count(*) FROM journal_dblp_crossref GROUP BY 1"))
     keys = conn.execute("SELECT count(DISTINCT dblp_key) FROM journal_dblp_crossref WHERE status = 200").fetchone()[0]
     print(f"\n  ✓  {stats.get(200, 0):,} found  |  {stats.get(404, 0):,} not in Crossref  |  "
           f"{stats.get(0, 0):,} still pending  |  {keys:,} keys with Crossref evidence\n")
     if stats.get(0):
-        print("  ✗ Some lookups failed: run a_extract.py --skip-xml again to retry them\n")
+        print("  ✗ Some lookups still failed: run a_extract.py again to retry them\n")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--xml", default=str(XML_PATH), help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})")
-    ap.add_argument("--scopus", default=str(SCOPUS_SRC), help=f"Path to Scopus CSV  (default: {SCOPUS_SRC.name})")
-    ap.add_argument("--skip-xml", action="store_true", help="Keep the DBLP evidence already in the database")
-    ap.add_argument("--skip-crossref", action="store_true", help="Do not look up pending DOIs in Crossref")
-    ap.add_argument("--mailto", help="Contact e-mail for the Crossref polite pool (faster lookups)")
-    args = ap.parse_args()
-    xml_path, scopus_path = Path(args.xml), Path(args.scopus)
+    xml_path, scopus_path = XML_PATH, SCOPUS_SRC
     if not scopus_path.exists():
         sys.exit(f"Scopus CSV not found: {scopus_path}")
-    if not args.skip_xml and not xml_path.exists():
+    if not xml_path.exists():
         sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
@@ -286,15 +277,8 @@ def main() -> None:
     print(f"\n  Database: {DB_PATH}\n")
     conn = connect()
     load_scopus(conn, scopus_path)
-    if args.skip_xml:
-        n = conn.execute("SELECT count(*) FROM journal_dblp_venue").fetchone()[0]
-        if not n:
-            sys.exit("--skip-xml given but the database has no DBLP evidence yet")
-        print(f"  Skipping XML scan: keeping {n:,} DBLP keys already loaded\n")
-    else:
-        load_dblp(conn, xml_path)
-    if not args.skip_crossref:
-        load_crossref(conn, args.mailto)
+    load_dblp(conn, xml_path)
+    load_crossref(conn)
     conn.close()
     print("━" * 70)
     print("  Done.  → Run b_match.py next")

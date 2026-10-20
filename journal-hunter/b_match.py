@@ -10,8 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 MIN_NAME_SCORE = 0.6
 MIN_NAME_SHARE = 0.15
-RECENT_NAME_YEARS = 3  # a name used this close to the key's newest year counts even below MIN_NAME_SHARE (renames)
-METHODS = ("crossref", "issn", "name")  # strongest first
+RECENT_NAME_YEARS = 3
+METHODS = ("crossref", "issn", "name")
 STOPWORDS = set(
     "a an the of on in for and to at with from by its de des du d la le les et fur und "
     "der die das y e em".split()
@@ -81,7 +81,6 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     scopus = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in scopus for i in (i1, i2) if i}
     scopus_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in scopus]
-    # (key, scopus_id) -> method -> (score, detail); a pair keeps every piece of evidence found for it
     evidence: dict[tuple[str, int], dict[str, tuple[float, str]]] = defaultdict(dict)
 
     def add(key: str, sid: int, method: str, score: float, detail: str) -> None:

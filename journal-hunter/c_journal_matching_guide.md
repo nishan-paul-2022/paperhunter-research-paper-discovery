@@ -55,7 +55,7 @@ Web sources, authoritative when the data above leaves doubt:
 
 **If dblp.org is unreachable.** dblp.org and its mirrors (`dblp.uni-trier.de`, `dblp.dagstuhl.de`) sit behind one bot wall. If one answers with a "Making sure you're not a bot" page, the others will too: do not retry them. The tables above, the dump `archive/paper-dblp.xml` (`grep 'key="journals/x/'` for a key's articles) and Crossref replace it. Never write that you checked DBLP when you could not; append `DBLP web unreachable` to every `absent` reason written without it.
 
-If `journal_dblp_crossref` does not exist, or `SELECT count(*) FROM journal_dblp_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (or `a_extract.py --skip-xml` to retry failed Crossref lookups), then `journal-hunter/b_match.py`.
+If `journal_dblp_crossref` does not exist, or `SELECT count(*) FROM journal_dblp_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `journal-hunter/b_match.py`.
 
 ---
 
