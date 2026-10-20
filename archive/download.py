@@ -133,10 +133,8 @@ def _extract(gz_path: Path, xml_path: Path) -> None:
 def main() -> None:
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Fetch remote MD5 to check for updates (only 46 bytes transferred)
     remote_md5 = _fetch_remote_md5()
 
-    # Corner case: Network unreachable / offline
     if not remote_md5:
         if XML_PATH.exists() and DTD_PATH.exists():
             print("Could not reach DBLP to check for updates. Using existing local archive.")
@@ -148,18 +146,15 @@ def main() -> None:
         else:
             sys.exit("Error: Could not reach DBLP and required local files are missing.")
 
-    # 2. Determine local MD5
     local_md5 = None
     if MD5_PATH.exists():
         local_md5 = MD5_PATH.read_text().strip().split()[0].lower()
     elif GZ_PATH.exists():
-        # MD5 file was missing but zip exists; calculate once and cache
         print("Calculating checksum of existing local zip...", end="\r", flush=True)
         local_md5 = _calc_local_md5(GZ_PATH)
         MD5_PATH.write_text(f"{local_md5}  paper-dblp.xml.gz\n")
         print(" " * 60, end="\r")
 
-    # 3. Check if new zip download is required
     need_new_gz = (not GZ_PATH.exists()) or (local_md5 != remote_md5)
 
     if need_new_gz:
@@ -167,7 +162,6 @@ def main() -> None:
             print("New DBLP release detected. Downloading update...")
         _download(URL_GZ, GZ_PATH, "paper-dblp.xml.gz")
 
-        # Verify downloaded zip against remote MD5
         downloaded_md5 = _calc_local_md5(GZ_PATH)
         if downloaded_md5 != remote_md5:
             GZ_PATH.unlink(missing_ok=True)
@@ -175,11 +169,9 @@ def main() -> None:
 
         MD5_PATH.write_text(f"{remote_md5}  paper-dblp.xml.gz\n")
 
-    # 4. Check dblp.dtd (download if missing or if updated release was fetched)
     if not DTD_PATH.exists() or need_new_gz:
         _download(URL_DTD, DTD_PATH, "dblp.dtd")
 
-    # 5. Check paper-dblp.xml (extract if missing or if updated release was fetched)
     if not XML_PATH.exists() or need_new_gz:
         _extract(GZ_PATH, XML_PATH)
 

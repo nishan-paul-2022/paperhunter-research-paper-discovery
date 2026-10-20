@@ -1,22 +1,4 @@
 #!/usr/bin/env python3
-"""AI review: every fetched paper is read and decided once, accepted or rejected.
-
-Reviewers (AI agents following paper-hunter/e_paper_matching_guide.md) work in parallel:
-  claim   lease a batch of undecided papers and print what the database knows about them
-  submit  store a batch of decisions; each record is validated, bad ones are sent back
-Decisions:
-  paper_accepted  accepted papers with their role (baseline, benchmark, evaluation, survey)
-  paper_rejected  rejected papers with their reject class
-  review_claim    leases, so two reviewers never get the same paper (expire after LEASE_SECONDS)
-A paper is in at most one of paper_accepted / paper_rejected (enforced by triggers).
-
-Commands:
-  python3 d_review.py claim --owner w1 [--n 20] [--slice a-star-2025 ...]
-  python3 d_review.py submit --owner w1 --file /tmp/w1.json
-  python3 d_review.py reopen conf/uss/X23 ...      undo decisions so the papers are claimed again
-  python3 d_review.py status
-  python3 d_review.py accepted                     the accepted papers with their DBLP record
-"""
 import argparse
 import difflib
 import json
@@ -97,8 +79,6 @@ def open_db():
     return conn
 
 
-# --------------------------------------------------------------------------- text matching
-
 _CHAR_MAP = {
     **dict.fromkeys(map(ord, "‐‑‒–—―−"), "-"),
     **dict.fromkeys(map(ord, "‘’‚‛′`´"), "'"),
@@ -108,13 +88,11 @@ _CHAR_MAP = {
 
 
 def normtext(s):
-    """NFKC, casefold, dash and quote unification, collapsed whitespace."""
     s = unicodedata.normalize("NFKC", s or "").casefold().translate(_CHAR_MAP)
     return " ".join(s.split())
 
 
 def quote_in(quote, text):
-    """True when the quote occurs in the text, allowing small copy differences (92% match)."""
     q, h = normtext(quote), normtext(text)
     if not q or not h:
         return False
@@ -124,10 +102,7 @@ def quote_in(quote, text):
     return sm.find_longest_match(0, len(q), 0, len(h)).size >= MATCH_RATIO * len(q)
 
 
-# --------------------------------------------------------------------------- claim
-
 def dossier(conn, pid):
-    """What a reviewer reads: content only, no venue, year or authors (see the guide, section 1)."""
     p = conn.execute("SELECT id, title FROM dblp_paper WHERE id = ?", (pid,)).fetchone()
     d = conn.execute("SELECT * FROM paper_detail WHERE paper_id = ?", (pid,)).fetchone()
     terms = {}
@@ -154,7 +129,6 @@ def cmd_claim(a):
         where.append(f"p.id IN (SELECT id FROM paper_inventory WHERE slice IN ({','.join('?' * len(a.slice))}))")
         args += a.slice
     conn.execute("BEGIN IMMEDIATE")
-    # papers this owner already holds come first, so a restarted reviewer resumes its batch
     ids = [r[0] for r in conn.execute(
         f"SELECT p.id FROM dblp_paper p LEFT JOIN review_claim c ON c.paper_id = p.id AND c.owner = ? "
         f"WHERE {' AND '.join(where)} ORDER BY c.paper_id IS NULL, p.id LIMIT ?",
@@ -167,10 +141,7 @@ def cmd_claim(a):
         print("no papers left to claim", file=sys.stderr)
 
 
-# --------------------------------------------------------------------------- submit
-
 def validate(conn, rec, owner):
-    """Every problem with one record as short messages; [] means it may be stored."""
     if not isinstance(rec, dict):
         return ["each record must be a JSON object"]
     errs = []
@@ -270,8 +241,6 @@ def cmd_submit(a):
     sys.exit(1 if bad else 0)
 
 
-# --------------------------------------------------------------------------- reporting
-
 def cmd_reopen(a):
     conn = open_db()
     conn.execute("BEGIN IMMEDIATE")
@@ -289,7 +258,7 @@ def cmd_reopen(a):
 
 def cmd_status(a):
     conn = open_db()
-    q = lambda sql, *args: conn.execute(sql, args).fetchone()[0]  # noqa: E731
+    q = lambda sql, *args: conn.execute(sql, args).fetchone()[0]
     fetched = q("SELECT count(DISTINCT paper_id) FROM paper_source")
     acc, rej = q("SELECT count(*) FROM paper_accepted"), q("SELECT count(*) FROM paper_rejected")
     print(f"papers fetched     {fetched:>10,}")
@@ -317,7 +286,7 @@ def cmd_accepted(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("claim", help="lease undecided papers and print their details")
     c.add_argument("--owner", required=True)

@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Stage 1: load Scopus (SJR) rankings and DBLP journal evidence into journal.db.
-
-Creates the schema on first run. Reruns refresh the evidence in place and keep
-every decision whose SJR journal and DBLP key still exist.
-"""
 import argparse
 import csv
 import os

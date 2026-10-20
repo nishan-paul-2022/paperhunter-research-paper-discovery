@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Stage 2: propose DBLP key ↔ SJR journal pairs into the journal_candidate table.
-
-A pair is proposed when a key's article links carry one of the journal's ISSNs,
-or when the key's journal name abbreviates the SJR title word by word
-(ISO-4 style: "Comput. Surv." ↔ "Computing Surveys").
-Proposals are not approvals: the AI reviewer decides each one (see journal_needs_review).
-"""
 import re
 import sqlite3
 import sys
@@ -21,7 +14,6 @@ STOPWORDS = set(
     "a an the of on in for and to at with from by its de des du d la le les et fur und "
     "der die das y e em".split()
 )
-# Publisher words DBLP names may carry while the SJR title drops them (or the reverse).
 OPTIONAL = {"acm", "ieee", "siam", "iet", "ieice", "ipsj", "informs", "ams", "elsevier", "springer"}
 
 
@@ -42,14 +34,12 @@ def tokens(s: str) -> list[str]:
 
 
 def title_variants(title: str) -> list[list[str]]:
-    """The SJR title, and the same without a subtitle or a parenthetical qualifier."""
     base = re.sub(r"\(.*?\)", " ", title)
     variants = {title, base, re.split(r":| - ", base)[0]}
     return [t for t in (tokens(v) for v in variants) if t]
 
 
 def abbreviates(d: str, s: str) -> bool:
-    """True if DBLP word d is s, a prefix of s, or a contraction of s ("mgmt" → "management")."""
     if d == s or s.startswith(d):
         return True
     if len(d) >= 3 and d[0] == s[0]:
@@ -59,7 +49,6 @@ def abbreviates(d: str, s: str) -> bool:
 
 
 def align(d_toks: list[str], s_toks: list[str]) -> int:
-    """Most SJR words covered when every DBLP word abbreviates one SJR word, in order; -1 if impossible."""
     n, m = len(d_toks), len(s_toks)
     neg = -1
     best = [[neg] * (m + 1) for _ in range(n + 1)]
@@ -89,7 +78,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     sjr = conn.execute("SELECT id, title, issn_1, issn_2 FROM sjr_journal").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in sjr for i in (i1, i2) if i}
     sjr_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in sjr]
-    pairs: dict[tuple[str, int], tuple[str, float, str]] = {}  # (key, sjr_id) → (method, score, detail)
+    pairs: dict[tuple[str, int], tuple[str, float, str]] = {}
 
     issn_total: dict[str, int] = defaultdict(int)
     issn_rows = conn.execute("SELECT dblp_key, issn, papers FROM dblp_issn").fetchall()

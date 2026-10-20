@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Stage 2: propose DBLP key ↔ CORE venue pairs into the conf_candidate table.
-
-A pair is proposed only when the acronym AND a proceedings title agree.
-Proposals are not approvals: the AI reviewer decides each one (see conf_needs_review).
-"""
 import re
 import sqlite3
 import sys
@@ -69,7 +64,6 @@ def edition_acronyms(proceedings_title: str) -> set[str]:
 
 
 def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
-    """Per key: acronyms it is known by, proceedings titles, and whether it is a co-located series."""
     booktitles: dict[str, list[tuple[str, int]]] = defaultdict(list)
     for key, booktitle, n in conn.execute(
         "SELECT dblp_key, booktitle, papers FROM dblp_booktitle ORDER BY dblp_key, papers DESC, booktitle"

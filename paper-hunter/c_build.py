@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Turn the raw OpenAlex / Semantic Scholar records in paper_source into structured tables.
-
-  paper_detail     one row per paper: ids, the best abstract, TLDR, type, open access, topic, counts
-  paper_term       keywords and topics (OpenAlex) and fields of study (Semantic Scholar), one row each
-  paper_reference  the works a paper cites, one row per (paper, source, cited work)
-  paper_card       view: dblp_paper + paper_detail + terms, what a reviewer reads about one paper
-
-Everything here is derived: `python3 c_build.py --all` rebuilds it from paper_source at any
-time without touching the network. b_fetch calls build() after each batch it stores.
-"""
 import argparse
 import html
 import json
@@ -22,7 +12,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DB_PATH = SCRIPT_DIR.parent / "archive" / "paperhunter.db"
-MIN_ABSTRACT = 120          # shorter "abstracts" are mostly boilerplate ("No abstract available.")
+MIN_ABSTRACT = 120
 BUILD_BATCH = 2000
 
 SCHEMA = """
@@ -104,8 +94,6 @@ def unpack(blob):
 
 
 def clean_abstract(s):
-    """Strip JATS/HTML markup, unescape entities, unfold ligatures (NFKC), collapse whitespace,
-    and drop a leading 'Abstract' and the stray leading dashes PDF extraction leaves."""
     s = _TAG.sub(lambda m: " " if m.group(1).lower() in _BLOCK else "", s or "")
     s = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", html.unescape(s))).strip()
     s = re.sub(r"^abstract\b[\s:.–—-]*", "", s, flags=re.IGNORECASE)
@@ -113,7 +101,6 @@ def clean_abstract(s):
 
 
 def openalex_abstract(inverted):
-    """Rebuild OpenAlex abstract text from its inverted index {word: [positions]}."""
     if not inverted:
         return ""
     return " ".join(w for _, w in sorted((i, w) for w, idxs in inverted.items() for i in idxs))
@@ -132,7 +119,6 @@ def _flag(v):
 
 
 def derive(paper_id, oa, s2):
-    """Raw records (either may be None) -> (detail row dict, term rows, reference rows)."""
     oa, s2 = oa or {}, s2 or {}
     s2_ids = s2.get("externalIds") or {}
 
@@ -218,7 +204,6 @@ DETAIL_COLS = ("paper_id", "openalex_id", "s2_id", "corpus_id", "arxiv_id", "abs
 
 
 def build(conn, paper_ids):
-    """Rebuild the derived rows of these papers from paper_source. The caller owns the transaction."""
     ids = sorted(set(paper_ids))
     for i in range(0, len(ids), 500):
         chunk = ids[i:i + 500]
@@ -251,7 +236,7 @@ def build_all(conn):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true", help="rebuild every paper from paper_source")
     a = ap.parse_args()
     if not a.all:

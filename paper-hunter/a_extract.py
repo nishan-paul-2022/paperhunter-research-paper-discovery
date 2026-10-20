@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Stage 3: load the papers of every listed venue into the dblp_paper table.
-
-Reads list_of_conferences and list_of_journals from archive/paperhunter.db, scans
-the DBLP XML once, and syncs dblp_paper with every paper of a listed venue in YEARS:
-new papers are added, existing ones updated in place (their id never changes), and
-papers no longer extracted are removed unless paper-hunter already fetched or decided them.
-The view paper_inventory adds each paper's rank and slice (e.g. a-star-2025),
-which paper-hunter uses to select papers (--slice).
-"""
 import os
 import re
 import sqlite3
@@ -59,7 +50,6 @@ DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>]+", re.IGNORECASE)
 
 
 def load_list(conn, view, rank_column):
-    """dblp_key → rank from a final-list view; the view is empty until its review is complete."""
     index = dict(conn.execute(f"SELECT dblp_key, {rank_column} FROM {view}"))
     if not index:
         sys.exit(f"ERROR: {view} is empty — finish its review first (see conference-hunter/ and journal-hunter/ matching guides)")
@@ -157,7 +147,6 @@ def scan_xml(xml_path, journal_index, conf_index):
 def write_papers(conn, papers):
     print("Syncing dblp_paper...")
     before = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
-    # papers paper-hunter fetched or decided stay even when DBLP drops them
     users = [t for t in ("paper_source", "paper_accepted", "paper_rejected")
              if conn.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone()]
     used = " OR ".join(f"id IN (SELECT paper_id FROM {t})" for t in users)

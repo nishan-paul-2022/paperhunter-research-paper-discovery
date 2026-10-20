@@ -1,34 +1,4 @@
 #!/usr/bin/env python3
-"""Fetch every paper's record from OpenAlex and Semantic Scholar into archive/paperhunter.db.
-
-Both APIs run at the same time, each in its own thread with its own rate limit, and each
-works through two phases:
-  1. DOI   batches of DOIs (OpenAlex 100 per request, Semantic Scholar 500 per request);
-  2. title one title lookup per paper, for papers without a DOI or whose DOI the API did not
-           know; a hit is kept only if the title matches (and the year is close). OpenAlex
-           title search costs 10x a DOI batch, so it waits for Semantic Scholar and only
-           searches papers that still have no abstract.
-Every answer is stored verbatim (zlib-compressed JSON) in paper_source, one row per
-(paper, source). A miss is stored too, so it is not asked again. After each batch,
-c_build turns the raw records into paper_detail, paper_term and paper_reference.
-Interrupt and re-run at any time: papers that already have an answer are skipped.
-
-Keys come from the environment or from paper-hunter/.env (KEY=value lines):
-  OPENALEX_API_KEY_1, OPENALEX_API_KEY_2, ...   (or a single OPENALEX_API_KEY)
-                     used in number order: when one key's daily budget is used up the next
-                     takes over; when all are, the run stops (re-run tomorrow to continue)
-  S2_API_KEY         OPENALEX_MAILTO (optional contact address)
-Semantic Scholar: one request every 1.1 s from a single thread (batch and title lookups share
-it), and a 429 resends the same request after a wait. Only one fetch process may run at a time.
-
-Commands:
-  python3 b_fetch.py fetch                       every paper in dblp_paper
-  python3 b_fetch.py fetch --slice a-star-2025   papers of paper_inventory slices
-  python3 b_fetch.py fetch --key conf/uss/X23    single papers by DBLP key (repeatable)
-  python3 b_fetch.py fetch --limit 500           the first N target papers (for a trial)
-  python3 b_fetch.py status                      coverage per source and field
-  python3 b_fetch.py show conf/uss/X23           what is stored for one paper
-"""
 import argparse
 import difflib
 import fcntl
@@ -54,9 +24,9 @@ DB_PATH = SCRIPT_DIR.parent / "archive" / "paperhunter.db"
 
 OPENALEX = "https://api.openalex.org"
 S2 = "https://api.semanticscholar.org/graph/v1"
-OA_BATCH, S2_BATCH = 100, 500     # per request; 500 is the Semantic Scholar batch maximum
-S2_INTERVAL = 1.1                 # S2 key: 1 request/s across all endpoints; 1.1 s leaves room for jitter
-S2_TRIES = 10                     # a 429 means "wait and send the same batch again"
+OA_BATCH, S2_BATCH = 100, 500
+S2_INTERVAL = 1.1
+S2_TRIES = 10
 LOCK_PATH = SCRIPT_DIR / ".fetch.lock"
 OA_SELECT = ",".join((
     "id", "doi", "title", "publication_year", "publication_date", "ids", "language", "type", "indexed_in",
@@ -68,9 +38,9 @@ S2_FIELDS = ",".join((
     "publicationTypes", "referenceCount", "citationCount", "influentialCitationCount", "isOpenAccess",
     "openAccessPdf", "fieldsOfStudy", "s2FieldsOfStudy", "tldr", "textAvailability",
     "references.paperId", "references.externalIds"))
-TITLE_MATCH = 0.93          # title similarity needed to accept a title-search hit
-YEAR_SLACK = 2              # ... and a publication year at most this far from DBLP's
-MAX_FAILED_BATCHES = 3      # consecutive failed requests before a source gives up for this run
+TITLE_MATCH = 0.93
+YEAR_SLACK = 2
+MAX_FAILED_BATCHES = 3
 
 SCHEMA = """
 -- One row per (paper, source): the API's record as returned, or a miss (found = 0, raw NULL).
@@ -92,13 +62,11 @@ class FetchError(Exception):
 
 
 class BudgetExhausted(FetchError):
-    """The API key's daily budget is used up; retrying today is pointless."""
+    pass
 
 
-FAILED = object()           # Worker.attempt's answer when the request itself failed
+FAILED = object()
 
-
-# --------------------------------------------------------------------------- config and http
 
 def load_env():
     env = SCRIPT_DIR / ".env"
@@ -110,7 +78,6 @@ def load_env():
 
 
 class Throttle:
-    """Minimum spacing between the requests of one source."""
 
     def __init__(self, interval):
         self.interval, self.last = interval, 0.0
@@ -123,11 +90,6 @@ class Throttle:
 
 
 def request(url, throttle, headers, data=None, tries=6, meta=None):
-    """GET (or POST with data) -> parsed JSON, None on 404. Retries 429/5xx and network errors.
-
-    meta, if given, receives the response headers. A 429 whose X-RateLimit-Remaining is 0
-    raises BudgetExhausted at once.
-    """
     hdrs = {"User-Agent": "paperhunter-detail/1.0", "Accept-Encoding": "gzip", **headers}
     if data is not None:
         hdrs["Content-Type"] = "application/json"
@@ -177,10 +139,7 @@ def bare_doi(d):
     return re.sub(r"^https?://(dx\.)?doi\.org/", "", d or "", flags=re.IGNORECASE).lower()
 
 
-# --------------------------------------------------------------------------- sources
-
 class Source:
-    """One API. lookup_dois / lookup_title return raw records; nothing here touches the DB."""
     name = ""
     doi_batch = 1
 
@@ -191,15 +150,12 @@ class Source:
         raise NotImplementedError
 
     def note(self):
-        """Extra text for progress lines."""
         return ""
 
 
 class OpenAlex(Source):
     name, doi_batch = "openalex", OA_BATCH
 
-    # Each key has a daily budget (10,000 credits on a free key). A DOI batch of 100 costs 1 credit,
-    # a title search 10, so title search only fills the gaps Semantic Scholar leaves (see Worker).
     def __init__(self):
         numbered = sorted((int(m.group(1)), v.strip()) for k, v in os.environ.items()
                           if (m := re.fullmatch(r"OPENALEX_API_KEY_(\d+)", k)) and v.strip())
@@ -208,12 +164,11 @@ class OpenAlex(Source):
         self.key_no = 0
         mail = os.environ.get("OPENALEX_MAILTO")
         self.mailto = f"&mailto={urllib.parse.quote(mail)}" if mail else ""
-        self.throttle = Throttle(0.25 if self.keys else 1.1)   # OR-filters: 5/s with a key, 1/s without
+        self.throttle = Throttle(0.25 if self.keys else 1.1)
         self.keyed = bool(self.keys)
         self.meta = {}
 
     def _get(self, url):
-        """request() with the current key; on a used-up budget move to the next key."""
         while True:
             headers = {"Authorization": f"Bearer {self.keys[self.key_no]}"} if self.keys else {}
             try:
@@ -243,9 +198,9 @@ class OpenAlex(Source):
         for w in self._works("doi:" + "|".join(plain), OA_BATCH) if plain else []:
             d = bare_doi(w.get("doi"))
             if d in out and out[d].get("abstract_inverted_index"):
-                continue                                  # duplicate work; keep the one with an abstract
+                continue
             out[d] = w
-        for d in dois:                                    # DOIs a filter cannot carry: one by one
+        for d in dois:
             if d not in plain:
                 w = self._get(f"{OPENALEX}/works/doi:{urllib.parse.quote(d)}?select={OA_SELECT}{self.mailto}")
                 if w:
@@ -263,9 +218,6 @@ class OpenAlex(Source):
 class SemanticScholar(Source):
     name, doi_batch = "s2", S2_BATCH
 
-    # One thread sends every S2 request (batch and title match) through one throttle, one at a
-    # time, so the key's 1 request/s limit holds across endpoints. The fetch lock keeps a second
-    # process off the key.
     def __init__(self):
         key = os.environ.get("S2_API_KEY")
         self.headers = {"x-api-key": key} if key else {}
@@ -292,14 +244,11 @@ class SemanticScholar(Source):
         return None
 
 
-# --------------------------------------------------------------------------- pipeline
-
 def pack(rec):
     return zlib.compress(json.dumps(rec, separators=(",", ":"), ensure_ascii=False).encode(), 6)
 
 
 def store(conn, src, via, results):
-    """results: [(paper_id, record or None)]. Stores them and rebuilds their derived rows."""
     now = int(time.time())
     with conn:
         conn.executemany(
@@ -310,10 +259,8 @@ def store(conn, src, via, results):
 
 
 class Worker(threading.Thread):
-    """Runs both phases for one source over the target papers, with its own DB connection."""
 
     def __init__(self, source, targets, retry_missing, gaps_only=False, after=None):
-        """gaps_only: title-search only papers that still have no abstract, after `after` finished."""
         super().__init__(name=source.name)
         self.source, self.targets, self.retry_missing = source, targets, retry_missing
         self.gaps_only, self.after = gaps_only, after
@@ -329,7 +276,6 @@ class Worker(threading.Thread):
             "SELECT paper_id, via, found FROM paper_source WHERE src = ?", (self.source.name,))}
 
     def attempt(self, call, *args):
-        """Run one API call; FAILED after a failure (the papers stay unasked and are retried next run)."""
         try:
             out = call(*args)
             self.failed = 0
@@ -382,7 +328,6 @@ class Worker(threading.Thread):
             self.log(f"title phase waits for {self.after.name} to finish")
             self.after.join()
         done = self.state(conn)
-        # no DOI, or the DOI was asked and unknown; a DOI whose request failed waits for the next run
         todo = [p for p in self.targets if (not p["doi"] and p["id"] not in done)
                 or done.get(p["id"]) == ("doi", 0)
                 or (self.retry_missing and done[p["id"]] == ("title", 0))]
@@ -426,7 +371,6 @@ def select_targets(conn, slices, keys, limit):
 
 
 def take_lock():
-    """Allow one fetch process at a time: a second one would break the S2 key's 1 request/s."""
     f = open(LOCK_PATH, "w")
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -436,7 +380,7 @@ def take_lock():
 
 
 def cmd_fetch(a):
-    lock = take_lock()  # noqa: F841  held until the process exits
+    lock = take_lock()
     conn = open_db()
     targets = select_targets(conn, a.slice, a.key, a.limit)
     conn.close()
@@ -462,8 +406,6 @@ def cmd_fetch(a):
     if any(w.error for w in workers):
         sys.exit(1)
 
-
-# --------------------------------------------------------------------------- reporting
 
 def cmd_status(a):
     conn = open_db()
@@ -517,7 +459,7 @@ def open_db():
 
 def main():
     load_env()
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fetch", help="fetch records from OpenAlex and Semantic Scholar")
     f.add_argument("--slice", action="append", help="paper_inventory slice, e.g. a-star-2025 (repeatable)")
