@@ -163,43 +163,43 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
 
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
-    sjr_id   INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
+    scopus_id   INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('issn', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
-    PRIMARY KEY (dblp_key, sjr_id)
+    PRIMARY KEY (dblp_key, scopus_id)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS journal_candidate_scopus ON journal_candidate (sjr_id);
+CREATE INDEX IF NOT EXISTS journal_candidate_scopus ON journal_candidate (scopus_id);
 
 CREATE TABLE IF NOT EXISTS journal_decision (
     id         INTEGER PRIMARY KEY,
-    sjr_id     INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
+    scopus_id     INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES journal_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK ((verdict = 'absent') = (dblp_key IS NULL))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_pair ON journal_decision (dblp_key, sjr_id) WHERE dblp_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_pair ON journal_decision (dblp_key, scopus_id) WHERE dblp_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_journal_per_key ON journal_decision (dblp_key) WHERE verdict = 'accept';
-CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_absent ON journal_decision (sjr_id) WHERE verdict = 'absent';
-CREATE INDEX IF NOT EXISTS journal_decision_scopus ON journal_decision (sjr_id);
+CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_absent ON journal_decision (scopus_id) WHERE verdict = 'absent';
+CREATE INDEX IF NOT EXISTS journal_decision_scopus ON journal_decision (scopus_id);
 
 CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_ins BEFORE INSERT ON journal_decision
 WHEN EXISTS (
-    SELECT 1 FROM journal_decision d WHERE d.sjr_id = NEW.sjr_id
+    SELECT 1 FROM journal_decision d WHERE d.scopus_id = NEW.scopus_id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
-BEGIN SELECT RAISE(ABORT, 'SJR journal cannot be both accepted and absent'); END;
+BEGIN SELECT RAISE(ABORT, 'Scopus journal cannot be both accepted and absent'); END;
 
 CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_upd BEFORE UPDATE ON journal_decision
 WHEN EXISTS (
-    SELECT 1 FROM journal_decision d WHERE d.sjr_id = NEW.sjr_id AND d.id <> NEW.id
+    SELECT 1 FROM journal_decision d WHERE d.scopus_id = NEW.scopus_id AND d.id <> NEW.id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
-BEGIN SELECT RAISE(ABORT, 'SJR journal cannot be both accepted and absent'); END;
+BEGIN SELECT RAISE(ABORT, 'Scopus journal cannot be both accepted and absent'); END;
 
 DROP VIEW IF EXISTS journal_summary;
 CREATE VIEW journal_summary AS
@@ -217,24 +217,24 @@ FROM journal_dblp_venue j;
 
 DROP VIEW IF EXISTS journal_review;
 CREATE VIEW journal_review AS
-SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.sjr_id, s.title AS sjr_title, s.issn_1, s.issn_2,
+SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, c.method, c.score, c.detail,
        e.papers, e.first_year, e.last_year, e.names, e.issns, e.doi_prefixes
 FROM journal_candidate c
-JOIN journal_scopus s ON s.id = c.sjr_id
+JOIN journal_scopus s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
-WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.sjr_id = c.sjr_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_scopus s
-WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.sjr_id = s.id AND d.verdict IN ('accept', 'absent'))
+WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
-SELECT 'INVALID', d.dblp_key, d.sjr_id, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or SJR journal: delete it',
+SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_decision d
-WHERE NOT EXISTS (SELECT 1 FROM journal_scopus s WHERE s.id = d.sjr_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_scopus s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
 DROP VIEW IF EXISTS journal_list;
@@ -244,7 +244,7 @@ SELECT d.dblp_key,
          ORDER BY papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
 FROM journal_decision d
-JOIN journal_scopus s ON s.id = d.sjr_id
+JOIN journal_scopus s ON s.id = d.scopus_id
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
 ORDER BY s.quartile, lower(s.title), d.dblp_key;

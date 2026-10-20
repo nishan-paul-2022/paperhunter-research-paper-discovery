@@ -75,9 +75,9 @@ def name_score(d_toks: list[str], s_toks: list[str]) -> float:
 
 
 def propose(conn: sqlite3.Connection) -> list[tuple]:
-    sjr = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus").fetchall()
-    by_issn = {i: sid for sid, _, i1, i2 in sjr for i in (i1, i2) if i}
-    sjr_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in sjr]
+    scopus = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus").fetchall()
+    by_issn = {i: sid for sid, _, i1, i2 in scopus for i in (i1, i2) if i}
+    scopus_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in scopus]
     pairs: dict[tuple[str, int], tuple[str, float, str]] = {}
 
     issn_total: dict[str, int] = defaultdict(int)
@@ -103,7 +103,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
             d_toks = tokens(name)
             if not d_toks:
                 continue
-            for sid, title, variants in sjr_tokens:
+            for sid, title, variants in scopus_tokens:
                 score = round(max(name_score(d_toks, v) for v in variants), 2)
                 old = pairs.get((key, sid))
                 if score < MIN_NAME_SCORE or old and (old[0] == "issn" or old[1] >= score):

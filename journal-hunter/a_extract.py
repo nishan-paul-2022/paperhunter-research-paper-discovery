@@ -11,7 +11,7 @@ from pathlib import Path
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 ARCHIVE_DIR = REPO_ROOT / "archive"
-SJR_SRC = ARCHIVE_DIR / "publication-scopus-computer-science-journal-2025.csv"
+SCOPUS_SRC = ARCHIVE_DIR / "publication-scopus-computer-science-journal-2025.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
@@ -49,12 +49,12 @@ def link_issns(url: str) -> set[str]:
     return {i for i in found if issn_valid(i)}
 
 
-def load_sjr(conn: sqlite3.Connection, sjr_path: Path) -> None:
+def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – Scopus/SJR rankings → journal_scopus")
+    print("  Phase 1 – Scopus rankings → journal_scopus")
     print("━" * 70)
     rows, dropped = [], 0
-    with open(sjr_path, encoding="utf-8", newline="") as f:
+    with open(scopus_path, encoding="utf-8", newline="") as f:
         for r in csv.DictReader(f, delimiter=";"):
             q = r.get("SJR Best Quartile", "").strip()
             if q not in VALID_QUARTILES:
@@ -70,11 +70,11 @@ def load_sjr(conn: sqlite3.Connection, sjr_path: Path) -> None:
             "issn_2 = excluded.issn_2, publisher = excluded.publisher, quartile = excluded.quartile",
             rows,
         )
-        conn.execute("CREATE TEMP TABLE sjr_ids (id INTEGER PRIMARY KEY)")
-        conn.executemany("INSERT INTO sjr_ids VALUES (?)", [(r[0],) for r in rows])
-        removed = conn.execute("DELETE FROM journal_scopus WHERE id NOT IN (SELECT id FROM sjr_ids)").rowcount
-        conn.execute("DROP TABLE sjr_ids")
-    print(f"  ✓  {len(rows)} SJR journals  |  {dropped} rows without Q1–Q4 skipped  |  {removed} removed\n")
+        conn.execute("CREATE TEMP TABLE scopus_ids (id INTEGER PRIMARY KEY)")
+        conn.executemany("INSERT INTO scopus_ids VALUES (?)", [(r[0],) for r in rows])
+        removed = conn.execute("DELETE FROM journal_scopus WHERE id NOT IN (SELECT id FROM scopus_ids)").rowcount
+        conn.execute("DROP TABLE scopus_ids")
+    print(f"  ✓  {len(rows)} Scopus journals  |  {dropped} rows without Q1–Q4 skipped  |  {removed} removed\n")
 
 
 def scan_xml(xml_path: Path):
@@ -162,12 +162,12 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--xml", default=str(XML_PATH), help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})")
-    ap.add_argument("--sjr", default=str(SJR_SRC), help=f"Path to Scopus CSV  (default: {SJR_SRC.name})")
+    ap.add_argument("--scopus", default=str(SCOPUS_SRC), help=f"Path to Scopus CSV  (default: {SCOPUS_SRC.name})")
     ap.add_argument("--skip-xml", action="store_true", help="Keep the DBLP evidence already in the database")
     args = ap.parse_args()
-    xml_path, sjr_path = Path(args.xml), Path(args.sjr)
-    if not sjr_path.exists():
-        sys.exit(f"Scopus CSV not found: {sjr_path}")
+    xml_path, scopus_path = Path(args.xml), Path(args.scopus)
+    if not scopus_path.exists():
+        sys.exit(f"Scopus CSV not found: {scopus_path}")
     if not args.skip_xml and not xml_path.exists():
         sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
@@ -176,7 +176,7 @@ def main() -> None:
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {DB_PATH}\n")
     conn = connect()
-    load_sjr(conn, sjr_path)
+    load_scopus(conn, scopus_path)
     if args.skip_xml:
         n = conn.execute("SELECT count(*) FROM journal_dblp_venue").fetchone()[0]
         if not n:
