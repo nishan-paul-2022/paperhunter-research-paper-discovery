@@ -436,7 +436,7 @@ def cmd_show(a):
 
 def open_db():
     if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH} (run context/b_schema.py first)")
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run circumstance/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH, timeout=300)
     return conn
 
