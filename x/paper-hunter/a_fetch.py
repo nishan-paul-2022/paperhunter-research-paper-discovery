@@ -13,7 +13,7 @@ Every answer is stored verbatim (zlib-compressed JSON) in paper_source, one row 
 b_build turns the raw records into paper_detail, paper_term and paper_reference.
 Interrupt and re-run at any time: papers that already have an answer are skipped.
 
-Keys come from the environment or from detail-hunter/.env (KEY=value lines):
+Keys come from the environment or from paper-hunter/.env (KEY=value lines):
   OPENALEX_API_KEY_1, OPENALEX_API_KEY_2, ...   (or a single OPENALEX_API_KEY)
                      used in number order: when one key's daily budget is used up the next
                      takes over; when all are, the run stops (re-run tomorrow to continue)
