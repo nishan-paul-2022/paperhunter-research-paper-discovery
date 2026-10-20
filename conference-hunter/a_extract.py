@@ -2,6 +2,7 @@
 import argparse
 import csv
 import os
+import re
 import sqlite3
 import sys
 from collections import Counter, defaultdict
@@ -54,20 +55,37 @@ def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
     print(f"  ✓  {len(rows)} CORE venues  |  {dropped} rows outside A*–C skipped  |  {removed} removed\n")
 
 
+def issue_label(number: str) -> str:
+    label = re.sub(r"[\s_.-]*\d+$", "", " ".join(number.split()))
+    return label if re.search(r"[A-Za-z]", label) else ""
+
+
+def venue_acronym(key: str) -> str:
+    return key.split("#", 1)[1] if "#" in key else key.split("/", 1)[1]
+
+
+def widen(span: dict, key, year: int) -> None:
+    if year:
+        lo, hi = span.get(key, (year, year))
+        span[key] = (min(lo, year), max(hi, year))
+
+
 def scan_xml(xml_path: Path):
     from lxml import etree
 
     size = os.path.getsize(xml_path)
     seen = 0
     papers: Counter = Counter()
+    years: dict[str, tuple[int, int]] = {}
     booktitles: dict[str, Counter] = defaultdict(Counter)
-    years: dict[str, list[int]] = {}
-    proceedings: dict[str, dict[tuple[int, str], str | None]] = defaultdict(dict)
+    bt_years: dict[tuple[str, str], tuple[int, int]] = {}
+    crossrefs: Counter = Counter()
+    proceedings: dict[str, tuple[str, int, str, str | None]] = {}
     f = open(xml_path, "rb")
     ctx = etree.iterparse(
         f,
         events=("end",),
-        tag=("inproceedings", "proceedings"),
+        tag=("inproceedings", "proceedings", "article"),
         load_dtd=True,
         resolve_entities=True,
         huge_tree=True,
@@ -76,37 +94,46 @@ def scan_xml(xml_path: Path):
         seen += 1
         key = el.get("key", "")
         parts = key.split("/")
-        if key.startswith("conf/") and len(parts) >= 3:
+        if len(parts) >= 3 and parts[0] in ("conf", "journals"):
             prefix = "/".join(parts[:2])
             year_text = el.findtext("year") or ""
             year = int(year_text) if year_text.isdigit() else 0
-            if el.tag == "inproceedings":
-                papers[prefix] += 1
-                booktitle = (el.findtext("booktitle") or "").strip()
-                if booktitle:
-                    booktitles[prefix][booktitle] += 1
-                if year:
-                    lo, hi = years.get(prefix, (year, year))
-                    years[prefix] = [min(lo, year), max(hi, year)]
+            if el.tag == "inproceedings" and parts[0] == "conf":
+                streams = [(prefix, (el.findtext("booktitle") or "").strip())]
+                crossref = (el.findtext("crossref") or "").strip()
+                if crossref:
+                    crossrefs[crossref] += 1
+            elif el.tag == "article" and parts[0] == "journals":
+                journal = " ".join((el.findtext("journal") or "").split())
+                streams = [(prefix, journal)]
+                label = issue_label(el.findtext("number") or "")
+                if label:
+                    streams.append((f"{prefix}#{label}", f"{journal} ({label})" if journal else label))
             else:
-                title_el = el.find("title")
-                if title_el is not None:
-                    title = " ".join("".join(title_el.itertext()).split())
+                streams = []
+                if el.tag == "proceedings" and parts[0] == "conf":
+                    title_el = el.find("title")
+                    title = " ".join("".join(title_el.itertext()).split()) if title_el is not None else ""
                     if title:
                         publisher = " ".join((el.findtext("publisher") or "").split()) or None
-                        if not proceedings[prefix].get((year, title)):
-                            proceedings[prefix][(year, title)] = publisher
+                        proceedings[key] = (prefix, year, title, publisher)
+            for stream, booktitle in streams:
+                papers[stream] += 1
+                widen(years, stream, year)
+                if booktitle:
+                    booktitles[stream][booktitle] += 1
+                    widen(bt_years, (stream, booktitle), year)
         if seen % 500_000 == 0:
             pct = f.tell() * 100 // size
-            print(f"  {pct:3}%  |  records scanned: {seen:,}  |  conference keys: {len(papers):,}", end="\r", flush=True)
+            print(f"  {pct:3}%  |  records scanned: {seen:,}  |  venue keys: {len(papers):,}", end="\r", flush=True)
         el.clear()
         while el.getprevious() is not None:
             del el.getparent()[0]
     f.close()
-    print(f"  100%  |  records scanned: {seen:,}  |  conference keys: {len(papers):,}")
-    venues = [(k, n, *years.get(k, (None, None))) for k, n in papers.items()]
-    bts = [(k, b, n) for k in papers for b, n in booktitles[k].items()]
-    pts = [(k, y, t, p) for k in papers for (y, t), p in proceedings.get(k, {}).items()]
+    print(f"  100%  |  records scanned: {seen:,}  |  venue keys: {len(papers):,}")
+    venues = [(k, venue_acronym(k), n, *years.get(k, (None, None))) for k, n in papers.items()]
+    bts = [(k, b, n, *bt_years.get((k, b), (None, None))) for k in papers for b, n in booktitles[k].items()]
+    pts = [(k, pk, y, t, p, crossrefs[pk]) for pk, (k, y, t, p) in proceedings.items() if k in papers]
     return venues, bts, pts
 
 
@@ -114,12 +141,12 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     print("━" * 70)
     print("  Phase 2 – DBLP evidence → dblp_venue, dblp_booktitle, dblp_proceedings")
     print("━" * 70)
-    print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~15–20 min)\n")
+    print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~20–30 min)\n")
     venues, bts, pts = scan_xml(xml_path)
     with conn:
         conn.executemany(
-            "INSERT INTO dblp_venue (dblp_key, papers, first_year, last_year) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT (dblp_key) DO UPDATE SET papers = excluded.papers, "
+            "INSERT INTO dblp_venue (dblp_key, acronym, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT (dblp_key) DO UPDATE SET acronym = excluded.acronym, papers = excluded.papers, "
             "first_year = excluded.first_year, last_year = excluded.last_year",
             venues,
         )
@@ -131,9 +158,18 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
         conn.execute("DROP TABLE scanned")
         conn.execute("DELETE FROM dblp_booktitle")
         conn.execute("DELETE FROM dblp_proceedings")
-        conn.executemany("INSERT INTO dblp_booktitle VALUES (?, ?, ?)", bts)
-        conn.executemany("INSERT INTO dblp_proceedings VALUES (?, ?, ?, ?)", pts)
-    print(f"\n  ✓  {len(venues):,} keys  |  {len(bts):,} booktitles  |  {len(pts):,} proceedings  |  {removed} keys removed\n")
+        conn.executemany(
+            "INSERT INTO dblp_booktitle (dblp_key, booktitle, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?)",
+            bts,
+        )
+        conn.executemany(
+            "INSERT INTO dblp_proceedings (dblp_key, proc_key, year, title, publisher, papers) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            pts,
+        )
+    kinds = Counter("stream" if "#" in v[0] else v[0].split("/")[0] for v in venues)
+    print(f"\n  ✓  {kinds['conf']:,} conf keys  |  {kinds['journals']:,} journals  |  {kinds['stream']:,} journal "
+          f"issue streams  |  {len(bts):,} booktitles  |  {len(pts):,} proceedings  |  {removed} keys removed\n")
 
 
 def main() -> None:

@@ -8,7 +8,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
-MIN_TITLE_SCORE = 0.6
 MIN_BOOKTITLE_SHARE = 0.15
 STOPWORDS = set(
     "a an the of on in for and to at with from by its their international "
@@ -24,8 +23,10 @@ SPELLING = {
     "behaviour": "behavior",
     "analyse": "analyze",
 }
-CO_LOCATED = re.compile(r"co-located|colocated|in conjunction|held at|workshop", re.I)
 ORG_PREFIX = re.compile(r"^(IEEE|ACM|IFIP)[ _-]+", re.I)
+KEY_ORG_PREFIX = re.compile(r"^(ieee|acm|ifip|acis)(?=[a-z]{2})")
+FORMER_ACRONYM = re.compile(r"\b[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b")
+EDITION = re.compile(r"\b([a-z][a-z0-9]*)\s*(?:(?:19|20)\d{2}|'\d{2})\b")
 
 
 def fold(s: str) -> str:
@@ -53,45 +54,48 @@ def strip_parens(s: str) -> str:
     return re.sub(r"\(.*?\)", "", s)
 
 
-def acronym_forms(acronym: str) -> set[str]:
+def acronym_forms(acronym: str, title: str = "") -> set[str]:
     a = strip_parens(acronym).strip()
-    return {f for f in (norm(a), norm(ORG_PREFIX.sub("", a))) if f}
+    forms = {norm(a), norm(ORG_PREFIX.sub("", a))}
+    for inner in re.findall(r"\((.*?)\)", f"{acronym} {title}"):
+        forms |= {norm(x) for x in FORMER_ACRONYM.findall(inner)}
+    return {f for f in forms if f}
+
+
+def key_forms(acronym: str) -> set[str]:
+    a = norm(acronym)
+    return {a, KEY_ORG_PREFIX.sub("", a), re.sub(r"\d+$", "", a)} - {""}
 
 
 def edition_acronyms(proceedings_title: str) -> set[str]:
     text = re.sub(r"[^a-z0-9 ']", "", fold(proceedings_title).replace("-", ""))
-    return set(re.findall(r"\b([a-z][a-z0-9]*)\s*'?(?:19|20)?\d{2}\b", text))
+    return set(EDITION.findall(text))
 
 
 def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
     booktitles: dict[str, list[tuple[str, int]]] = defaultdict(list)
-    for key, booktitle, n in conn.execute(
-        "SELECT dblp_key, booktitle, papers FROM dblp_booktitle ORDER BY dblp_key, papers DESC, booktitle"
-    ):
-        if len(booktitles[key]) < 5:
-            booktitles[key].append((booktitle, n))
+    for key, booktitle, n in conn.execute("SELECT dblp_key, booktitle, papers FROM dblp_booktitle"):
+        booktitles[key].append((booktitle, n))
     proceedings: dict[str, list[str]] = defaultdict(list)
-    for key, title in conn.execute(
-        "SELECT dblp_key, title FROM dblp_proceedings ORDER BY dblp_key, year DESC, title DESC"
-    ):
-        if len(proceedings[key]) < 3:
-            proceedings[key].append(title)
+    for key, title in conn.execute("SELECT dblp_key, title FROM dblp_proceedings ORDER BY dblp_key, year DESC"):
+        proceedings[key].append(title)
     evidence = {}
-    for (key,) in conn.execute("SELECT dblp_key FROM dblp_venue"):
+    for key, acronym in conn.execute("SELECT dblp_key, acronym FROM dblp_venue"):
         bts = booktitles.get(key, [])
         total = sum(n for _, n in bts) or 1
-        dominant = {
-            norm(re.sub(r"\(.*?\)|@.*$", "", b)) for b, n in bts if n / total >= MIN_BOOKTITLE_SHARE
-        }
+        acronyms = key_forms(acronym)
+        for b, n in bts:
+            acronyms.add(norm(re.sub(r"\(.*?\)|@.*$", "", b)))
+            if key.startswith("journals/") and n / total >= MIN_BOOKTITLE_SHARE:
+                acronyms |= {norm(t) for t in re.findall(r"[A-Za-z][A-Za-z0-9]+", b)}
         pts = proceedings.get(key, [])
-        acronyms = {norm(key.split("/", 1)[1])} | dominant
         for p in pts:
             acronyms |= edition_acronyms(p)
+        texts = pts + [b for b, _ in bts]
         evidence[key] = {
             "acronyms": acronyms - {""},
-            "pt_tokens": [tokens(p) for p in pts],
-            "pts": pts,
-            "co_located": bool(pts) and all(CO_LOCATED.search(p) for p in pts),
+            "texts": texts,
+            "text_tokens": [tokens(t) for t in texts],
         }
     return evidence
 
@@ -104,19 +108,13 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
             by_acronym[a].add(key)
     pairs = []
     for core_id, title, acronym in conn.execute("SELECT id, title, acronym FROM core_venue"):
-        ct = tokens(strip_parens(title))
-        if not ct:
-            continue
-        keys = set().union(*(by_acronym.get(a, set()) for a in acronym_forms(acronym)))
+        ct = tokens(strip_parens(title)) or tokens(title)
+        keys = set().union(*(by_acronym.get(a, set()) for a in acronym_forms(acronym, title)))
         for key in keys:
             e = evidence[key]
-            if e["co_located"] and "workshop" not in title.lower():
-                continue
-            scores = [len(ct & pt) / len(ct) for pt in e["pt_tokens"]]
-            if not scores or max(scores) < MIN_TITLE_SCORE:
-                continue
+            scores = [len(ct & t) / len(ct) if ct else 0.0 for t in e["text_tokens"]] or [0.0]
             best = max(range(len(scores)), key=scores.__getitem__)
-            pairs.append((key, core_id, round(scores[best], 2), e["pts"][best]))
+            pairs.append((key, core_id, round(scores[best], 2), e["texts"][best] if e["texts"] else ""))
     return pairs
 
 

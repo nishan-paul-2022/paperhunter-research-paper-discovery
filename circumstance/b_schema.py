@@ -14,26 +14,31 @@ CREATE TABLE IF NOT EXISTS core_venue (
 );
 
 CREATE TABLE IF NOT EXISTS dblp_venue (
-    dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%'),
+    dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
+    acronym    TEXT NOT NULL,
     papers     INTEGER NOT NULL,
     first_year INTEGER,
     last_year  INTEGER
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS dblp_booktitle (
-    dblp_key  TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
-    booktitle TEXT NOT NULL,
-    papers    INTEGER NOT NULL,
+    dblp_key   TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
+    booktitle  TEXT NOT NULL,
+    papers     INTEGER NOT NULL,
+    first_year INTEGER,
+    last_year  INTEGER,
     PRIMARY KEY (dblp_key, booktitle)
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS dblp_proceedings (
     dblp_key  TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
+    proc_key  TEXT PRIMARY KEY,
     year      INTEGER NOT NULL,
     title     TEXT NOT NULL,
     publisher TEXT,
-    PRIMARY KEY (dblp_key, year, title)
+    papers    INTEGER NOT NULL
 ) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS dblp_proceedings_key ON dblp_proceedings (dblp_key, year);
 
 CREATE TABLE IF NOT EXISTS conf_candidate (
     dblp_key          TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
@@ -76,12 +81,14 @@ BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 
 DROP VIEW IF EXISTS venue_evidence;
 CREATE VIEW venue_evidence AS
-SELECT v.dblp_key, upper(substr(v.dblp_key, 6)) AS acronym, v.papers, v.first_year, v.last_year,
-       (SELECT group_concat(b.booktitle || ' (' || b.papers || ')', ' | ')
-          FROM (SELECT booktitle, papers FROM dblp_booktitle WHERE dblp_key = v.dblp_key
+SELECT v.dblp_key, v.acronym, v.papers, v.first_year, v.last_year,
+       (SELECT count(*) FROM dblp_proceedings WHERE dblp_key = v.dblp_key) AS volumes,
+       (SELECT group_concat(b.booktitle || ' (' || b.papers || ', ' || coalesce(b.first_year, '?') || '-'
+                            || coalesce(b.last_year, '?') || ')', ' | ')
+          FROM (SELECT booktitle, papers, first_year, last_year FROM dblp_booktitle WHERE dblp_key = v.dblp_key
                 ORDER BY papers DESC, booktitle LIMIT 5) b) AS booktitles,
-       (SELECT group_concat(p.title, ' | ')
-          FROM (SELECT title FROM dblp_proceedings WHERE dblp_key = v.dblp_key
+       (SELECT group_concat(p.title || ' (' || p.papers || ' papers)', ' | ')
+          FROM (SELECT title, papers FROM dblp_proceedings WHERE dblp_key = v.dblp_key
                 ORDER BY year DESC, title DESC LIMIT 3) p) AS proceedings_titles
 FROM dblp_venue v;
 
@@ -109,7 +116,7 @@ WHERE NOT EXISTS (SELECT 1 FROM core_venue v WHERE v.id = d.core_id)
 
 DROP VIEW IF EXISTS list_of_conferences;
 CREATE VIEW list_of_conferences AS
-SELECT d.dblp_key, upper(substr(d.dblp_key, 6)) AS dblp_acronym, v.title, v.rank AS ranking
+SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.title, v.rank AS ranking
 FROM conf_decision d
 JOIN core_venue v ON v.id = d.core_id
 JOIN dblp_venue k ON k.dblp_key = d.dblp_key
@@ -264,7 +271,7 @@ SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venu
        r.rank,
        CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
 FROM dblp_paper p
-JOIN (SELECT dblp_key, ranking AS rank FROM list_of_conferences
+JOIN (SELECT dblp_key, ranking AS rank FROM list_of_conferences WHERE dblp_key LIKE 'conf/%'
       UNION ALL
       SELECT dblp_key, quartile AS rank FROM list_of_journals) r ON r.dblp_key = p.venue_key;
 
@@ -378,23 +385,48 @@ WHEN EXISTS (SELECT 1 FROM paper_accepted WHERE paper_id = NEW.paper_id)
 BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
 """
 
-MIGRATIONS = [
-    ("dblp_proceedings", "publisher", "TEXT"),
-]
+REBUILT_EVIDENCE = {"dblp_booktitle": "first_year", "dblp_proceedings": "proc_key"}
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    for table, column, decl in MIGRATIONS:
-        if column not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
-            print(f"migrated: {table}.{column} added")
+    tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
+    stale = [t for t, col in REBUILT_EVIDENCE.items()
+             if t in tables and col not in {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}]
+    venue_stale = "dblp_venue" in tables and "journals/" not in tables["dblp_venue"]
+    if not stale and not venue_stale:
+        return
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("BEGIN")
+    for (view,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
+        conn.execute(f"DROP VIEW {view}")
+    for t in stale:
+        conn.execute(f"DROP TABLE {t}")
+    if venue_stale:
+        conn.execute("""CREATE TABLE dblp_venue_new (
+            dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
+            acronym    TEXT NOT NULL,
+            papers     INTEGER NOT NULL,
+            first_year INTEGER,
+            last_year  INTEGER
+        ) WITHOUT ROWID""")
+        conn.execute("INSERT INTO dblp_venue_new SELECT dblp_key, substr(dblp_key, instr(dblp_key, '/') + 1), "
+                     "papers, first_year, last_year FROM dblp_venue")
+        conn.execute("DROP TABLE dblp_venue")
+        conn.execute("ALTER TABLE dblp_venue_new RENAME TO dblp_venue")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
+    print(f"migrated: rebuilt {', '.join(stale + ['dblp_venue'] * venue_stale)}; "
+          "run conference-hunter/a_extract.py to refill the DBLP evidence")
 
 
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DB_PATH
     conn = sqlite3.connect(path)
-    conn.executescript(SCHEMA)
     migrate(conn)
+    conn.executescript(SCHEMA)
+    broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if broken:
+        sys.exit(f"foreign key violations after migration: {broken[:10]}")
     counts = dict(conn.execute(
         "SELECT type, count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' GROUP BY type"))
     conn.close()
