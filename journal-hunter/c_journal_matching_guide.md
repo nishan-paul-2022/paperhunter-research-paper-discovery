@@ -109,6 +109,7 @@ INSERT INTO journal_decision (scopus_id, dblp_key, verdict, reason) VALUES
   - `PREDECESSOR: continued as journals/<new> (<proof>)` on an accept of a key that ended under a former title or ISSN.
   - `ENDED: last DBLP year <y>` on the newest accepted key of a journal that DBLP stopped indexing, after you confirmed there is no later key.
   - `SHARED KEY: <journals>` on rejects of a key holding several journals.
+  - `NEW TITLE: <no predecessor, or conference series> (<what you checked>)` on `absent` journals whose Scopus coverage starts in the last three years (Step 4d).
 - The database refuses:
   - a key accepted for two journals;
   - a journal both accepted and absent;
@@ -210,6 +211,15 @@ HAVING newest < CAST(strftime('%Y', 'now') AS INTEGER) - 2
    AND sum(d.reason NOT LIKE '%PREDECESSOR:%') > 0;
 ```
 
+4d. New Scopus titles marked `absent`. A journal renamed with a new ISSN gets a new Scopus record, while DBLP still files its papers under the old key and has not indexed the new title yet. Neither the matcher nor the reverse probe can see that (*Natural Language Engineering* → *Natural Language Processing* 2025, `journals/nle`; *AI Communications* → *European Journal on Artificial Intelligence* 2025, `journals/aicom`). For each row, check the publisher's journal page, the Scopus/SJR page and the ISSN portal for "formerly", "continues" or "renamed". If it continues an older journal, find that journal's key (Step 3 searches by the old title and ISSN), delete the `absent` row and accept the key with `PREDECESSOR:`. Otherwise append `NEW TITLE: no predecessor (<what you checked>)` to the `absent` reason. Conference series that Scopus types as journals get `NEW TITLE: conference series`.
+
+```sql
+SELECT d.id, s.id AS scopus_id, s.title, s.issn_1, s.issn_2, s.publisher, s.coverage
+FROM journal_decision d JOIN journal_scopus s ON s.id = d.scopus_id
+WHERE d.verdict = 'absent' AND d.reason NOT LIKE '%NEW TITLE:%'
+  AND CAST(substr(s.coverage, 1, 4) AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER) - 3;
+```
+
 **Step 5. Audit name-only accepts.** These carry the highest false-positive risk. Re-check each against §2: full title, publisher, years, and the Crossref journal record. Fix any wrong one.
 
 ```sql
@@ -222,16 +232,16 @@ WHERE d.verdict = 'accept'
 
 **Step 6. Audit every `absent`.** Re-run Step 3 for each `absent` journal whose reason lacks the reverse probe or carries `DBLP web unreachable`.
 
-**Step 7. Final gate.** All four must hold; otherwise go back to Step 1.
+**Step 7. Final gate.** All five must hold; otherwise go back to Step 1.
 - `SELECT count(*) FROM journal_review;` returns 0.
-- The Step 4a, 4b and 4c queries return 0 rows.
+- The Step 4a, 4b, 4c and 4d queries return 0 rows.
 
 **Step 8. Report** (ten lines at most):
 - `SELECT quartile, count(*) FROM journal_list GROUP BY quartile;`
 - Scopus journals covered vs `absent`, out of all Scopus journals;
 - decisions added, changed and deleted in this run;
 - every `accept` you reversed or added during Steps 4–6;
-- counts of `ISSN GAP:`, `PREDECESSOR:`, `ENDED:` and `SHARED KEY:` tags;
+- counts of `ISSN GAP:`, `PREDECESSOR:`, `ENDED:`, `SHARED KEY:` and `NEW TITLE:` tags;
 - whether DBLP and Crossref were reachable, and how many reasons carry `DBLP web unreachable`.
 
 ---
@@ -247,6 +257,7 @@ WHERE d.verdict = 'accept'
 | `journals/jct`, `journals/ieicet` | shared keys (JCT A+B; four IEICE Transactions) up to 2020 | `journals/jcta`, `jctb`, `ieiceta` … `ieicetd` |
 | `journals/jeric`, `journals/vlc`, `journals/program`, `journals/ir`, `journals/jdi` | renamed journals (TOCE, J. Comput. Lang., Data Technol. Appl., Discover Computing, J. Imaging Inform. Med.) | accept, with `PREDECESSOR:` when the key ended |
 | `journals/cl` vs `journals/vlc` for Journal of Computer Languages | both claim the lineage; Crossref puts the new ISSN 2590-1184 on `vlc` | prove `cl`'s link with the publisher before any accept |
+| `journals/nle`, `journals/aicom` (ended 2024, no candidate) | renamed 2025 with new ISSNs: *Natural Language Processing* 2977-0424, *European Journal on Artificial Intelligence* 3050-4546 | accept with `PREDECESSOR:` (Step 4d) |
 | `journals/ton` "IEEE/ACM Trans. Netw." | renamed "IEEE Trans. Netw." in 2025, new ISSN 2998-4157 | Scopus "IEEE Transactions on Networking" |
 | `journals/scl`, `journals/ejasmp` with one foreign DOI | misfiled article | reject that pair |
 | two journals called "Informatica", "Journal of Computer Science and Technology", "Journal of Cyber Security", "Int. J. Artificial Intelligence and Machine Learning" | namesakes from different countries/publishers | decide by ISSN |
@@ -258,4 +269,4 @@ WHERE d.verdict = 'accept'
 - Never accept `journals/corr` or a shared key; never write `absent` without running every search in Step 3.
 - Never claim a DBLP web check you did not make.
 - Every pair you examine gets a written verdict.
-- You are done only when the four checks in Step 7 hold.
+- You are done only when the five checks in Step 7 hold.
