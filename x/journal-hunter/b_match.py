@@ -151,7 +151,7 @@ def main() -> None:
     print(f"  └─ final list:  {final} keys")
     print()
     if issues:
-        print("  ✗ Review needed → give run/c-journal-matching-guide.md to the AI")
+        print("  ✗ Review needed → give journal-hunter/c_journal_matching_guide.md to the AI")
     else:
         print("  ✓ Review complete → list_of_journals is final")
     print()

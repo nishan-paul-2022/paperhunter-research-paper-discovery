@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS conf_candidate (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS conf_candidate_core ON conf_candidate (core_id);
 
--- Written only by the AI reviewer (run/b-conference-matching-guide.md).
+-- Written only by the AI reviewer (conference-hunter/c_conference_matching_guide.md).
 CREATE TABLE IF NOT EXISTS conf_decision (
     id         INTEGER PRIMARY KEY,
     core_id    INTEGER NOT NULL REFERENCES core_venue ON DELETE CASCADE,

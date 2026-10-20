@@ -69,27 +69,27 @@ Each claimed paper shows `title`, `abstract`, `tldr`, `keywords`, `topics`, `fie
 
 ## 8. Orchestrator procedure
 
-Run from `x/paper-hunter/`. Details must be fetched first (`a_fetch.py fetch`); only fetched papers can be claimed.
+Run from `x/paper-hunter/`. Details must be fetched first (`b_fetch.py fetch`); only fetched papers can be claimed.
 
 ```bash
-python3 a_fetch.py status        # how many papers have details
-python3 c_review.py status       # decided, accepted by role, rejected by class, left to review
+python3 b_fetch.py status        # how many papers have details
+python3 d_review.py status       # decided, accepted by role, rejected by class, left to review
 ```
 
-Then spawn `W` parallel worker agents (section 9), each with its own owner name, until `c_review.py status` shows `left to review 0`. Use `--slice` in the workers' claim commands to work through one part of the corpus first, e.g. `--slice a-star-2025`.
+Then spawn `W` parallel worker agents (section 9), each with its own owner name, until `d_review.py status` shows `left to review 0`. Use `--slice` in the workers' claim commands to work through one part of the corpus first, e.g. `--slice a-star-2025`.
 
 Finally:
 ```bash
-python3 c_review.py accepted
+python3 d_review.py accepted
 ```
-and self-audit the list: role distribution, no duplicated title, every accepted paper truly offensive and agentic. To correct a decision: `python3 c_review.py reopen <dblp_key>`; the paper is claimed and decided again.
+and self-audit the list: role distribution, no duplicated title, every accepted paper truly offensive and agentic. To correct a decision: `python3 d_review.py reopen <dblp_key>`; the paper is claimed and decided again.
 
 ## 9. Worker procedure (give this to each sub-agent)
 
-> You are a PAPER-HUNTER reviewer. Read sections 1–7 of `run/e-paper-matching-guide.md`. Your owner name: `<NAME>`. Work in `x/paper-hunter/`.
+> You are a PAPER-HUNTER reviewer. Read sections 1–7 of `paper-hunter/e_paper_matching_guide.md`. Your owner name: `<NAME>`. Work in `x/paper-hunter/`.
 > Loop until `claim` prints an empty list:
-> 1. `python3 c_review.py claim --owner <NAME> --n 20` (add `--slice <SLICE>` if the orchestrator gave one)
-> 2. Judge every paper individually. Write one JSON array (section 10) to `/tmp/<NAME>.json` and run `python3 c_review.py submit --owner <NAME> --file /tmp/<NAME>.json`.
+> 1. `python3 d_review.py claim --owner <NAME> --n 20` (add `--slice <SLICE>` if the orchestrator gave one)
+> 2. Judge every paper individually. Write one JSON array (section 10) to `/tmp/<NAME>.json` and run `python3 d_review.py submit --owner <NAME> --file /tmp/<NAME>.json`.
 > 3. If `submit` sends a record back, fix exactly what it says and resubmit only that record. Never invent a quote; if no supporting text exists, lower `p` and reject.
 > 4. Every 100 papers, re-read sections 2–5.
 > Finish by printing the number of papers you decided.
@@ -133,7 +133,7 @@ Reject:
 
 - `claim` prints `[]` but `status` shows papers left: other workers hold them; leases expire after 30 minutes, then they can be claimed again.
 - `submit` says the paper is not claimed by you: your lease expired and another worker took it. Skip it.
-- Resume anything with `c_review.py status`; a restarted worker gets its own unfinished batch back first.
+- Resume anything with `d_review.py status`; a restarted worker gets its own unfinished batch back first.
 
 ## 13. Final message
 

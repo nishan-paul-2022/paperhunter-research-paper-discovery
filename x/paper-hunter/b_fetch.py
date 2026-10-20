@@ -10,7 +10,7 @@ works through two phases:
            searches papers that still have no abstract.
 Every answer is stored verbatim (zlib-compressed JSON) in paper_source, one row per
 (paper, source). A miss is stored too, so it is not asked again. After each batch,
-b_build turns the raw records into paper_detail, paper_term and paper_reference.
+c_build turns the raw records into paper_detail, paper_term and paper_reference.
 Interrupt and re-run at any time: papers that already have an answer are skipped.
 
 Keys come from the environment or from paper-hunter/.env (KEY=value lines):
@@ -22,12 +22,12 @@ Semantic Scholar: one request every 1.1 s from a single thread (batch and title 
 it), and a 429 resends the same request after a wait. Only one fetch process may run at a time.
 
 Commands:
-  python3 a_fetch.py fetch                       every paper in dblp_paper
-  python3 a_fetch.py fetch --slice a-star-2025   papers of paper_inventory slices
-  python3 a_fetch.py fetch --key conf/uss/X23    single papers by DBLP key (repeatable)
-  python3 a_fetch.py fetch --limit 500           the first N target papers (for a trial)
-  python3 a_fetch.py status                      coverage per source and field
-  python3 a_fetch.py show conf/uss/X23           what is stored for one paper
+  python3 b_fetch.py fetch                       every paper in dblp_paper
+  python3 b_fetch.py fetch --slice a-star-2025   papers of paper_inventory slices
+  python3 b_fetch.py fetch --key conf/uss/X23    single papers by DBLP key (repeatable)
+  python3 b_fetch.py fetch --limit 500           the first N target papers (for a trial)
+  python3 b_fetch.py status                      coverage per source and field
+  python3 b_fetch.py show conf/uss/X23           what is stored for one paper
 """
 import argparse
 import difflib
@@ -47,7 +47,7 @@ import urllib.request
 import zlib
 from pathlib import Path
 
-import b_build
+import c_build
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DB_PATH = SCRIPT_DIR.parent / "archive" / "paperhunter.db"
@@ -306,7 +306,7 @@ def store(conn, src, via, results):
             "INSERT OR REPLACE INTO paper_source (paper_id, src, via, found, raw, fetched_at) VALUES (?,?,?,?,?,?)",
             [(pid, src, via, int(rec is not None), pack(rec) if rec is not None else None, now)
              for pid, rec in results])
-        b_build.build(conn, [pid for pid, rec in results if rec is not None])
+        c_build.build(conn, [pid for pid, rec in results if rec is not None])
 
 
 class Worker(threading.Thread):
@@ -431,7 +431,7 @@ def take_lock():
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        sys.exit("ERROR: another a_fetch.py fetch is already running (the S2 key allows one process)")
+        sys.exit("ERROR: another b_fetch.py fetch is already running (the S2 key allows one process)")
     return f
 
 
@@ -511,7 +511,7 @@ def open_db():
         sys.exit(f"ERROR: database not found at {DB_PATH}")
     conn = sqlite3.connect(DB_PATH, timeout=300)
     conn.executescript(SCHEMA)
-    b_build.create_schema(conn)
+    c_build.create_schema(conn)
     return conn
 
 

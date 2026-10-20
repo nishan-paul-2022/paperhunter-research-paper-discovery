@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ARCHIVE_DIR = Path(__file__).resolve().parent.parent / "archive"
+ARCHIVE_DIR = Path(__file__).resolve().parent
 GZ_PATH = ARCHIVE_DIR / "paper-dblp.xml.gz"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DTD_PATH = ARCHIVE_DIR / "dblp.dtd"

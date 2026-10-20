@@ -62,7 +62,7 @@ def load_list(conn, view, rank_column):
     """dblp_key → rank from a final-list view; the view is empty until its review is complete."""
     index = dict(conn.execute(f"SELECT dblp_key, {rank_column} FROM {view}"))
     if not index:
-        sys.exit(f"ERROR: {view} is empty — finish its review first (see run/ matching guides)")
+        sys.exit(f"ERROR: {view} is empty — finish its review first (see conference-hunter/ and journal-hunter/ matching guides)")
     return index
 
 

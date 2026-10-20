@@ -6,8 +6,8 @@
   paper_reference  the works a paper cites, one row per (paper, source, cited work)
   paper_card       view: dblp_paper + paper_detail + terms, what a reviewer reads about one paper
 
-Everything here is derived: `python3 b_build.py --all` rebuilds it from paper_source at any
-time without touching the network. a_fetch calls build() after each batch it stores.
+Everything here is derived: `python3 c_build.py --all` rebuilds it from paper_source at any
+time without touching the network. b_fetch calls build() after each batch it stores.
 """
 import argparse
 import html

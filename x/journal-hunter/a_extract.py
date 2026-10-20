@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS journal_candidate (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS journal_candidate_sjr ON journal_candidate (sjr_id);
 
--- Written only by the AI reviewer (run/c-journal-matching-guide.md).
+-- Written only by the AI reviewer (journal-hunter/c_journal_matching_guide.md).
 CREATE TABLE IF NOT EXISTS journal_decision (
     id         INTEGER PRIMARY KEY,
     sjr_id     INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,

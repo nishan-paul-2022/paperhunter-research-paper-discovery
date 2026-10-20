@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AI review: every fetched paper is read and decided once, accepted or rejected.
 
-Reviewers (AI agents following run/e-paper-matching-guide.md) work in parallel:
+Reviewers (AI agents following paper-hunter/e_paper_matching_guide.md) work in parallel:
   claim   lease a batch of undecided papers and print what the database knows about them
   submit  store a batch of decisions; each record is validated, bad ones are sent back
 Decisions:
@@ -11,11 +11,11 @@ Decisions:
 A paper is in at most one of paper_accepted / paper_rejected (enforced by triggers).
 
 Commands:
-  python3 c_review.py claim --owner w1 [--n 20] [--slice a-star-2025 ...]
-  python3 c_review.py submit --owner w1 --file /tmp/w1.json
-  python3 c_review.py reopen conf/uss/X23 ...      undo decisions so the papers are claimed again
-  python3 c_review.py status
-  python3 c_review.py accepted                     the accepted papers with their DBLP record
+  python3 d_review.py claim --owner w1 [--n 20] [--slice a-star-2025 ...]
+  python3 d_review.py submit --owner w1 --file /tmp/w1.json
+  python3 d_review.py reopen conf/uss/X23 ...      undo decisions so the papers are claimed again
+  python3 d_review.py status
+  python3 d_review.py accepted                     the accepted papers with their DBLP record
 """
 import argparse
 import difflib
