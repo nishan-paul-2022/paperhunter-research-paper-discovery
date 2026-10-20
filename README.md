@@ -70,4 +70,4 @@ python3 d_review.py status
 python3 d_review.py accepted
 ```
 
-**Output:** tables `dblp_paper`, `paper_detail`, `paper_term`, `paper_reference`, `paper_accepted`, `paper_rejected`
+**Output:** tables `paper_dblp`, `paper_detail`, `paper_term`, `paper_reference`, `paper_accepted`, `paper_rejected`

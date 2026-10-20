@@ -12,11 +12,11 @@ Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `
 
 | object | kind | you |
 |---|---|---|
-| `journal_sjr(id, title, issn_1, issn_2, publisher, quartile)` | table, from Scopus (`id` = Sourceid) | read |
+| `journal_scopus(id, title, issn_1, issn_2, publisher, quartile)` | table, from Scopus (`id` = Sourceid) | read |
 | `journal_dblp_venue(dblp_key, papers, first_year, last_year)` | table, from DBLP | read |
 | `journal_dblp_name(dblp_key, name, papers)` | table, from DBLP | read: how articles of a key name their journal (ISO-4 abbreviations) |
 | `journal_dblp_issn(dblp_key, issn, papers)` | table, from DBLP | read: checksum-valid ISSNs found in article links, the strongest evidence |
-| `journal_dblp_doi_prefix(dblp_key, prefix, papers)` | table, from DBLP | read: publisher of the articles (10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global) |
+| `journal_dblp_doi(dblp_key, prefix, papers)` | table, from DBLP | read: publisher of the articles (10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global) |
 | `journal_candidate(dblp_key, sjr_id, method, score, detail)` | table, from `b_match.py` | read: proposed pairs, not approved |
 | `journal_decision(id, sjr_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
 | `journal_summary` | view | read: one summary row per key (top names, ISSNs, DOI prefixes) |
@@ -59,7 +59,7 @@ VALUES (34567, NULL, 'absent', 'Not indexed in DBLP');
 | `reject` | the key | the proposed pair is a different journal |
 | `absent` | `NULL` | this SJR journal has no DBLP key of its own |
 
-- Take `sjr_id` from `journal_review.sjr_id` or `journal_sjr.id`.
+- Take `sjr_id` from `journal_review.sjr_id` or `journal_scopus.id`.
 - `reason` is one line of evidence and is required.
 - The database rejects invalid writes:
   - a key accepted for two journals

@@ -113,14 +113,14 @@ def scan_xml(xml_path, journal_index, conf_index):
 
 
 def write_papers(conn, papers):
-    print("Syncing dblp_paper...")
-    before = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
+    print("Syncing paper_dblp...")
+    before = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
     users = [t for t in ("paper_source", "paper_accepted", "paper_rejected")
              if conn.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone()]
     used = " OR ".join(f"id IN (SELECT paper_id FROM {t})" for t in users)
     with conn:
         conn.executemany(
-            "INSERT INTO dblp_paper (dblp_key, venue_key, kind, year, title, authors, venue, ee, url, doi) "
+            "INSERT INTO paper_dblp (dblp_key, venue_key, kind, year, title, authors, venue, ee, url, doi) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (dblp_key) DO UPDATE SET "
             "venue_key = excluded.venue_key, kind = excluded.kind, year = excluded.year, title = excluded.title, "
             "authors = excluded.authors, venue = excluded.venue, ee = excluded.ee, url = excluded.url, "
@@ -132,11 +132,11 @@ def write_papers(conn, papers):
         stale = "dblp_key NOT IN (SELECT dblp_key FROM extracted)"
         kept = 0
         if used:
-            kept = conn.execute(f"SELECT count(*) FROM dblp_paper WHERE {stale} AND ({used})").fetchone()[0]
+            kept = conn.execute(f"SELECT count(*) FROM paper_dblp WHERE {stale} AND ({used})").fetchone()[0]
             stale += f" AND NOT ({used})"
-        removed = conn.execute(f"DELETE FROM dblp_paper WHERE {stale}").rowcount
+        removed = conn.execute(f"DELETE FROM paper_dblp WHERE {stale}").rowcount
         conn.execute("DROP TABLE extracted")
-    after = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
+    after = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
     print(f"  ✓ {len(papers):,} papers extracted  |  {after - before + removed:,} new  |  {removed:,} removed"
           + (f"  |  {kept:,} no longer in DBLP but kept (used by paper-hunter)" if kept else ""))
     print()
@@ -161,7 +161,7 @@ def main():
     write_papers(conn, papers)
     conn.close()
     print("━" * 70)
-    print("  Done! Papers are in dblp_paper (view: paper_inventory) of archive/paperhunter.db")
+    print("  Done! Papers are in paper_dblp (view: paper_inventory) of archive/paperhunter.db")
     print("━" * 70)
     print()
 

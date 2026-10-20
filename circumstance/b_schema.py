@@ -124,7 +124,7 @@ WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
          lower(v.title), d.dblp_key;
 
-CREATE TABLE IF NOT EXISTS journal_sjr (
+CREATE TABLE IF NOT EXISTS journal_scopus (
     id        INTEGER PRIMARY KEY,
     title     TEXT NOT NULL,
     issn_1    TEXT,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_issn (
     PRIMARY KEY (dblp_key, issn)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS journal_dblp_doi_prefix (
+CREATE TABLE IF NOT EXISTS journal_dblp_doi (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     prefix   TEXT NOT NULL,
     papers   INTEGER NOT NULL,
@@ -163,17 +163,17 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi_prefix (
 
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
-    sjr_id   INTEGER NOT NULL REFERENCES journal_sjr ON DELETE CASCADE,
+    sjr_id   INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('issn', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, sjr_id)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS journal_candidate_sjr ON journal_candidate (sjr_id);
+CREATE INDEX IF NOT EXISTS journal_candidate_scopus ON journal_candidate (sjr_id);
 
 CREATE TABLE IF NOT EXISTS journal_decision (
     id         INTEGER PRIMARY KEY,
-    sjr_id     INTEGER NOT NULL REFERENCES journal_sjr ON DELETE CASCADE,
+    sjr_id     INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES journal_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS journal_decision (
 CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_pair ON journal_decision (dblp_key, sjr_id) WHERE dblp_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_journal_per_key ON journal_decision (dblp_key) WHERE verdict = 'accept';
 CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_absent ON journal_decision (sjr_id) WHERE verdict = 'absent';
-CREATE INDEX IF NOT EXISTS journal_decision_sjr ON journal_decision (sjr_id);
+CREATE INDEX IF NOT EXISTS journal_decision_scopus ON journal_decision (sjr_id);
 
 CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_ins BEFORE INSERT ON journal_decision
 WHEN EXISTS (
@@ -211,7 +211,7 @@ SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
           FROM (SELECT issn, papers FROM journal_dblp_issn WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, issn LIMIT 4) i) AS issns,
        (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
-          FROM (SELECT prefix, papers FROM journal_dblp_doi_prefix WHERE dblp_key = j.dblp_key
+          FROM (SELECT prefix, papers FROM journal_dblp_doi WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes
 FROM journal_dblp_venue j;
 
@@ -221,20 +221,20 @@ SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.sjr_id, s.title AS sjr_title, s.issn
        s.publisher, s.quartile, c.method, c.score, c.detail,
        e.papers, e.first_year, e.last_year, e.names, e.issns, e.doi_prefixes
 FROM journal_candidate c
-JOIN journal_sjr s ON s.id = c.sjr_id
+JOIN journal_scopus s ON s.id = c.sjr_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.sjr_id = c.sjr_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM journal_sjr s
+FROM journal_scopus s
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.sjr_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.sjr_id, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or SJR journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_decision d
-WHERE NOT EXISTS (SELECT 1 FROM journal_sjr s WHERE s.id = d.sjr_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_scopus s WHERE s.id = d.sjr_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
 DROP VIEW IF EXISTS journal_list;
@@ -244,12 +244,12 @@ SELECT d.dblp_key,
          ORDER BY papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
 FROM journal_decision d
-JOIN journal_sjr s ON s.id = d.sjr_id
+JOIN journal_scopus s ON s.id = d.sjr_id
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
 ORDER BY s.quartile, lower(s.title), d.dblp_key;
 
-CREATE TABLE IF NOT EXISTS dblp_paper (
+CREATE TABLE IF NOT EXISTS paper_dblp (
     id        INTEGER PRIMARY KEY,
     dblp_key  TEXT NOT NULL UNIQUE,
     venue_key TEXT NOT NULL,
@@ -262,21 +262,21 @@ CREATE TABLE IF NOT EXISTS dblp_paper (
     url       TEXT,
     doi       TEXT
 );
-CREATE INDEX IF NOT EXISTS dblp_paper_venue ON dblp_paper (venue_key);
-CREATE INDEX IF NOT EXISTS dblp_paper_year ON dblp_paper (year);
+CREATE INDEX IF NOT EXISTS paper_dblp_venue ON paper_dblp (venue_key);
+CREATE INDEX IF NOT EXISTS paper_dblp_year ON paper_dblp (year);
 
 DROP VIEW IF EXISTS paper_inventory;
 CREATE VIEW paper_inventory AS
 SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venue, p.ee, p.url, p.doi,
        r.rank,
        CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
-FROM dblp_paper p
+FROM paper_dblp p
 JOIN (SELECT dblp_key, ranking AS rank FROM conf_list WHERE dblp_key LIKE 'conf/%'
       UNION ALL
       SELECT dblp_key, quartile AS rank FROM journal_list) r ON r.dblp_key = p.venue_key;
 
 CREATE TABLE IF NOT EXISTS paper_source (
-    paper_id   INTEGER NOT NULL REFERENCES dblp_paper(id),
+    paper_id   INTEGER NOT NULL REFERENCES paper_dblp(id),
     src        TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
     via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
     found      INTEGER NOT NULL CHECK (found IN (0, 1)),
@@ -287,7 +287,7 @@ CREATE TABLE IF NOT EXISTS paper_source (
 );
 
 CREATE TABLE IF NOT EXISTS paper_detail (
-    paper_id      INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
+    paper_id      INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
     openalex_id   TEXT,
     s2_id         TEXT,
     corpus_id     INTEGER,
@@ -315,7 +315,7 @@ CREATE TABLE IF NOT EXISTS paper_detail (
 );
 
 CREATE TABLE IF NOT EXISTS paper_term (
-    paper_id INTEGER NOT NULL REFERENCES dblp_paper(id),
+    paper_id INTEGER NOT NULL REFERENCES paper_dblp(id),
     kind     TEXT NOT NULL CHECK (kind IN ('keyword', 'topic', 'field')),
     name     TEXT NOT NULL,
     score    REAL,
@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS paper_term (
 CREATE INDEX IF NOT EXISTS paper_term_name ON paper_term (kind, name);
 
 CREATE TABLE IF NOT EXISTS paper_reference (
-    paper_id INTEGER NOT NULL REFERENCES dblp_paper(id),
+    paper_id INTEGER NOT NULL REFERENCES paper_dblp(id),
     src      TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
     ref_id   TEXT NOT NULL,
     doi      TEXT,
@@ -343,16 +343,16 @@ SELECT p.id AS paper_id, p.dblp_key, p.title, p.year, p.venue, p.kind, p.doi,
        (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'topic') AS topics,
        (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'field') AS fields,
        d.arxiv_id, d.oa_url, d.pdf_url, d.openalex_id, d.s2_id
-FROM dblp_paper p JOIN paper_detail d ON d.paper_id = p.id;
+FROM paper_dblp p JOIN paper_detail d ON d.paper_id = p.id;
 
-CREATE TABLE IF NOT EXISTS review_claim (
-    paper_id INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
+CREATE TABLE IF NOT EXISTS paper_review_claim (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
     owner    TEXT NOT NULL,
     until    INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS paper_accepted (
-    paper_id     INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
+    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
     role         TEXT NOT NULL CHECK (role IN ('baseline', 'benchmark', 'evaluation', 'survey')),
     p            REAL NOT NULL CHECK (p >= 0.5 AND p <= 1),
     agent        TEXT NOT NULL CHECK (agent = 'y'),
@@ -368,7 +368,7 @@ CREATE TABLE IF NOT EXISTS paper_accepted (
 );
 
 CREATE TABLE IF NOT EXISTS paper_rejected (
-    paper_id     INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
+    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
     reject_class TEXT NOT NULL CHECK (reject_class IN ('off_domain', 'security_other', 'defensive_only', 'vuln_detection_or_code_scan', 'generic_llm_security', 'static_qa_benchmark', 'llm_no_offense', 'frontmatter')),
     p            REAL NOT NULL CHECK (p >= 0 AND p < 0.5),
     reason       TEXT NOT NULL,
@@ -402,17 +402,17 @@ def migrate(conn: sqlite3.Connection) -> None:
     for t in stale:
         conn.execute(f"DROP TABLE {t}")
     if venue_stale:
-        conn.execute("""CREATE TABLE conf_dblp_venue_new (
+        conn.execute("""CREATE TABLE conf_venue_tmp (
             dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
             acronym    TEXT NOT NULL,
             papers     INTEGER NOT NULL,
             first_year INTEGER,
             last_year  INTEGER
         ) WITHOUT ROWID""")
-        conn.execute("INSERT INTO conf_dblp_venue_new SELECT dblp_key, substr(dblp_key, instr(dblp_key, '/') + 1), "
+        conn.execute("INSERT INTO conf_venue_tmp SELECT dblp_key, substr(dblp_key, instr(dblp_key, '/') + 1), "
                      "papers, first_year, last_year FROM conf_dblp_venue")
         conn.execute("DROP TABLE conf_dblp_venue")
-        conn.execute("ALTER TABLE conf_dblp_venue_new RENAME TO conf_dblp_venue")
+        conn.execute("ALTER TABLE conf_venue_tmp RENAME TO conf_dblp_venue")
     conn.commit()
     conn.execute("PRAGMA foreign_keys = ON")
     print(f"migrated: rebuilt {', '.join(stale + ['conf_dblp_venue'] * venue_stale)}; "

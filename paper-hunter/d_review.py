@@ -60,7 +60,7 @@ def quote_in(quote, text):
 
 
 def dossier(conn, pid):
-    p = conn.execute("SELECT id, title FROM dblp_paper WHERE id = ?", (pid,)).fetchone()
+    p = conn.execute("SELECT id, title FROM paper_dblp WHERE id = ?", (pid,)).fetchone()
     d = conn.execute("SELECT * FROM paper_detail WHERE paper_id = ?", (pid,)).fetchone()
     terms = {}
     for kind, name in conn.execute("SELECT kind, name FROM paper_term WHERE paper_id = ? "
@@ -80,17 +80,17 @@ def dossier(conn, pid):
 def cmd_claim(a):
     conn = open_db()
     now = int(time.time())
-    where, args = [_UNDECIDED, _FETCHED, "NOT EXISTS (SELECT 1 FROM review_claim c WHERE c.paper_id = p.id "
+    where, args = [_UNDECIDED, _FETCHED, "NOT EXISTS (SELECT 1 FROM paper_review_claim c WHERE c.paper_id = p.id "
                    "AND c.until > ? AND c.owner <> ?)"], [now, a.owner]
     if a.slice:
         where.append(f"p.id IN (SELECT id FROM paper_inventory WHERE slice IN ({','.join('?' * len(a.slice))}))")
         args += a.slice
     conn.execute("BEGIN IMMEDIATE")
     ids = [r[0] for r in conn.execute(
-        f"SELECT p.id FROM dblp_paper p LEFT JOIN review_claim c ON c.paper_id = p.id AND c.owner = ? "
+        f"SELECT p.id FROM paper_dblp p LEFT JOIN paper_review_claim c ON c.paper_id = p.id AND c.owner = ? "
         f"WHERE {' AND '.join(where)} ORDER BY c.paper_id IS NULL, p.id LIMIT ?",
         [a.owner, *args, a.n])]
-    conn.executemany("INSERT OR REPLACE INTO review_claim (paper_id, owner, until) VALUES (?, ?, ?)",
+    conn.executemany("INSERT OR REPLACE INTO paper_review_claim (paper_id, owner, until) VALUES (?, ?, ?)",
                      [(pid, a.owner, now + LEASE_SECONDS) for pid in ids])
     conn.execute("COMMIT")
     print(json.dumps([dossier(conn, pid) for pid in ids], indent=1, ensure_ascii=False))
@@ -105,7 +105,7 @@ def validate(conn, rec, owner):
     pid = rec.get("id")
     if not isinstance(pid, int) or isinstance(pid, bool):
         return ["id must be the integer paper id from claim"]
-    claim = conn.execute("SELECT owner, until FROM review_claim WHERE paper_id = ?", (pid,)).fetchone()
+    claim = conn.execute("SELECT owner, until FROM paper_review_claim WHERE paper_id = ?", (pid,)).fetchone()
     if claim is None or claim["owner"] != owner:
         errs.append(f"paper {pid} is not claimed by {owner}; claim it first")
     verdict, p = rec.get("verdict"), rec.get("p")
@@ -165,7 +165,7 @@ def store(conn, rec, owner):
     else:
         conn.execute("INSERT INTO paper_rejected (paper_id, reject_class, p, reason, by, at) VALUES (?,?,?,?,?,?)",
                      (rec["id"], rec["reject_class"], float(rec["p"]), rec["reason"].strip(), owner, now))
-    conn.execute("DELETE FROM review_claim WHERE paper_id = ?", (rec["id"],))
+    conn.execute("DELETE FROM paper_review_claim WHERE paper_id = ?", (rec["id"],))
 
 
 def cmd_submit(a):
@@ -203,7 +203,7 @@ def cmd_reopen(a):
     conn.execute("BEGIN IMMEDIATE")
     n = 0
     for key in a.dblp_key:
-        row = conn.execute("SELECT id FROM dblp_paper WHERE dblp_key = ?", (key,)).fetchone()
+        row = conn.execute("SELECT id FROM paper_dblp WHERE dblp_key = ?", (key,)).fetchone()
         if row is None:
             print(f"unknown dblp key {key}", file=sys.stderr)
             continue
@@ -226,15 +226,15 @@ def cmd_status(a):
     print(f"  rejected         {rej:>10,}")
     for cls, n in conn.execute("SELECT reject_class, count(*) FROM paper_rejected GROUP BY 1 ORDER BY 2 DESC"):
         print(f"    {cls:28} {n:>10,}")
-    print(f"open claims        {q('SELECT count(*) FROM review_claim WHERE until > ?', int(time.time())):>10,}")
-    print(f"left to review     {q(f'SELECT count(*) FROM dblp_paper p WHERE {_FETCHED} AND {_UNDECIDED}'):>10,}")
+    print(f"open claims        {q('SELECT count(*) FROM paper_review_claim WHERE until > ?', int(time.time())):>10,}")
+    print(f"left to review     {q(f'SELECT count(*) FROM paper_dblp p WHERE {_FETCHED} AND {_UNDECIDED}'):>10,}")
 
 
 def cmd_accepted(a):
     conn = open_db()
     rows = conn.execute(
         "SELECT a.role, a.p, d.dblp_key, d.year, d.venue, d.title, d.doi FROM paper_accepted a "
-        "JOIN dblp_paper d ON d.id = a.paper_id "
+        "JOIN paper_dblp d ON d.id = a.paper_id "
         "ORDER BY CASE a.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evaluation' THEN 2 ELSE 3 END, "
         "a.p DESC, d.dblp_key").fetchall()
     for r in rows:

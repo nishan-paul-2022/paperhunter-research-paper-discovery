@@ -339,7 +339,7 @@ class Worker(threading.Thread):
 
 
 def select_targets(conn, slices, keys, limit):
-    sql = "SELECT id, dblp_key, doi, title, year FROM dblp_paper"
+    sql = "SELECT id, dblp_key, doi, title, year FROM paper_dblp"
     where, args = [], []
     if slices:
         where.append(f"id IN (SELECT id FROM paper_inventory WHERE slice IN ({','.join('?' * len(slices))}))")
@@ -395,8 +395,8 @@ def cmd_fetch(a):
 
 def cmd_status(a):
     conn = open_db()
-    total = conn.execute("SELECT count(*) FROM dblp_paper").fetchone()[0]
-    print(f"dblp_paper: {total:,} papers\n")
+    total = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
+    print(f"paper_dblp: {total:,} papers\n")
     print(f"{'source':9} {'via':6} {'found':>10} {'missing':>10}")
     for src, via, found, missing in conn.execute(
             "SELECT src, via, sum(found), sum(1 - found) FROM paper_source GROUP BY src, via ORDER BY src, via"):
