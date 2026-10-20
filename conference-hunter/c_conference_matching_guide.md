@@ -15,7 +15,7 @@ Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `
 | `core_venue(id, title, acronym, rank)` | table, from CORE | read |
 | `dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | table, from DBLP | read |
 | `dblp_booktitle(dblp_key, booktitle, papers)` | table, from DBLP | read: how papers of a key name their venue |
-| `dblp_proceedings(dblp_key, year, title)` | table, from DBLP | read: full proceedings titles, the strongest evidence |
+| `dblp_proceedings(dblp_key, year, title, publisher)` | table, from DBLP | read: full proceedings titles, the strongest evidence; publisher (ACM, IEEE, Springer, …) separates venues that share an acronym |
 | `conf_candidate(dblp_key, core_id, score, proceedings_title)` | table, from `b_match.py` | read: proposed pairs, not approved |
 | `conf_decision(id, core_id, dblp_key, verdict, reason, decided_at)` | table | **write: the only thing you change** |
 | `venue_evidence` | view | read: one summary row per key (top booktitles, latest proceedings) |
@@ -70,7 +70,7 @@ VALUES (799, NULL, 'absent', 'Not indexed in DBLP');
 
 ## How to decide
 
-**`UNREVIEWED`** (`dblp_key` → `core_title`). Compare the row's `proceedings_titles`, `booktitles` and `detail` (the matched proceedings title) with `core_title`. If needed, query all proceedings of the key (`SELECT year, title FROM dblp_proceedings WHERE dblp_key = ? ORDER BY year`) or open `https://dblp.org/db/conf/<name>/`.
+**`UNREVIEWED`** (`dblp_key` → `core_title`). Compare the row's `proceedings_titles`, `booktitles` and `detail` (the matched proceedings title) with `core_title`. If needed, query all proceedings of the key (`SELECT year, title, publisher FROM dblp_proceedings WHERE dblp_key = ? ORDER BY year`) or open `https://dblp.org/db/conf/<name>/`.
 - `accept` only if the proceedings name the same conference series as the CORE title. Renames and mergers count as the same series, e.g. NIPS→NeurIPS, WCRE→SANER, ATAL→AAMAS, ICSM→ICSME.
 - Otherwise `reject`. Typical cases:
   - a different venue sharing the acronym (`conf/sac` is ACM Symposium on Applied Computing, not Selected Areas in Cryptography; `conf/fse` is Fast Software Encryption, not ACM FSE)

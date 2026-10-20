@@ -28,9 +28,10 @@ CREATE TABLE IF NOT EXISTS dblp_booktitle (
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS dblp_proceedings (
-    dblp_key TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
-    year     INTEGER NOT NULL,
-    title    TEXT NOT NULL,
+    dblp_key  TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
+    year      INTEGER NOT NULL,
+    title     TEXT NOT NULL,
+    publisher TEXT,
     PRIMARY KEY (dblp_key, year, title)
 ) WITHOUT ROWID;
 

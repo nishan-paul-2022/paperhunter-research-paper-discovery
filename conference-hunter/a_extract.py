@@ -62,7 +62,7 @@ def scan_xml(xml_path: Path):
     papers: Counter = Counter()
     booktitles: dict[str, Counter] = defaultdict(Counter)
     years: dict[str, list[int]] = {}
-    proceedings: dict[str, set[tuple[int, str]]] = defaultdict(set)
+    proceedings: dict[str, dict[tuple[int, str], str | None]] = defaultdict(dict)
     f = open(xml_path, "rb")
     ctx = etree.iterparse(
         f,
@@ -93,7 +93,9 @@ def scan_xml(xml_path: Path):
                 if title_el is not None:
                     title = " ".join("".join(title_el.itertext()).split())
                     if title:
-                        proceedings[prefix].add((year, title))
+                        publisher = " ".join((el.findtext("publisher") or "").split()) or None
+                        if not proceedings[prefix].get((year, title)):
+                            proceedings[prefix][(year, title)] = publisher
         if seen % 500_000 == 0:
             pct = f.tell() * 100 // size
             print(f"  {pct:3}%  |  records scanned: {seen:,}  |  conference keys: {len(papers):,}", end="\r", flush=True)
@@ -104,7 +106,7 @@ def scan_xml(xml_path: Path):
     print(f"  100%  |  records scanned: {seen:,}  |  conference keys: {len(papers):,}")
     venues = [(k, n, *years.get(k, (None, None))) for k, n in papers.items()]
     bts = [(k, b, n) for k in papers for b, n in booktitles[k].items()]
-    pts = [(k, y, t) for k in papers for y, t in proceedings.get(k, ())]
+    pts = [(k, y, t, p) for k in papers for (y, t), p in proceedings.get(k, {}).items()]
     return venues, bts, pts
 
 
@@ -130,7 +132,7 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
         conn.execute("DELETE FROM dblp_booktitle")
         conn.execute("DELETE FROM dblp_proceedings")
         conn.executemany("INSERT INTO dblp_booktitle VALUES (?, ?, ?)", bts)
-        conn.executemany("INSERT INTO dblp_proceedings VALUES (?, ?, ?)", pts)
+        conn.executemany("INSERT INTO dblp_proceedings VALUES (?, ?, ?, ?)", pts)
     print(f"\n  ✓  {len(venues):,} keys  |  {len(bts):,} booktitles  |  {len(pts):,} proceedings  |  {removed} keys removed\n")
 
 
