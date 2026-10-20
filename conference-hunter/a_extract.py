@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-import argparse
 import csv
+import json
 import os
 import re
 import sqlite3
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -15,6 +19,12 @@ CORE_SRC = ARCHIVE_DIR / "publication-core-2026.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 VALID_RANKS = ("A*", "A", "B", "C")
+DBLP_SPARQL = "https://sparql.dblp.org/sparql"
+DBLP_AGENT = "paperhunter-conference-hunter/1.0"
+DBLP_LINEAGE_QUERY = (
+    "PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?stream ?relation ?other WHERE { "
+    "VALUES ?relation { dblp:predeccessorStream dblp:successorStream } ?stream ?relation ?other }"
+)
 
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
@@ -172,16 +182,47 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
           f"issue streams  |  {len(bts):,} booktitles  |  {len(pts):,} proceedings  |  {removed} keys removed\n")
 
 
+def dblp_sparql(query: str) -> list[dict] | None:
+    data = urllib.parse.urlencode({"query": query}).encode()
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(DBLP_SPARQL, data=data, headers={
+                "User-Agent": DBLP_AGENT, "Accept": "application/sparql-results+json"})
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                return json.load(resp)["results"]["bindings"]
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, OSError):
+            time.sleep(2 ** attempt * 5)
+    return None
+
+
+def load_lineage(conn: sqlite3.Connection) -> None:
+    print("━" * 70)
+    print("  Phase 3 – DBLP predecessor/successor links (sparql.dblp.org) → conf_dblp_lineage")
+    print("━" * 70)
+    rows = dblp_sparql(DBLP_LINEAGE_QUERY)
+    if rows is None:
+        kept = conn.execute("SELECT count(*) FROM conf_dblp_lineage").fetchone()[0]
+        print(f"  ✗ sparql.dblp.org did not answer: keeping the {kept:,} links stored by the last run\n")
+        return
+    keys = {k for (k,) in conn.execute("SELECT dblp_key FROM conf_dblp_venue")}
+    stream = lambda r, f: r[f]["value"].replace("https://dblp.org/streams/", "")
+    links = set()
+    for r in rows:
+        a, b = stream(r, "stream"), stream(r, "other")
+        pair = (a, b) if r["relation"]["value"].endswith("successorStream") else (b, a)
+        if pair[0] in keys and pair[1] in keys and pair[0] != pair[1]:
+            links.add(pair)
+    with conn:
+        conn.execute("DELETE FROM conf_dblp_lineage")
+        conn.executemany("INSERT INTO conf_dblp_lineage VALUES (?, ?)", sorted(links))
+    print(f"  ✓  {len(links):,} links between {len({k for p in links for k in p}):,} series\n")
+
+
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--xml", default=str(XML_PATH), help=f"Path to paper-dblp.xml  (default: {XML_PATH.name})")
-    ap.add_argument("--core", default=str(CORE_SRC), help=f"Path to CORE CSV  (default: {CORE_SRC.name})")
-    ap.add_argument("--skip-xml", action="store_true", help="Keep the DBLP evidence already in the database")
-    args = ap.parse_args()
-    xml_path, core_path = Path(args.xml), Path(args.core)
+    xml_path, core_path = XML_PATH, CORE_SRC
     if not core_path.exists():
         sys.exit(f"CORE CSV not found: {core_path}")
-    if not args.skip_xml and not xml_path.exists():
+    if not xml_path.exists():
         sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
@@ -190,13 +231,8 @@ def main() -> None:
     print(f"\n  Database: {DB_PATH}\n")
     conn = connect()
     load_core(conn, core_path)
-    if args.skip_xml:
-        n = conn.execute("SELECT count(*) FROM conf_dblp_venue").fetchone()[0]
-        if not n:
-            sys.exit("--skip-xml given but the database has no DBLP evidence yet")
-        print(f"  Skipping XML scan: keeping {n:,} DBLP keys already loaded\n")
-    else:
-        load_dblp(conn, xml_path)
+    load_dblp(conn, xml_path)
+    load_lineage(conn)
     conn.close()
     print("━" * 70)
     print("  Done.  → Run b_match.py next")

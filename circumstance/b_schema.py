@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS conf_dblp_title (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS conf_dblp_title_key ON conf_dblp_title (dblp_key, year);
 
+CREATE TABLE IF NOT EXISTS conf_dblp_lineage (
+    predecessor_key TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
+    successor_key   TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
+    PRIMARY KEY (predecessor_key, successor_key)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS conf_dblp_lineage_successor ON conf_dblp_lineage (successor_key);
+
 CREATE TABLE IF NOT EXISTS conf_candidate (
     dblp_key          TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
     core_id           INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
@@ -166,9 +173,9 @@ CREATE INDEX IF NOT EXISTS journal_dblp_crossref_key ON journal_dblp_crossref (d
 CREATE TABLE IF NOT EXISTS journal_dblp_issn (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     issn     TEXT NOT NULL,
-    papers   INTEGER NOT NULL,
     PRIMARY KEY (dblp_key, issn)
 ) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS journal_dblp_issn_issn ON journal_dblp_issn (issn);
 
 CREATE TABLE IF NOT EXISTS journal_dblp_doi (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
@@ -180,7 +187,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     scopus_id   INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
-    method   TEXT NOT NULL CHECK (method IN ('crossref', 'issn', 'name')),
+    method   TEXT NOT NULL CHECK (method IN ('dblp', 'crossref', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, scopus_id)
@@ -220,6 +227,8 @@ BEGIN SELECT RAISE(ABORT, 'Scopus journal cannot be both accepted and absent'); 
 DROP VIEW IF EXISTS journal_summary;
 CREATE VIEW journal_summary AS
 SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
+       (SELECT group_concat(issn, ' ') FROM (SELECT issn FROM journal_dblp_issn WHERE dblp_key = j.dblp_key
+                                              ORDER BY issn)) AS dblp_issns,
        (SELECT group_concat(n.name || ' (' || n.papers || ', ' || coalesce(n.first_year, '?') || '-'
                             || coalesce(n.last_year, '?') || ')', ' | ')
           FROM (SELECT name, papers, first_year, last_year FROM journal_dblp_name WHERE dblp_key = j.dblp_key
@@ -229,9 +238,6 @@ SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
                        count(*) AS dois, min(year) AS lo, max(year) AS hi
                 FROM journal_dblp_crossref WHERE dblp_key = j.dblp_key AND status = 200
                 GROUP BY 1, 2 ORDER BY hi DESC, dois DESC LIMIT 4) x) AS crossref,
-       (SELECT group_concat(i.issn || ' (' || i.papers || ')', ' | ')
-          FROM (SELECT issn, papers FROM journal_dblp_issn WHERE dblp_key = j.dblp_key
-                ORDER BY papers DESC, issn LIMIT 4) i) AS issns,
        (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
           FROM (SELECT prefix, papers FROM journal_dblp_doi WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes
@@ -241,7 +247,7 @@ DROP VIEW IF EXISTS journal_review;
 CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, s.coverage, c.method, c.score, c.detail,
-       e.papers, e.first_year, e.last_year, e.names, e.crossref, e.issns, e.doi_prefixes
+       e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.doi_prefixes
 FROM journal_candidate c
 JOIN journal_scopus_venue s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
@@ -430,7 +436,18 @@ def migrate_journals(conn: sqlite3.Connection) -> None:
                 if col not in have:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {'TEXT' if col == 'coverage' else 'INTEGER'}")
                     done.append(f"{table}.{col}")
-        if "journal_candidate" in tables and "'crossref'" not in tables["journal_candidate"]:
+        if "journal_dblp_issn" in tables and "papers" in tables["journal_dblp_issn"]:
+            for (view,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
+                conn.execute(f"DROP VIEW {view}")
+            conn.execute("DROP TABLE journal_dblp_issn")
+            if "journal_dblp_venue_issn" in tables:
+                conn.execute("DROP INDEX IF EXISTS journal_dblp_venue_issn_issn")
+                conn.execute("ALTER TABLE journal_dblp_venue_issn RENAME TO journal_dblp_issn")
+                done.append("journal_dblp_venue_issn renamed to journal_dblp_issn (link ISSNs removed)")
+            else:
+                done.append("journal_dblp_issn (rebuilt for DBLP ISSNs)")
+        candidate = tables.get("journal_candidate", "")
+        if candidate and ("'dblp'" not in candidate or "'issn'" in candidate):
             conn.execute("DROP VIEW IF EXISTS journal_review")
             conn.execute("DROP VIEW IF EXISTS journal_list")
             conn.execute("DROP TABLE journal_candidate")

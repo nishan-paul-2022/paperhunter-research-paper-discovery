@@ -11,7 +11,7 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 MIN_NAME_SCORE = 0.6
 MIN_NAME_SHARE = 0.15
 RECENT_NAME_YEARS = 3
-METHODS = ("crossref", "issn", "name")
+METHODS = ("dblp", "crossref", "name")
 STOPWORDS = set(
     "an the of on in for and to at with from by its de des du d la le les et fur und "
     "der die das y e em".split()
@@ -88,6 +88,13 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
         if old is None or old[0] < score:
             evidence[(key, sid)][method] = (score, detail)
 
+    dblp_issns: dict[str, list[str]] = defaultdict(list)
+    for key, issn in conn.execute("SELECT dblp_key, issn FROM journal_dblp_issn ORDER BY dblp_key, issn"):
+        dblp_issns[key].append(issn)
+    for key, issns in dblp_issns.items():
+        for sid in {by_issn[i] for i in issns if i in by_issn}:
+            add(key, sid, "dblp", 1.0, f"DBLP ISSN {', '.join(i for i in issns if by_issn.get(i) == sid)}")
+
     sampled: dict[str, list[tuple]] = defaultdict(list)
     missing: dict[str, int] = defaultdict(int)
     for key, year, status, i1, i2, title in conn.execute(
@@ -109,16 +116,6 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
                 f"({min(years)}-{max(years)}; key's newest {rows[-1][0]}), journal '{h[-1][2]}'")
     newest_issns = {key: f"{rows[-1][1] or '?'} {rows[-1][2] or ''}".strip() + f" '{rows[-1][3]}' ({rows[-1][0]})"
                     for key, rows in sampled.items()}
-
-    issn_total: dict[str, int] = defaultdict(int)
-    issn_rows = conn.execute("SELECT dblp_key, issn, papers FROM journal_dblp_issn").fetchall()
-    for key, _, n in issn_rows:
-        issn_total[key] += n
-    for key, issn, n in issn_rows:
-        sid = by_issn.get(issn)
-        if sid is not None:
-            add(key, sid, "issn", round(n / issn_total[key], 2),
-                f"link ISSN {issn} in {n} of {issn_total[key]} ISSN-bearing links")
 
     names: dict[str, set[str]] = defaultdict(set)
     rows = conn.execute("SELECT dblp_key, name, papers, last_year FROM journal_dblp_name").fetchall()
@@ -147,6 +144,8 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     for (key, sid), found in evidence.items():
         method = next(m for m in METHODS if m in found)
         detail = "; ".join(found[m][1] for m in METHODS if m in found)
+        if "dblp" not in found and key in dblp_issns:
+            detail += f"; NO DBLP ISSN MATCH: DBLP lists {' '.join(dblp_issns[key])}"
         if "crossref" not in found and key in newest_issns:
             detail += f"; NO CROSSREF ISSN MATCH: the key's newest Crossref DOI says {newest_issns[key]}"
         pairs.append((key, sid, method, found[method][0], detail))
@@ -174,7 +173,7 @@ def main() -> None:
     final = conn.execute("SELECT count(*) FROM journal_list").fetchone()[0]
     by_method = dict(conn.execute("SELECT method, count(*) FROM journal_candidate GROUP BY method").fetchall())
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)"
-          f"  |  Crossref {by_method.get('crossref', 0)}  |  link ISSN {by_method.get('issn', 0)}"
+          f"  |  DBLP ISSN {by_method.get('dblp', 0)}  |  Crossref {by_method.get('crossref', 0)}"
           f"  |  name {by_method.get('name', 0)}")
     print(f"  ├─ decisions:   {decisions}")
     print(f"  ├─ UNREVIEWED:  {issues.get('UNREVIEWED', 0)}")

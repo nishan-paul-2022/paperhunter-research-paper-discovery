@@ -23,11 +23,14 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 
-ISSN_DOI = re.compile(r"doi\.org/10\.\d{4,9}/(?:\(SICI\)|j\.issn\.|issn\.|j\.)?(\d{4})-(\d{3}[\dX])(?![\dA-Z])", re.I)
-ISSN_PII = re.compile(r"(?:pii/|10\.1016/)S(\d{4})-?(\d{3}[\dXx])", re.I)
 DOI_PREFIX = re.compile(r"doi\.org/(10\.\d{4,9})/", re.I)
 DOI_FULL = re.compile(r"doi\.org/(10\.\d{4,9}/\S+)", re.I)
 CROSSREF_API = "https://api.crossref.org/works/"
+DBLP_SPARQL = "https://sparql.dblp.org/sparql"
+DBLP_ISSN_QUERY = (
+    "PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?stream ?issn WHERE { "
+    "?stream a dblp:Journal ; dblp:issn ?issn . FILTER(STRSTARTS(STR(?issn), \"urn:issn:\")) }"
+)
 CROSSREF_POLITE_WORKERS = 3
 CROSSREF_PUBLIC_WORKERS = 1
 CROSSREF_AGENT = "paperhunter-journal-hunter/1.0"
@@ -55,21 +58,6 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
 def format_issn(raw: str) -> str:
     s = raw.strip().replace("-", "").replace(" ", "").upper()
     return f"{s[:4]}-{s[4:]}" if len(s) == 8 else ""
-
-
-def issn_valid(issn: str) -> bool:
-    digits = issn.replace("-", "")
-    if len(digits) != 8 or not digits[:7].isdigit():
-        return False
-    total = sum(int(d) * w for d, w in zip(digits[:7], range(8, 1, -1)))
-    check = (11 - total % 11) % 11
-    return digits[7] == ("X" if check == 10 else str(check))
-
-
-def link_issns(url: str) -> set[str]:
-    found = {f"{a}-{b.upper()}" for a, b in ISSN_DOI.findall(url)}
-    found |= {f"{a}-{b.upper()}" for a, b in ISSN_PII.findall(url)}
-    return {i for i in found if issn_valid(i)}
 
 
 def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
@@ -110,7 +98,6 @@ def scan_xml(xml_path: Path):
     seen = 0
     papers: Counter = Counter()
     names: dict[str, Counter] = defaultdict(Counter)
-    issns: dict[str, Counter] = defaultdict(Counter)
     prefixes: dict[str, Counter] = defaultdict(Counter)
     years: dict[str, tuple[int, int]] = {}
     name_years: dict[tuple[str, str], tuple[int, int]] = {}
@@ -131,18 +118,15 @@ def scan_xml(xml_path: Path):
                 names[prefix][name] += 1
                 widen(name_years, (prefix, name), year)
             widen(years, prefix, year)
-            found, dois, doi = set(), set(), None
+            dois, doi = set(), None
             for ee in el.findall("ee"):
                 url = ee.text or ""
-                found |= link_issns(url)
                 dois.update(DOI_PREFIX.findall(url))
                 m = DOI_FULL.search(url)
                 if m and not doi:
                     doi = m.group(1)
             if doi and year:
                 dois_by_year.setdefault((prefix, name, year), doi)
-            for i in found:
-                issns[prefix][i] += 1
             for p in dois:
                 prefixes[prefix][p] += 1
         if seen % 500_000 == 0:
@@ -155,9 +139,8 @@ def scan_xml(xml_path: Path):
     print(f"  100%  |  articles scanned: {seen:,}  |  journal keys: {len(papers):,}")
     journals = [(k, n, *years.get(k, (None, None))) for k, n in papers.items()]
     name_rows = [(k, v, n, *name_years.get((k, v), (None, None))) for k in papers for v, n in names[k].items()]
-    issn_rows = [(k, v, n) for k in papers for v, n in issns[k].items()]
     prefix_rows = [(k, v, n) for k in papers for v, n in prefixes[k].items()]
-    return journals, name_rows, issn_rows, prefix_rows, doi_samples(dois_by_year)
+    return journals, name_rows, prefix_rows, doi_samples(dois_by_year)
 
 
 def widen(span: dict, key, year: int) -> None:
@@ -183,10 +166,10 @@ def doi_samples(dois_by_year: dict[tuple[str, str, int], str]) -> list[tuple[str
 
 def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 2 – DBLP evidence → journal_dblp_venue, journal_dblp_name, journal_dblp_issn, journal_dblp_doi")
+    print("  Phase 2 – DBLP evidence → journal_dblp_venue, journal_dblp_name, journal_dblp_doi")
     print("━" * 70)
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~15–20 min)\n")
-    journals, name_rows, issn_rows, prefix_rows, samples = scan_xml(xml_path)
+    journals, name_rows, prefix_rows, samples = scan_xml(xml_path)
     with conn:
         conn.executemany(
             "INSERT INTO journal_dblp_venue (dblp_key, papers, first_year, last_year) VALUES (?, ?, ?, ?) "
@@ -200,11 +183,10 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
             "DELETE FROM journal_dblp_venue WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
         ).rowcount
         conn.execute("DROP TABLE scanned")
-        for table in ("journal_dblp_name", "journal_dblp_issn", "journal_dblp_doi"):
+        for table in ("journal_dblp_name", "journal_dblp_doi"):
             conn.execute(f"DELETE FROM {table}")
         conn.executemany("INSERT INTO journal_dblp_name (dblp_key, name, papers, first_year, last_year) "
                          "VALUES (?, ?, ?, ?, ?)", name_rows)
-        conn.executemany("INSERT INTO journal_dblp_issn VALUES (?, ?, ?)", issn_rows)
         conn.executemany("INSERT INTO journal_dblp_doi VALUES (?, ?, ?)", prefix_rows)
         conn.execute("CREATE TEMP TABLE sampled (doi TEXT PRIMARY KEY, dblp_key TEXT, name TEXT, year INTEGER)")
         conn.executemany("INSERT INTO sampled VALUES (?, ?, ?, ?)", samples)
@@ -213,11 +195,47 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
                      "FROM sampled WHERE true ON CONFLICT (doi) DO UPDATE SET dblp_key = excluded.dblp_key, "
                      "name = excluded.name, year = excluded.year")
         conn.execute("DROP TABLE sampled")
-    with_issn = len({r[0] for r in issn_rows})
     print(
-        f"\n  ✓  {len(journals):,} keys  |  {len(name_rows):,} names  |  {with_issn:,} keys with link ISSNs"
+        f"\n  ✓  {len(journals):,} keys  |  {len(name_rows):,} names"
         f"  |  {len(prefix_rows):,} DOI prefixes  |  {len(samples):,} DOIs sampled  |  {removed} keys removed\n"
     )
+
+
+def dblp_sparql(query: str) -> list[dict] | None:
+    mailto = os.environ.get("CROSSREF_MAILTO", "").strip()
+    agent = CROSSREF_AGENT + (f" (mailto:{mailto})" if mailto else "")
+    data = urllib.parse.urlencode({"query": query}).encode()
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(DBLP_SPARQL, data=data, headers={
+                "User-Agent": agent, "Accept": "application/sparql-results+json"})
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                return json.load(resp)["results"]["bindings"]
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, OSError):
+            time.sleep(2 ** attempt * 5)
+    return None
+
+
+def load_dblp_issn(conn: sqlite3.Connection) -> None:
+    print("━" * 70)
+    print("  Phase 3 – DBLP ISSNs (sparql.dblp.org) → journal_dblp_issn")
+    print("━" * 70)
+    rows = dblp_sparql(DBLP_ISSN_QUERY)
+    if rows is None:
+        kept = conn.execute("SELECT count(DISTINCT dblp_key) FROM journal_dblp_issn").fetchone()[0]
+        print(f"  ✗ sparql.dblp.org did not answer: keeping the {kept:,} keys stored by the last run\n")
+        return
+    keys = {k for (k,) in conn.execute("SELECT dblp_key FROM journal_dblp_venue")}
+    pairs = set()
+    for r in rows:
+        key = r["stream"]["value"].replace("https://dblp.org/streams/", "")
+        issn = format_issn(r["issn"]["value"].replace("urn:issn:", ""))
+        if key in keys and issn:
+            pairs.add((key, issn))
+    with conn:
+        conn.execute("DELETE FROM journal_dblp_issn")
+        conn.executemany("INSERT INTO journal_dblp_issn VALUES (?, ?)", sorted(pairs))
+    print(f"  ✓  {len(pairs):,} ISSNs for {len({k for k, _ in pairs}):,} of {len(keys):,} keys\n")
 
 
 def crossref_fetch(url: str, mailto: str | None) -> dict | None:
@@ -271,7 +289,7 @@ def save_crossref(conn: sqlite3.Connection, doi: str, row: tuple) -> None:
 
 def load_crossref(conn: sqlite3.Connection) -> None:
     print("━" * 70)
-    print("  Phase 3 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
+    print("  Phase 4 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
     print("━" * 70)
     mailto = os.environ.get("CROSSREF_MAILTO", "").strip() or None
     workers = CROSSREF_POLITE_WORKERS if mailto else CROSSREF_PUBLIC_WORKERS
@@ -339,6 +357,7 @@ def main() -> None:
     conn = connect()
     load_scopus(conn, scopus_path)
     load_dblp(conn, xml_path)
+    load_dblp_issn(conn)
     load_crossref(conn)
     conn.close()
     print("━" * 70)

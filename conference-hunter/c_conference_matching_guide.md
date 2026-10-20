@@ -28,6 +28,7 @@ A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 | `conf_dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | one row per series. `acronym` is the key name or the issue label; `papers` and years cover its papers |
 | `conf_dblp_booktitle(dblp_key, booktitle, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
 | `conf_dblp_title(dblp_key, proc_key, year, title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
+| `conf_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between series (from `sparql.dblp.org`): renames, mergers, new keys (`conf/ftcs` → `conf/dsn`, `conf/wcre` and `conf/csmr` → `conf/saner`, `conf/atal` → `conf/ifaamas`). Authoritative where present, but DBLP records links for only a few hundred series: a missing link proves nothing |
 | `conf_candidate(dblp_key, core_id, score, proceedings_title)` | proposals from `b_match.py`. Every series whose name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title. `score` is the share of CORE title words found in the best proceedings title or booktitle, which is stored in `proceedings_title`. The score is a hint only: a low score does not make a reject, and a high one does not make an accept |
 | `conf_decision(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
 | `conf_summary` | one summary row per series: acronym, years, number of volumes, top 5 booktitles with year spans, the 3 newest proceedings titles with paper counts |
@@ -40,19 +41,23 @@ Look at a series' whole history before deciding, not just `conf_summary`:
 SELECT year, proc_key, title, publisher, papers FROM conf_dblp_title WHERE dblp_key = 'conf/x' ORDER BY year;
 SELECT booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE dblp_key = 'conf/x' ORDER BY papers DESC;
 SELECT * FROM conf_dblp_venue WHERE dblp_key = 'conf/x';
+SELECT * FROM conf_dblp_lineage WHERE 'conf/x' IN (predecessor_key, successor_key);
 ```
 
-Then check the web, which is authoritative and settles most doubts:
-- DBLP venue page `https://dblp.org/db/conf/<name>/` (or `/db/journals/<name>/`) gives the series' full name and often links its predecessor or successor ("continued as", "renamed").
-- DBLP venue search `https://dblp.org/search/venue/api?q=<words>&format=json&h=100` lists every DBLP venue whose name matches, with its key in `url`. Send at most one request per second.
-- The CORE portal and the conference's own website.
+Then check these sources:
+- **Wikidata**, for name → DBLP key. Conference series carry their DBLP key in property P8926, and Wikidata matches names, aliases and former names. One query per venue at `https://query.wikidata.org/sparql`:
 
-**If dblp.org is unreachable.** dblp.org and its mirrors (`dblp.uni-trier.de`, `dblp.dagstuhl.de`) sit behind one bot wall. If one answers with a "Making sure you're not a bot" page, the others will too: do not retry them. Instead:
-- Search the local dump `archive/paper-dblp.xml` with `grep` for the key (`key="conf/x/`) or for title words. It holds every paper, so it settles what a key contains, but it has no venue-page notes such as "continued as".
-- Use web search for predecessor and successor proof: the conference site, its proceedings front matter, or a library catalogue.
-- Never write that you checked DBLP when you could not. Every `absent` reason and every `ENDED:` tag written without DBLP gets the suffix `DBLP web unreachable`, so a later run with DBLP access knows to re-check it.
+  ```sparql
+  SELECT ?item ?label ?dblp WHERE { ?item wdt:P8926 ?dblp ; rdfs:label|skos:altLabel ?label .
+    FILTER(STRSTARTS(?dblp, "conf/") && LANG(?label) = "en" && CONTAINS(LCASE(?label), "multimedia")) }
+  ```
+- **The conference's own website**, its "previous editions" or history page, and the proceedings front matter (web search), for renames and mergers that `conf_dblp_lineage` lacks (SAIG and GCSE → GPCE).
+- **The local dump** `archive/paper-dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
+- The CORE portal.
 
-If `conf_dblp_venue` has no `acronym` column or `conf_dblp_title` has no `proc_key` column, stop and tell the humans to run `circumstance/b_schema.py` and then `conference-hunter/a_extract.py`.
+**Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.
+
+If `conf_dblp_venue` has no `acronym` column, `conf_dblp_title` has no `proc_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py` and then `conference-hunter/a_extract.py`.
 
 ---
 
@@ -64,7 +69,7 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
 - The proceedings titles name `V` itself.
 - A predecessor or successor series of `V` (rename, merger, takeover). It must be backed by at least one of:
   - the CORE title (`was`, `previously`, `merger of`, `combined`);
-  - the DBLP venue page linking the two;
+  - a `conf_dblp_lineage` link between the two;
   - continuous edition numbering ("15th" follows "14th") or an explicit statement on the conference site.
 
   Examples: NIPS→NeurIPS, WCRE→SANER, ICSM→ICSME, ICMAS/Agents/ATAL→AAMAS, WICSA→ICSA, TPHOLs→ITP.
@@ -75,7 +80,7 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
     - `journals/pacmse#FSE`, `#ISSTA`
     - `journals/pacmhci#CSCW`, `#MHCI`, `#CHI PLAY`, …
     - `journals/pacmnet#CoNEXT`
-  - **Whole journals that are entirely one conference's proceedings:** `journals/pvldb` (VLDB), `journals/popets` (PETS), `journals/tches` (CHES), `journals/tosc` (FSE crypto), `journals/pomacs` (SIGMETRICS). Verify each on the DBLP journal page.
+  - **Whole journals that are entirely one conference's proceedings:** `journals/pvldb` (VLDB), `journals/popets` (PETS), `journals/tches` (CHES), `journals/tosc` (FSE crypto), `journals/pomacs` (SIGMETRICS). Verify each from its proceedings titles and the journal's own site.
 - A key that holds a **track of `V`'s own event** split out by DBLP. Example: `conf/icse-seip`, whose title is "International Conference on Software Engineering: Software Engineering in Practice". The main key already counts the same tracks in other years.
 - `V`'s companion, Findings, workshop or poster volumes **inside `V`'s own key**. These count with the key; you cannot split a series.
 
@@ -111,7 +116,7 @@ INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
  ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
   'ACM/SIGAPP Symposium on Applied Computing, namesake'),
  ((SELECT id FROM conf_core_venue WHERE title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
-  'No series of its own; papers inside conf/miccai (SASHIMI@MICCAI); DBLP venue search: no hit');
+  'No series of its own; papers inside conf/miccai (SASHIMI@MICCAI); Wikidata: no DBLP series');
 ```
 
 | verdict | `dblp_key` | meaning |
@@ -162,7 +167,7 @@ On a first run every candidate and every CORE venue is open. On a rerun after a 
    ```
 2. Distinctive words of the full title, which catches venues that DBLP files under an unexpected key (`conf/uss` for USENIX Security, `conf/mm` for ACM Multimedia, `conf/si3d` for I3D).
 3. The journal issue streams: `SELECT * FROM conf_dblp_venue WHERE dblp_key LIKE 'journals/%#%'`.
-4. The DBLP venue search API and the conference website. If DBLP is unreachable, use the fallback in §1 instead.
+4. `conf_dblp_lineage` for every series found so far, Wikidata (§1) and the conference website.
 
 Accept every series you find (§2); reject the near misses you examined. Only if nothing is found, write `absent` and list what you searched in the reason.
 
@@ -190,8 +195,23 @@ Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides
 
 **Step 4b. Venue history for A\* and A venues.** Renames with no shared words escape every query: LFP and FPCA→ICFP, SAIG and GCSE→GPCE, EWSA→ECSA, PSTV→FORTE, RANDOM→APPROX/RANDOM, InfoVis→IEEE VIS. For each A\* and A venue, look up its history on the conference site, its "previous editions" page or the proceedings front matter. Run the Step 3 searches on every former name you find, then accept or reject each series as in §2.
 
+**Step 4c. Sweep for linked series (must end at 0 rows).** These are series that DBLP links as predecessor or successor of an accepted series, with no decision for that venue. Most are real predecessors or mergers (FTCS → DSN, METRICS and ISESE → ESEM, CSMR → SANER, SoftVis → VISSOFT, PARLE → Euro-Par): accept them as in §2. Reject the rest with the reason (a workshop DBLP links to its parent, a minority partner of a merger).
+
+```sql
+WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM conf_dblp_lineage
+              UNION SELECT successor_key, predecessor_key FROM conf_dblp_lineage)
+SELECT d.core_id, v.rank, v.acronym, v.title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
+       e.proceedings_titles
+FROM conf_decision d JOIN link l ON l.a = d.dblp_key
+JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_dblp_venue k ON k.dblp_key = l.b
+JOIN conf_summary e ON e.dblp_key = l.b
+WHERE d.verdict = 'accept'
+  AND NOT EXISTS (SELECT 1 FROM conf_decision x WHERE x.dblp_key = l.b AND (x.core_id = d.core_id OR x.verdict = 'accept'))
+ORDER BY v.rank, v.acronym;
+```
+
 **Step 5. Sweep for stale venues (must end at 0 rows).** These are venues whose newest accepted series ends more than two years ago and carries no tag yet. For each one, find where the venue went:
-- a new key (the Step 3 searches, then the DBLP venue page of the old key);
+- a new key (the Step 3 searches, then `conf_dblp_lineage` of the old key);
 - a journal issue stream or a whole journal;
 - a mixed journal;
 - or nowhere.
@@ -222,11 +242,12 @@ WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
 ```
 
-**Step 7. Audit every `absent`.** Re-run the Step 3 searches, including the journal streams and the DBLP venue search API, for each `absent` venue. DBLP adds venues over time. When DBLP is reachable again, re-check first every reason that carries `DBLP web unreachable`, and drop the suffix once checked.
+**Step 7. Audit every `absent`.** Re-run the Step 3 searches, including the journal streams and Wikidata, for each `absent` venue. DBLP adds venues over time.
 
-**Step 8. Final gate.** All three must hold; otherwise go back to step 1.
+**Step 8. Final gate.** All four must hold; otherwise go back to step 1.
 - `SELECT count(*) FROM conf_review;` returns 0.
 - The Step 4 query returns 0 rows.
+- The Step 4c query returns 0 rows.
 - The Step 5 query returns 0 rows.
 
 **Step 9. Report** (ten lines at most):
@@ -234,7 +255,7 @@ WHERE d.verdict = 'accept'
 - CORE venues covered vs `absent`, out of all CORE venues;
 - decisions added, changed and deleted in this run;
 - every `accept` you reversed, or added during the audits (Steps 4–7), as series → venue;
-- whether DBLP was reachable, and how many reasons carry `DBLP web unreachable`;
+- whether `conf_dblp_lineage` was filled, and whether Wikidata was reachable;
 - the journal series you accepted, and the venues tagged `JOURNAL:`.
 
 ---
@@ -259,6 +280,5 @@ WHERE d.verdict = 'accept'
 - One series maps to at most one CORE venue; one venue may have many series. Find them all.
 - Never accept on acronym alone: the proceedings must name the same series, or a proven predecessor of it.
 - Never accept a mixed journal; never write `absent` without running every search in Step 3.
-- Never claim a DBLP web check you did not make; mark it `DBLP web unreachable` instead.
 - Every pair you examine gets a written verdict.
-- You are done only when the three checks in Step 8 hold.
+- You are done only when the four checks in Step 8 hold.
