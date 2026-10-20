@@ -29,7 +29,7 @@ A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 | `conf_dblp_booktitle(dblp_key, booktitle, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
 | `conf_dblp_title(dblp_key, proc_key, year, title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
 | `conf_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between series (from `sparql.dblp.org`): renames, mergers, new keys (`conf/ftcs` → `conf/dsn`, `conf/wcre` and `conf/csmr` → `conf/saner`, `conf/atal` → `conf/ifaamas`). Authoritative where present, but DBLP records links for only a few hundred series: a missing link proves nothing |
-| `conf_candidate(dblp_key, core_id, score, proceedings_title)` | proposals from `b_match.py`. Every series whose name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title. `score` is the share of CORE title words found in the best proceedings title or booktitle, which is stored in `proceedings_title`. The score is a hint only: a low score does not make a reject, and a high one does not make an accept |
+| `conf_candidate(dblp_key, core_id, score, proceedings_title)` | proposals from `b_match.py`. Every series whose name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title, plus series related to a strong match: track keys, keys sharing a main booktitle, keys whose proceedings titles contain the CORE full title, and keys linked in `conf_dblp_lineage` (Step 4a lists examples). `score` is the share of CORE title words found in the best proceedings title or booktitle, which is stored in `proceedings_title`. The score is a hint only: a low score does not make a reject, and a high one does not make an accept |
 | `conf_decision(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
 | `conf_summary` | one summary row per series: acronym, years, number of volumes, top 5 booktitles with year spans, the 3 newest proceedings titles with paper counts |
 | `conf_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` CORE venues, `INVALID` decisions |
@@ -57,7 +57,7 @@ Then check these sources:
 
 **Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.
 
-If `conf_dblp_venue` has no `acronym` column, `conf_dblp_title` has no `proc_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py` and then `conference-hunter/a_extract.py`.
+If `conf_dblp_venue` has no `acronym` column, `conf_dblp_title` has no `proc_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py`, then `conference-hunter/a_extract.py`, then `conference-hunter/b_match.py`.
 
 ---
 

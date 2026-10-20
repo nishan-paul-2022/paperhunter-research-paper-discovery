@@ -22,7 +22,7 @@ DBLP's XML has **no** journal title and **no** ISSN field. A DBLP key is only a 
 | `journal_dblp_venue(dblp_key, papers, first_year, last_year)` | one row per DBLP journal key |
 | `journal_dblp_name(dblp_key, name, papers, first_year, last_year)` | every `<journal>` name the key's articles use (ISO-4 style abbreviations), with year span. A name change inside a key is a rename |
 | `journal_dblp_issn(dblp_key, issn)` | **the strongest evidence**: the ISSNs DBLP itself records for the key's journal (from `sparql.dblp.org`), including former titles' ISSNs. Covers almost every key, including keys without DOIs |
-| `journal_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between keys (from `sparql.dblp.org`): renames, new keys, absorbed journals (`journals/eik` → `journals/jalc`, `journals/jeric` → `journals/toce`). Authoritative where present, but DBLP records links for few keys: a missing link proves nothing |
+| `journal_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between keys (from `sparql.dblp.org`): renames, new keys, absorbed journals (`journals/eik` → `journals/jalc`, `journals/wi` → `journals/bise`, `journals/knac` → `journals/ijmms`). Authoritative where present, but DBLP records links for few keys: a missing link proves nothing |
 | `journal_dblp_crossref(doi, dblp_key, name, year, status, issn_1, issn_2, title, publisher)` | **per-year evidence.** Sampled article DOIs of the key (oldest and newest per name, plus the two newest years) looked up in Crossref: the journal's ISSNs (print, electronic), its **full** title and publisher as the publisher registered them. `status` 404 = DOI not in Crossref (DataCite, mEDRA, arXiv); no row = the key has no DOIs |
 | `journal_dblp_doi(dblp_key, prefix, papers)` | DOI prefixes = publisher: 10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002/10.1111 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global, 10.1515 De Gruyter, 10.1108 Emerald, 10.1587 IEICE, 10.1093 Oxford |
 | `journal_candidate(dblp_key, scopus_id, method, score, detail)` | proposals from `b_match.py`; `method` is the strongest evidence of the pair (see below), `detail` lists **all** evidence of the pair |
@@ -33,8 +33,8 @@ DBLP's XML has **no** journal title and **no** ISSN field. A DBLP key is only a 
 
 `journal_candidate.method`:
 - `dblp`: one of the key's DBLP ISSNs is this Scopus journal's ISSN. Near-proof of identity; the Crossref part of `detail` shows which years.
-- `lineage`: DBLP links the key, directly or through other keys, to a key with `dblp` or strong `crossref` evidence for this journal. The `detail` names the link. It may be a rename (accept with `PREDECESSOR:`) or a different journal absorbed by this one (reject).
 - `crossref`: a Crossref ISSN of the key's sampled DOIs is this Scopus journal's ISSN. `score` = share of the key's found DOIs carrying it. The `detail` says which years carry it and the key's newest DOI year.
+- `lineage`: DBLP links the key, through predecessors only or successors only, to a key with `dblp` evidence or `crossref` evidence on at least half its DOIs for this journal. The `detail` names the link. It may be a rename (accept with `PREDECESSOR:`) or a different journal absorbed by this one (reject).
 - `name`: only the name agrees (a DBLP name or a Crossref title abbreviates the Scopus title; `score` = share of Scopus title words covered). When the key has DBLP ISSNs or Crossref evidence pointing elsewhere, the `detail` ends with `NO DBLP ISSN MATCH: DBLP lists …` or `NO CROSSREF ISSN MATCH: the key's newest Crossref DOI says …`.
 
 Look at a key's whole history before deciding, not just the summary:
@@ -140,21 +140,22 @@ On a first run every candidate and every Scopus journal is open. On a rerun afte
 **Step 1. `INVALID`.** Delete each named decision.
 
 **Step 2. `UNREVIEWED`** (`dblp_key` → `scopus_title`). Work key by key: read the key's whole history (§1), then decide all its candidates together, at most one `accept`.
-- `dblp`: usually an accept, after the names, publisher and years agree. Check the Crossref part of `detail` for a rename or a shared key (`journals/jct` lists both JCT A and B ISSNs).
+- `dblp`: usually an accept, after the names, publisher and years agree. Check the Crossref part of `detail` for a rename, or for a shared key whose Crossref ISSNs belong to two journals in the same years (`journals/jct`).
 - `crossref` with a high score whose years include the key's newest year: usually an accept, after the names and publisher agree.
 - `crossref` with a low score: read the per-DOI rows. Contiguous newest years on `J`'s ISSN with a name change = rename (accept). Contiguous oldest years only = predecessor title (accept only with `PREDECESSOR:`, or reject if `J` is another journal). Scattered single DOIs = misfiled (reject).
 - `lineage`: decide rename versus absorption from the title history (`journal_dblp_name`, Crossref titles) and the publisher's notice. A rename is accepted with `PREDECESSOR:`; an absorbed journal is rejected.
 - `name` with `NO DBLP ISSN MATCH` or `NO CROSSREF ISSN MATCH`: almost always a namesake. Accept only with an `ISSN GAP:` proof. Expect to reject nearly all of these.
-- `name` on a key without Crossref evidence (no DOIs, or all 404): decide by full title (expand the ISO-4 name), publisher (DOI prefix or the `<ee>` host vs `publisher`) and years vs `coverage`. Check the journal's own website or the Scopus page when in doubt.
+- `name` on a key with neither DBLP ISSNs nor Crossref evidence (no DOIs, or all 404): decide by full title (expand the ISO-4 name), publisher (DOI prefix or the `<ee>` host vs `publisher`) and years vs `coverage`. Check the journal's own website or the Scopus page when in doubt.
 
 **Step 3. `UNCOVERED`** (Scopus journal with no accepted key and no `absent` row). Run all of these before concluding anything:
 1. Its ISSNs in the evidence:
 
    ```sql
    SELECT dblp_key FROM journal_dblp_issn WHERE issn = ?;
-   SELECT * FROM journal_dblp_lineage WHERE ? IN (predecessor_key, successor_key);  -- for every key found
    SELECT dblp_key, year, title, issn_1, issn_2 FROM journal_dblp_crossref WHERE ? IN (issn_1, issn_2);
    ```
+
+   For every key found, also read its links: `SELECT * FROM journal_dblp_lineage WHERE 'journals/x' IN (predecessor_key, successor_key);`
 2. Distinctive title words, its ISO-4 abbreviation and former titles in names and Crossref titles:
 
    ```sql
@@ -200,7 +201,7 @@ WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%ISSN GAP:%' AND d.reason NOT 
                   WHERE m.dblp_key = d.dblp_key AND si.issn IN (m.issn_1, m.issn_2));
 ```
 
-4c. Stale journals: Scopus still covers them, but every accepted key ended more than two years ago. Find the successor key (Step 3 searches plus the reverse probe), accept it and tag the old key `PREDECESSOR:`; or, if DBLP stopped indexing, tag the newest key `ENDED:`.
+4c. Stale journals: Scopus still covers them, but every accepted key ended more than two years ago. Find the successor key (`journal_dblp_lineage`, the Step 3 searches and the reverse probe), accept it and tag the old key `PREDECESSOR:`; or, if DBLP stopped indexing, tag the newest key `ENDED:`.
 
 ```sql
 SELECT s.id, s.title, s.coverage, group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS keys,
@@ -261,7 +262,7 @@ WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM journal_decision x WHERE x.dblp_key = l.b AND (x.scopus_id = d.scopus_id OR x.verdict = 'accept'));
 ```
 
-**Step 5. Audit name-only accepts.** These carry the highest false-positive risk. Re-check each against §2: full title, publisher, years, and the Crossref journal record. Fix any wrong one.
+**Step 5. Audit accepts without ISSN evidence**: accepts whose pair has no `dblp` or `crossref` evidence (found by name, by lineage or by hand). These carry the highest false-positive risk. Re-check each against §2: full title, publisher, years, and the Crossref journal record. Fix any wrong one.
 
 ```sql
 SELECT d.id, d.dblp_key, s.title, s.publisher, s.coverage, d.reason, e.names, e.crossref, e.doi_prefixes
