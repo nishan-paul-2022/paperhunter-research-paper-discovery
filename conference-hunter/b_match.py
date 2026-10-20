@@ -26,6 +26,8 @@ SPELLING = {
 ORG_PREFIX = re.compile(r"^(IEEE|ACM|IFIP)[ _-]+", re.I)
 KEY_ORG_PREFIX = re.compile(r"^(ieee|acm|ifip|acis)(?=[a-z]{2})")
 FORMER_ACRONYM = re.compile(r"\b[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b")
+CAPS_TOKEN = re.compile(r"\b[A-Z][A-Z0-9]+\b")
+ORGS = {"ieee", "acm", "ifip", "siam", "usenix", "iacr", "iet", "ieice", "ipsj", "aaai", "spie", "iapr", "lncs", "ceur"}
 EDITION = re.compile(r"\b([a-z][a-z0-9]*)\s*(?:(?:19|20)\d{2}|'\d{2})\b")
 
 
@@ -59,7 +61,7 @@ def acronym_forms(acronym: str, title: str = "") -> set[str]:
     forms = {norm(a), norm(ORG_PREFIX.sub("", a))}
     for inner in re.findall(r"\((.*?)\)", f"{acronym} {title}"):
         forms |= {norm(x) for x in FORMER_ACRONYM.findall(inner)}
-    return {f for f in forms if f}
+    return {f for f in forms if f} - ORGS
 
 
 def key_forms(acronym: str) -> set[str]:
@@ -87,7 +89,7 @@ def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
         for b, n in bts:
             acronyms.add(norm(re.sub(r"\(.*?\)|@.*$", "", b)))
             if key.startswith("journals/") and n / total >= MIN_BOOKTITLE_SHARE:
-                acronyms |= {norm(t) for t in re.findall(r"[A-Za-z][A-Za-z0-9]+", b)}
+                acronyms |= {norm(t) for t in CAPS_TOKEN.findall(b)} - ORGS
         pts = proceedings.get(key, [])
         for p in pts:
             acronyms |= edition_acronyms(p)
