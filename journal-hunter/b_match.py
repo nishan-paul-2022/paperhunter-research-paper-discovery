@@ -75,13 +75,13 @@ def name_score(d_toks: list[str], s_toks: list[str]) -> float:
 
 
 def propose(conn: sqlite3.Connection) -> list[tuple]:
-    sjr = conn.execute("SELECT id, title, issn_1, issn_2 FROM sjr_journal").fetchall()
+    sjr = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_sjr").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in sjr for i in (i1, i2) if i}
     sjr_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in sjr]
     pairs: dict[tuple[str, int], tuple[str, float, str]] = {}
 
     issn_total: dict[str, int] = defaultdict(int)
-    issn_rows = conn.execute("SELECT dblp_key, issn, papers FROM dblp_issn").fetchall()
+    issn_rows = conn.execute("SELECT dblp_key, issn, papers FROM journal_dblp_issn").fetchall()
     for key, _, n in issn_rows:
         issn_total[key] += n
     for key, issn, n in issn_rows:
@@ -93,7 +93,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
                 pairs[(key, sid)] = ("issn", share, f"ISSN {issn} in {n} of {issn_total[key]} ISSN-bearing links")
 
     names: dict[str, list[tuple[str, int]]] = defaultdict(list)
-    for key, name, n in conn.execute("SELECT dblp_key, name, papers FROM dblp_journal_name"):
+    for key, name, n in conn.execute("SELECT dblp_key, name, papers FROM journal_dblp_name"):
         names[key].append((name, n))
     for key, rows in names.items():
         total = sum(n for _, n in rows) or 1
@@ -117,7 +117,7 @@ def main() -> None:
         sys.exit(f"Database not found: {DB_PATH}  (run circumstance/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
-    if not conn.execute("SELECT count(*) FROM dblp_journal").fetchone()[0]:
+    if not conn.execute("SELECT count(*) FROM journal_dblp_venue").fetchone()[0]:
         sys.exit("No DBLP evidence in the database  (run a_extract.py first)")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
@@ -128,9 +128,9 @@ def main() -> None:
     with conn:
         conn.execute("DELETE FROM journal_candidate")
         conn.executemany("INSERT INTO journal_candidate VALUES (?, ?, ?, ?, ?)", pairs)
-    issues = dict(conn.execute("SELECT issue, count(*) FROM journal_needs_review GROUP BY issue").fetchall())
+    issues = dict(conn.execute("SELECT issue, count(*) FROM journal_review GROUP BY issue").fetchall())
     decisions = conn.execute("SELECT count(*) FROM journal_decision").fetchone()[0]
-    final = conn.execute("SELECT count(*) FROM list_of_journals").fetchone()[0]
+    final = conn.execute("SELECT count(*) FROM journal_list").fetchone()[0]
     by_method = dict(conn.execute("SELECT method, count(*) FROM journal_candidate GROUP BY method").fetchall())
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)"
           f"  |  ISSN {by_method.get('issn', 0)}  |  name {by_method.get('name', 0)}")
@@ -142,7 +142,7 @@ def main() -> None:
     if issues:
         print("  ✗ Review needed → give journal-hunter/c_journal_matching_guide.md to the AI")
     else:
-        print("  ✓ Review complete → list_of_journals is final")
+        print("  ✓ Review complete → journal_list is final")
     print()
     conn.close()
 

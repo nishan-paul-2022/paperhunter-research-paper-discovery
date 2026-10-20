@@ -51,7 +51,7 @@ def link_issns(url: str) -> set[str]:
 
 def load_sjr(conn: sqlite3.Connection, sjr_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – Scopus/SJR rankings → sjr_journal")
+    print("  Phase 1 – Scopus/SJR rankings → journal_sjr")
     print("━" * 70)
     rows, dropped = [], 0
     with open(sjr_path, encoding="utf-8", newline="") as f:
@@ -65,14 +65,14 @@ def load_sjr(conn: sqlite3.Connection, sjr_path: Path) -> None:
             rows.append((int(r["Sourceid"]), r["Title"].strip(), issns[0], issns[1], r["Publisher"].strip(), q))
     with conn:
         conn.executemany(
-            "INSERT INTO sjr_journal (id, title, issn_1, issn_2, publisher, quartile) VALUES (?, ?, ?, ?, ?, ?) "
+            "INSERT INTO journal_sjr (id, title, issn_1, issn_2, publisher, quartile) VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (id) DO UPDATE SET title = excluded.title, issn_1 = excluded.issn_1, "
             "issn_2 = excluded.issn_2, publisher = excluded.publisher, quartile = excluded.quartile",
             rows,
         )
         conn.execute("CREATE TEMP TABLE sjr_ids (id INTEGER PRIMARY KEY)")
         conn.executemany("INSERT INTO sjr_ids VALUES (?)", [(r[0],) for r in rows])
-        removed = conn.execute("DELETE FROM sjr_journal WHERE id NOT IN (SELECT id FROM sjr_ids)").rowcount
+        removed = conn.execute("DELETE FROM journal_sjr WHERE id NOT IN (SELECT id FROM sjr_ids)").rowcount
         conn.execute("DROP TABLE sjr_ids")
     print(f"  ✓  {len(rows)} SJR journals  |  {dropped} rows without Q1–Q4 skipped  |  {removed} removed\n")
 
@@ -130,13 +130,13 @@ def scan_xml(xml_path: Path):
 
 def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 2 – DBLP evidence → dblp_journal, dblp_journal_name, dblp_issn, dblp_doi_prefix")
+    print("  Phase 2 – DBLP evidence → journal_dblp_venue, journal_dblp_name, journal_dblp_issn, journal_dblp_doi_prefix")
     print("━" * 70)
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~15–20 min)\n")
     journals, name_rows, issn_rows, prefix_rows = scan_xml(xml_path)
     with conn:
         conn.executemany(
-            "INSERT INTO dblp_journal (dblp_key, papers, first_year, last_year) VALUES (?, ?, ?, ?) "
+            "INSERT INTO journal_dblp_venue (dblp_key, papers, first_year, last_year) VALUES (?, ?, ?, ?) "
             "ON CONFLICT (dblp_key) DO UPDATE SET papers = excluded.papers, "
             "first_year = excluded.first_year, last_year = excluded.last_year",
             journals,
@@ -144,14 +144,14 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
         conn.execute("CREATE TEMP TABLE scanned (dblp_key TEXT PRIMARY KEY)")
         conn.executemany("INSERT INTO scanned VALUES (?)", [(j[0],) for j in journals])
         removed = conn.execute(
-            "DELETE FROM dblp_journal WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
+            "DELETE FROM journal_dblp_venue WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
         ).rowcount
         conn.execute("DROP TABLE scanned")
-        for table in ("dblp_journal_name", "dblp_issn", "dblp_doi_prefix"):
+        for table in ("journal_dblp_name", "journal_dblp_issn", "journal_dblp_doi_prefix"):
             conn.execute(f"DELETE FROM {table}")
-        conn.executemany("INSERT INTO dblp_journal_name VALUES (?, ?, ?)", name_rows)
-        conn.executemany("INSERT INTO dblp_issn VALUES (?, ?, ?)", issn_rows)
-        conn.executemany("INSERT INTO dblp_doi_prefix VALUES (?, ?, ?)", prefix_rows)
+        conn.executemany("INSERT INTO journal_dblp_name VALUES (?, ?, ?)", name_rows)
+        conn.executemany("INSERT INTO journal_dblp_issn VALUES (?, ?, ?)", issn_rows)
+        conn.executemany("INSERT INTO journal_dblp_doi_prefix VALUES (?, ?, ?)", prefix_rows)
     with_issn = len({r[0] for r in issn_rows})
     print(
         f"\n  ✓  {len(journals):,} keys  |  {len(name_rows):,} names  |  {with_issn:,} keys with ISSNs"
@@ -178,7 +178,7 @@ def main() -> None:
     conn = connect()
     load_sjr(conn, sjr_path)
     if args.skip_xml:
-        n = conn.execute("SELECT count(*) FROM dblp_journal").fetchone()[0]
+        n = conn.execute("SELECT count(*) FROM journal_dblp_venue").fetchone()[0]
         if not n:
             sys.exit("--skip-xml given but the database has no DBLP evidence yet")
         print(f"  Skipping XML scan: keeping {n:,} DBLP keys already loaded\n")

@@ -124,7 +124,7 @@ WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
          lower(v.title), d.dblp_key;
 
-CREATE TABLE IF NOT EXISTS sjr_journal (
+CREATE TABLE IF NOT EXISTS journal_sjr (
     id        INTEGER PRIMARY KEY,
     title     TEXT NOT NULL,
     issn_1    TEXT,
@@ -133,37 +133,37 @@ CREATE TABLE IF NOT EXISTS sjr_journal (
     quartile  TEXT NOT NULL CHECK (quartile IN ('Q1', 'Q2', 'Q3', 'Q4'))
 );
 
-CREATE TABLE IF NOT EXISTS dblp_journal (
+CREATE TABLE IF NOT EXISTS journal_dblp_venue (
     dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'journals/%'),
     papers     INTEGER NOT NULL,
     first_year INTEGER,
     last_year  INTEGER
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS dblp_journal_name (
-    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS journal_dblp_name (
+    dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     name     TEXT NOT NULL,
     papers   INTEGER NOT NULL,
     PRIMARY KEY (dblp_key, name)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS dblp_issn (
-    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS journal_dblp_issn (
+    dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     issn     TEXT NOT NULL,
     papers   INTEGER NOT NULL,
     PRIMARY KEY (dblp_key, issn)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS dblp_doi_prefix (
-    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS journal_dblp_doi_prefix (
+    dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     prefix   TEXT NOT NULL,
     papers   INTEGER NOT NULL,
     PRIMARY KEY (dblp_key, prefix)
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS journal_candidate (
-    dblp_key TEXT NOT NULL REFERENCES dblp_journal ON DELETE CASCADE,
-    sjr_id   INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
+    dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
+    sjr_id   INTEGER NOT NULL REFERENCES journal_sjr ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('issn', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
@@ -173,8 +173,8 @@ CREATE INDEX IF NOT EXISTS journal_candidate_sjr ON journal_candidate (sjr_id);
 
 CREATE TABLE IF NOT EXISTS journal_decision (
     id         INTEGER PRIMARY KEY,
-    sjr_id     INTEGER NOT NULL REFERENCES sjr_journal ON DELETE CASCADE,
-    dblp_key   TEXT REFERENCES dblp_journal ON DELETE CASCADE,
+    sjr_id     INTEGER NOT NULL REFERENCES journal_sjr ON DELETE CASCADE,
+    dblp_key   TEXT REFERENCES journal_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -201,52 +201,52 @@ WHEN EXISTS (
 )
 BEGIN SELECT RAISE(ABORT, 'SJR journal cannot be both accepted and absent'); END;
 
-DROP VIEW IF EXISTS journal_evidence;
-CREATE VIEW journal_evidence AS
+DROP VIEW IF EXISTS journal_summary;
+CREATE VIEW journal_summary AS
 SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
        (SELECT group_concat(n.name || ' (' || n.papers || ')', ' | ')
-          FROM (SELECT name, papers FROM dblp_journal_name WHERE dblp_key = j.dblp_key
+          FROM (SELECT name, papers FROM journal_dblp_name WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, name LIMIT 3) n) AS names,
        (SELECT group_concat(i.issn || ' (' || i.papers || ')', ' | ')
-          FROM (SELECT issn, papers FROM dblp_issn WHERE dblp_key = j.dblp_key
+          FROM (SELECT issn, papers FROM journal_dblp_issn WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, issn LIMIT 4) i) AS issns,
        (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
-          FROM (SELECT prefix, papers FROM dblp_doi_prefix WHERE dblp_key = j.dblp_key
+          FROM (SELECT prefix, papers FROM journal_dblp_doi_prefix WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes
-FROM dblp_journal j;
+FROM journal_dblp_venue j;
 
-DROP VIEW IF EXISTS journal_needs_review;
-CREATE VIEW journal_needs_review AS
+DROP VIEW IF EXISTS journal_review;
+CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.sjr_id, s.title AS sjr_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, c.method, c.score, c.detail,
        e.papers, e.first_year, e.last_year, e.names, e.issns, e.doi_prefixes
 FROM journal_candidate c
-JOIN sjr_journal s ON s.id = c.sjr_id
-JOIN journal_evidence e ON e.dblp_key = c.dblp_key
+JOIN journal_sjr s ON s.id = c.sjr_id
+JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.sjr_id = c.sjr_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM sjr_journal s
+FROM journal_sjr s
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.sjr_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.sjr_id, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or SJR journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_decision d
-WHERE NOT EXISTS (SELECT 1 FROM sjr_journal s WHERE s.id = d.sjr_id)
-   OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dblp_journal k WHERE k.dblp_key = d.dblp_key));
+WHERE NOT EXISTS (SELECT 1 FROM journal_sjr s WHERE s.id = d.sjr_id)
+   OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
-DROP VIEW IF EXISTS list_of_journals;
-CREATE VIEW list_of_journals AS
+DROP VIEW IF EXISTS journal_list;
+CREATE VIEW journal_list AS
 SELECT d.dblp_key,
-       (SELECT name FROM dblp_journal_name n WHERE n.dblp_key = d.dblp_key
+       (SELECT name FROM journal_dblp_name n WHERE n.dblp_key = d.dblp_key
          ORDER BY papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
 FROM journal_decision d
-JOIN sjr_journal s ON s.id = d.sjr_id
-JOIN dblp_journal k ON k.dblp_key = d.dblp_key
-WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_needs_review)
+JOIN journal_sjr s ON s.id = d.sjr_id
+JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
 ORDER BY s.quartile, lower(s.title), d.dblp_key;
 
 CREATE TABLE IF NOT EXISTS dblp_paper (
@@ -273,7 +273,7 @@ SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venu
 FROM dblp_paper p
 JOIN (SELECT dblp_key, ranking AS rank FROM conf_list WHERE dblp_key LIKE 'conf/%'
       UNION ALL
-      SELECT dblp_key, quartile AS rank FROM list_of_journals) r ON r.dblp_key = p.venue_key;
+      SELECT dblp_key, quartile AS rank FROM journal_list) r ON r.dblp_key = p.venue_key;
 
 CREATE TABLE IF NOT EXISTS paper_source (
     paper_id   INTEGER NOT NULL REFERENCES dblp_paper(id),

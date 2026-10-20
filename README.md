@@ -44,7 +44,7 @@ python3 journal-hunter/b_match.py
 
 Give `journal-hunter/c_journal_matching_guide.md` to the AI.
 
-**Output:** view `list_of_journals`
+**Output:** view `journal_list`
 
 ### 6. Papers
 

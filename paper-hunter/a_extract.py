@@ -153,7 +153,7 @@ def main():
         sys.exit(f"ERROR: database not found at {DB_PATH} (run circumstance/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     print("Loading journal and conference lists...")
-    journal_index = load_list(conn, "list_of_journals", "quartile")
+    journal_index = load_list(conn, "journal_list", "quartile")
     conf_index = load_list(conn, "conf_list", "ranking")
     print(f"  ✓ {len(journal_index)} journals loaded")
     print(f"  ✓ {len(conf_index)} conferences loaded")
