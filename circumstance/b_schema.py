@@ -378,11 +378,23 @@ WHEN EXISTS (SELECT 1 FROM paper_accepted WHERE paper_id = NEW.paper_id)
 BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
 """
 
+MIGRATIONS = [
+    ("dblp_proceedings", "publisher", "TEXT"),
+]
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    for table, column, decl in MIGRATIONS:
+        if column not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+            print(f"migrated: {table}.{column} added")
+
 
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DB_PATH
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
+    migrate(conn)
     counts = dict(conn.execute(
         "SELECT type, count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' GROUP BY type"))
     conn.close()
