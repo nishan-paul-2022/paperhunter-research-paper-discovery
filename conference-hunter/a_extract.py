@@ -21,7 +21,7 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 VALID_RANKS = ("A*", "A", "B", "C")
 DBLP_SPARQL = "https://sparql.dblp.org/sparql"
-DBLP_AGENT = "paperhunter-conference-hunter/1.0"
+AGENT = "paperhunter-conference-hunter/1.0"
 DBLP_LINEAGE_QUERY = (
     "PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?stream ?relation ?other WHERE { "
     "VALUES ?relation { dblp:predeccessorStream dblp:successorStream } ?stream ?relation ?other }"
@@ -193,7 +193,7 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
 
 def dblp_sparql(query: str) -> list[dict] | None:
     mailto = os.environ.get("CONTACT_MAILTO", "").strip()
-    agent = DBLP_AGENT + (f" (mailto:{mailto})" if mailto else "")
+    agent = AGENT + (f" (mailto:{mailto})" if mailto else "")
     data = urllib.parse.urlencode({"query": query}).encode()
     for attempt in range(3):
         try:

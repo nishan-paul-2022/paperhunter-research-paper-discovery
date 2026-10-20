@@ -37,7 +37,7 @@ DBLP_LINEAGE_QUERY = (
 )
 CROSSREF_POLITE_WORKERS = 3
 CROSSREF_PUBLIC_WORKERS = 1
-CROSSREF_AGENT = "paperhunter-journal-hunter/1.0"
+AGENT = "paperhunter-journal-hunter/1.0"
 CROSSREF_BATCH = 100
 CROSSREF_FIELDS = "DOI,ISSN,issn-type,container-title,publisher"
 CROSSREF_PASSES = 3
@@ -207,7 +207,7 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
 
 def dblp_sparql(query: str) -> list[dict] | None:
     mailto = os.environ.get("CONTACT_MAILTO", "").strip()
-    agent = CROSSREF_AGENT + (f" (mailto:{mailto})" if mailto else "")
+    agent = AGENT + (f" (mailto:{mailto})" if mailto else "")
     data = urllib.parse.urlencode({"query": query}).encode()
     for attempt in range(3):
         try:
@@ -266,7 +266,7 @@ def load_dblp_lineage(conn: sqlite3.Connection) -> None:
 
 
 def crossref_fetch(url: str, mailto: str | None) -> dict | None:
-    agent = CROSSREF_AGENT
+    agent = AGENT
     if mailto:
         url += ("&" if "?" in url else "?") + "mailto=" + urllib.parse.quote(mailto)
         agent += f" (mailto:{mailto})"
