@@ -47,6 +47,11 @@ Then check the web, which is authoritative and settles most doubts:
 - DBLP venue search `https://dblp.org/search/venue/api?q=<words>&format=json&h=100` lists every DBLP venue whose name matches, with its key in `url`. Send at most one request per second.
 - The CORE portal and the conference's own website.
 
+**If dblp.org is unreachable.** dblp.org and its mirrors (`dblp.uni-trier.de`, `dblp.dagstuhl.de`) sit behind one bot wall. If one answers with a "Making sure you're not a bot" page, the others will too: do not retry them. Instead:
+- Search the local dump `archive/paper-dblp.xml` with `grep` for the key (`key="conf/x/`) or for title words. It holds every paper, so it settles what a key contains, but it has no venue-page notes such as "continued as".
+- Use web search for predecessor and successor proof: the conference site, its proceedings front matter, or a library catalogue.
+- Never write that you checked DBLP when you could not. Every `absent` reason and every `ENDED:` tag written without DBLP gets the suffix `DBLP web unreachable`, so a later run with DBLP access knows to re-check it.
+
 If `conf_dblp_venue` has no `acronym` column or `conf_dblp_title` has no `proc_key` column, stop and tell the humans to run `circumstance/b_schema.py` and then `conference-hunter/a_extract.py`.
 
 ---
@@ -157,7 +162,7 @@ On a first run every candidate and every CORE venue is open. On a rerun after a 
    ```
 2. Distinctive words of the full title, which catches venues that DBLP files under an unexpected key (`conf/uss` for USENIX Security, `conf/mm` for ACM Multimedia, `conf/si3d` for I3D).
 3. The journal issue streams: `SELECT * FROM conf_dblp_venue WHERE dblp_key LIKE 'journals/%#%'`.
-4. The DBLP venue search API and the conference website.
+4. The DBLP venue search API and the conference website. If DBLP is unreachable, use the fallback in §1 instead.
 
 Accept every series you find (§2); reject the near misses you examined. Only if nothing is found, write `absent` and list what you searched in the reason.
 
@@ -180,6 +185,10 @@ WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = h.dblp_key
                   AND (d.core_id = h.core_id OR d.verdict = 'accept'))
 ORDER BY v.rank, v.acronym;
 ```
+
+Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides acronym matches, the matcher proposes track keys named after a matched key (`conf/icse-seip`), keys that share a main booktitle with one (`conf/imw` IMC, `conf/ssspr` S+SSPR, `conf/symsac` SYMSAC), and keys whose proceedings titles contain the CORE full title (`conf/fpca`). Most are workshops and namesakes. Real ones need predecessor proof (§2). A row can name the wrong venue: `conf/agents` surfaces under EMAS, but it is AAMAS's predecessor. Decide by what the series is, not by the row's venue.
+
+**Step 4b. Venue history for A\* and A venues.** Renames with no shared words escape every query: LFP and FPCA→ICFP, SAIG and GCSE→GPCE, EWSA→ECSA, PSTV→FORTE, RANDOM→APPROX/RANDOM, InfoVis→IEEE VIS. For each A\* and A venue, look up its history on the conference site, its "previous editions" page or the proceedings front matter. Run the Step 3 searches on every former name you find, then accept or reject each series as in §2.
 
 **Step 5. Sweep for stale venues (must end at 0 rows).** These are venues whose newest accepted series ends more than two years ago and carries no tag yet. For each one, find where the venue went:
 - a new key (the Step 3 searches, then the DBLP venue page of the old key);
@@ -213,7 +222,7 @@ WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
 ```
 
-**Step 7. Audit every `absent`.** Re-run the Step 3 searches, including the journal streams and the DBLP venue search API, for each `absent` venue. DBLP adds venues over time.
+**Step 7. Audit every `absent`.** Re-run the Step 3 searches, including the journal streams and the DBLP venue search API, for each `absent` venue. DBLP adds venues over time. When DBLP is reachable again, re-check first every reason that carries `DBLP web unreachable`, and drop the suffix once checked.
 
 **Step 8. Final gate.** All three must hold; otherwise go back to step 1.
 - `SELECT count(*) FROM conf_review;` returns 0.
@@ -225,6 +234,7 @@ WHERE d.verdict = 'accept'
 - CORE venues covered vs `absent`, out of all CORE venues;
 - decisions added, changed and deleted in this run;
 - every `accept` you reversed, or added during the audits (Steps 4–7), as series → venue;
+- whether DBLP was reachable, and how many reasons carry `DBLP web unreachable`;
 - the journal series you accepted, and the venues tagged `JOURNAL:`.
 
 ---
@@ -249,5 +259,6 @@ WHERE d.verdict = 'accept'
 - One series maps to at most one CORE venue; one venue may have many series. Find them all.
 - Never accept on acronym alone: the proceedings must name the same series, or a proven predecessor of it.
 - Never accept a mixed journal; never write `absent` without running every search in Step 3.
+- Never claim a DBLP web check you did not make; mark it `DBLP web unreachable` instead.
 - Every pair you examine gets a written verdict.
 - You are done only when the three checks in Step 8 hold.
