@@ -2,7 +2,7 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-The humans have already run `a_extract.py` and `b_match.py`, which loaded the database `x/archive/paperhunter.db`. Your job is to fill the `conf_decision` table until the view `conf_needs_review` is empty. The view `list_of_conferences` is then the final list: every DBLP conference key (`conf/<name>`) that belongs to a CORE A*–C venue, with zero false positives and zero false negatives.
+The humans have already run `a_extract.py` and `b_match.py`, which loaded the database `archive/paperhunter.db`. Your job is to fill the `conf_decision` table until the view `conf_needs_review` is empty. The view `list_of_conferences` is then the final list: every DBLP conference key (`conf/<name>`) that belongs to a CORE A*–C venue, with zero false positives and zero false negatives.
 
 Work from `/home/nishan/Documents/paperhunter-research-paper-discovery/x`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`. Start every connection with `PRAGMA foreign_keys = ON;`.
 
