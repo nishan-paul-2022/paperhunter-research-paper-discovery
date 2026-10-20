@@ -55,7 +55,7 @@ FAILED = object()
 
 
 def load_env():
-    env = SCRIPT_DIR / ".env"
+    env = SCRIPT_DIR.parent / ".env"
     if env.exists():
         for line in env.read_text().splitlines():
             k, sep, v = line.strip().partition("=")
