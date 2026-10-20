@@ -42,20 +42,6 @@ TITLE_MATCH = 0.93
 YEAR_SLACK = 2
 MAX_FAILED_BATCHES = 3
 
-SCHEMA = """
--- One row per (paper, source): the API's record as returned, or a miss (found = 0, raw NULL).
-CREATE TABLE IF NOT EXISTS paper_source (
-    paper_id   INTEGER NOT NULL REFERENCES dblp_paper(id),
-    src        TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
-    via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),   -- how the record was looked up
-    found      INTEGER NOT NULL CHECK (found IN (0, 1)),
-    raw        BLOB,                                            -- zlib-compressed JSON
-    fetched_at INTEGER NOT NULL,
-    PRIMARY KEY (paper_id, src),
-    CHECK ((found = 1) = (raw IS NOT NULL))
-);
-"""
-
 
 class FetchError(Exception):
     pass
@@ -450,10 +436,8 @@ def cmd_show(a):
 
 def open_db():
     if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH}")
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run archive/schema.py first)")
     conn = sqlite3.connect(DB_PATH, timeout=300)
-    conn.executescript(SCHEMA)
-    c_build.create_schema(conn)
     return conn
 
 

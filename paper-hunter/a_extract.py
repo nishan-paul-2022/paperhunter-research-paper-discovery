@@ -14,38 +14,6 @@ XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = ARCHIVE_DIR / "paperhunter.db"
 YEARS = [2023, 2024, 2025, 2026]
 
-SCHEMA = """
--- One row per DBLP paper of a listed venue. id is the stable paper id paper-hunter uses;
--- new papers get ids in DBLP order.
-CREATE TABLE IF NOT EXISTS dblp_paper (
-    id        INTEGER PRIMARY KEY,
-    dblp_key  TEXT NOT NULL UNIQUE,             -- e.g. conf/ics/YangLWHT23
-    venue_key TEXT NOT NULL,                    -- conf/ics or journals/tse
-    kind      TEXT NOT NULL CHECK (kind IN ('conference', 'journal')),
-    year      INTEGER NOT NULL,
-    title     TEXT NOT NULL,
-    authors   TEXT NOT NULL,                    -- "; "-separated, DBLP disambiguation suffixes kept
-    venue     TEXT NOT NULL,                    -- booktitle or journal name as in DBLP
-    ee        TEXT,                             -- first electronic edition link
-    url       TEXT,                             -- DBLP table-of-contents path
-    doi       TEXT                              -- lowercased DOI from any ee link, else NULL
-);
-CREATE INDEX IF NOT EXISTS dblp_paper_venue ON dblp_paper (venue_key);
-CREATE INDEX IF NOT EXISTS dblp_paper_year ON dblp_paper (year);
-
--- dblp_paper with each paper's current rank and slice. Rank follows the final lists,
--- so a venue dropped from a list drops out here without re-extracting.
-DROP VIEW IF EXISTS paper_inventory;
-CREATE VIEW paper_inventory AS
-SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venue, p.ee, p.url, p.doi,
-       r.rank,
-       CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
-FROM dblp_paper p
-JOIN (SELECT dblp_key, ranking AS rank FROM list_of_conferences
-      UNION ALL
-      SELECT dblp_key, quartile AS rank FROM list_of_journals) r ON r.dblp_key = p.venue_key;
-"""
-
 DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"<>]+", re.IGNORECASE)
 
 
@@ -182,9 +150,8 @@ def main():
     if not XML_PATH.exists():
         sys.exit(f"ERROR: paper-dblp.xml not found at {XML_PATH}")
     if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH}")
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run archive/schema.py first)")
     conn = sqlite3.connect(DB_PATH)
-    conn.executescript(SCHEMA)
     print("Loading journal and conference lists...")
     journal_index = load_list(conn, "list_of_journals", "quartile")
     conf_index = load_list(conn, "list_of_conferences", "ranking")

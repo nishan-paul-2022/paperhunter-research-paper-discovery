@@ -15,78 +15,9 @@ DB_PATH = SCRIPT_DIR.parent / "archive" / "paperhunter.db"
 MIN_ABSTRACT = 120
 BUILD_BATCH = 2000
 
-SCHEMA = """
--- One row per paper that has at least one record in paper_source.
-CREATE TABLE IF NOT EXISTS paper_detail (
-    paper_id      INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
-    openalex_id   TEXT,                  -- W4413176392
-    s2_id         TEXT,                  -- Semantic Scholar paperId (40 hex)
-    corpus_id     INTEGER,               -- Semantic Scholar CorpusId
-    arxiv_id      TEXT,                  -- 2411.05185
-    abstract      TEXT,                  -- Semantic Scholar text if usable, else OpenAlex
-    abstract_src  TEXT CHECK (abstract_src IN ('s2', 'openalex')),
-    tldr          TEXT,                  -- Semantic Scholar one-sentence summary (model-written)
-    language      TEXT,                  -- OpenAlex, ISO 639-1
-    work_type     TEXT,                  -- OpenAlex type: article, conference-paper, review, ...
-    is_retracted  INTEGER CHECK (is_retracted IN (0, 1)),
-    is_paratext   INTEGER CHECK (is_paratext IN (0, 1)),   -- front matter, TOC, editorial
-    is_oa         INTEGER CHECK (is_oa IN (0, 1)),
-    oa_status     TEXT,                  -- gold, green, hybrid, bronze, diamond, closed
-    oa_url        TEXT,                  -- best open-access link (landing page or PDF)
-    pdf_url       TEXT,                  -- a direct PDF link when one is known
-    text_availability TEXT,              -- Semantic Scholar: fulltext, abstract, none
-    primary_topic TEXT,                  -- OpenAlex topic hierarchy: topic < subfield < field < domain
-    subfield      TEXT,
-    field         TEXT,
-    domain        TEXT,
-    reference_count INTEGER,             -- larger of the two sources
-    citation_count  INTEGER,             -- larger of the two sources
-    influential_citation_count INTEGER,  -- Semantic Scholar
-    built_at      INTEGER NOT NULL
-);
-
--- Multi-valued descriptors. kind: keyword (OpenAlex), topic (OpenAlex), field (Semantic Scholar).
-CREATE TABLE IF NOT EXISTS paper_term (
-    paper_id INTEGER NOT NULL REFERENCES dblp_paper(id),
-    kind     TEXT NOT NULL CHECK (kind IN ('keyword', 'topic', 'field')),
-    name     TEXT NOT NULL,
-    score    REAL,
-    PRIMARY KEY (paper_id, kind, name)
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS paper_term_name ON paper_term (kind, name);
-
--- Cited works. ref_id is the OpenAlex W-id or the Semantic Scholar paperId of the cited work;
--- Semantic Scholar also gives the cited work's DOI, DBLP key and arXiv id.
-CREATE TABLE IF NOT EXISTS paper_reference (
-    paper_id INTEGER NOT NULL REFERENCES dblp_paper(id),
-    src      TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
-    ref_id   TEXT NOT NULL,
-    doi      TEXT,
-    dblp_key TEXT,
-    arxiv_id TEXT,
-    PRIMARY KEY (paper_id, src, ref_id)
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS paper_reference_ref ON paper_reference (ref_id);
-
-DROP VIEW IF EXISTS paper_card;
-CREATE VIEW paper_card AS
-SELECT p.id AS paper_id, p.dblp_key, p.title, p.year, p.venue, p.kind, p.doi,
-       d.abstract, d.abstract_src, d.tldr, d.work_type, d.is_paratext, d.language,
-       d.primary_topic, d.subfield, d.field,
-       (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'keyword') AS keywords,
-       (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'topic') AS topics,
-       (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'field') AS fields,
-       d.arxiv_id, d.oa_url, d.pdf_url, d.openalex_id, d.s2_id
-FROM dblp_paper p JOIN paper_detail d ON d.paper_id = p.id;
-"""
-
 _TAG = re.compile(r"</?(?:[\w-]+:)?([\w-]+)[^>]*>")
 _BLOCK = {"p", "title", "sec", "br", "div", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6"}
 _ARXIV_URL = re.compile(r"arxiv\.org/(?:abs|pdf)/([^\s?#v]+(?:v\d+)?)")
-
-
-def create_schema(conn):
-    conn.executescript(SCHEMA)
 
 
 def unpack(blob):
@@ -243,7 +174,6 @@ def main():
         ap.print_help()
         sys.exit(2)
     conn = sqlite3.connect(DB_PATH, timeout=120)
-    create_schema(conn)
     build_all(conn)
     conn.close()
 

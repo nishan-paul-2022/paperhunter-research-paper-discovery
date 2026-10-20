@@ -22,48 +22,6 @@ QUOTE_MIN_WORDS, QUOTE_MAX_WORDS = 4, 45
 REASON_MIN_CHARS, REASON_MAX_WORDS = 10, 60
 MATCH_RATIO = 0.92
 
-SCHEMA = f"""
-CREATE TABLE IF NOT EXISTS review_claim (
-    paper_id INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
-    owner    TEXT NOT NULL,
-    until    INTEGER NOT NULL               -- unix time the lease expires
-);
-
--- The output: one row per accepted paper.
-CREATE TABLE IF NOT EXISTS paper_accepted (
-    paper_id     INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
-    role         TEXT NOT NULL CHECK (role IN {ROLES}),
-    p            REAL NOT NULL CHECK (p >= 0.5 AND p <= 1),
-    agent        TEXT NOT NULL CHECK (agent = 'y'),
-    offense      TEXT NOT NULL CHECK (offense = 'y'),
-    black_box    TEXT NOT NULL CHECK (black_box IN ('y', 'p', 'n', 'u')),
-    long_horizon TEXT NOT NULL CHECK (long_horizon IN ('y', 'p', 'n', 'u')),
-    quote        TEXT NOT NULL,                 -- verbatim from quote_src
-    quote_src    TEXT NOT NULL CHECK (quote_src IN {QUOTE_SOURCES}),
-    reason       TEXT NOT NULL,
-    by           TEXT NOT NULL,
-    at           INTEGER NOT NULL,
-    CHECK (role <> 'baseline' OR (black_box <> 'n' AND long_horizon <> 'n'))
-);
-
-CREATE TABLE IF NOT EXISTS paper_rejected (
-    paper_id     INTEGER PRIMARY KEY REFERENCES dblp_paper(id),
-    reject_class TEXT NOT NULL CHECK (reject_class IN {REJECT_CLASSES}),
-    p            REAL NOT NULL CHECK (p >= 0 AND p < 0.5),
-    reason       TEXT NOT NULL,
-    by           TEXT NOT NULL,
-    at           INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS paper_rejected_class ON paper_rejected (reject_class);
-
-CREATE TRIGGER IF NOT EXISTS paper_accepted_not_rejected BEFORE INSERT ON paper_accepted
-WHEN EXISTS (SELECT 1 FROM paper_rejected WHERE paper_id = NEW.paper_id)
-BEGIN SELECT RAISE(ABORT, 'paper is already rejected'); END;
-CREATE TRIGGER IF NOT EXISTS paper_rejected_not_accepted BEFORE INSERT ON paper_rejected
-WHEN EXISTS (SELECT 1 FROM paper_accepted WHERE paper_id = NEW.paper_id)
-BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
-"""
-
 _UNDECIDED = ("NOT EXISTS (SELECT 1 FROM paper_accepted a WHERE a.paper_id = p.id) "
               "AND NOT EXISTS (SELECT 1 FROM paper_rejected r WHERE r.paper_id = p.id)")
 _FETCHED = "EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id)"
@@ -71,11 +29,10 @@ _FETCHED = "EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id)"
 
 def open_db():
     if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH}")
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run archive/schema.py first)")
     conn = sqlite3.connect(DB_PATH, timeout=300, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(SCHEMA)
     return conn
 
 

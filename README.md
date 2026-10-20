@@ -21,7 +21,15 @@ Save to `archive/`:
 python3 archive/download.py
 ```
 
-### 4. Conference list
+### 4. Create database
+
+```bash
+python3 archive/schema.py
+```
+
+**Output:** `archive/paperhunter.db` with every table and view
+
+### 5. Conference list
 
 ```bash
 python3 conference-hunter/a_extract.py
@@ -32,7 +40,7 @@ Give `conference-hunter/c_conference_matching_guide.md` to the AI.
 
 **Output:** view `list_of_conferences`
 
-### 5. Journal list
+### 6. Journal list
 
 ```bash
 python3 journal-hunter/a_extract.py
@@ -43,7 +51,7 @@ Give `journal-hunter/c_journal_matching_guide.md` to the AI.
 
 **Output:** view `list_of_journals`
 
-### 6. Papers
+### 7. Papers
 
 ```bash
 python3 paper-hunter/a_extract.py
@@ -51,7 +59,7 @@ python3 paper-hunter/a_extract.py
 
 **Output:** table `dblp_paper`
 
-### 7. Paper details
+### 8. Paper details
 
 Put API keys in `paper-hunter/.env`:
 
@@ -69,7 +77,7 @@ python3 b_fetch.py status
 
 **Output:** tables `paper_detail`, `paper_term`, `paper_reference`
 
-### 8. Review
+### 9. Review
 
 Give `paper-hunter/e_paper_matching_guide.md` to the AI.
 
