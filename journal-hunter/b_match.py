@@ -78,7 +78,7 @@ def name_score(d_toks: list[str], s_toks: list[str]) -> float:
 
 
 def propose(conn: sqlite3.Connection) -> list[tuple]:
-    scopus = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus").fetchall()
+    scopus = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus_venue").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in scopus for i in (i1, i2) if i}
     scopus_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in scopus]
     evidence: dict[tuple[str, int], dict[str, tuple[float, str]]] = defaultdict(dict)

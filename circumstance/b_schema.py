@@ -124,7 +124,7 @@ WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
          lower(v.title), d.dblp_key;
 
-CREATE TABLE IF NOT EXISTS journal_scopus (
+CREATE TABLE IF NOT EXISTS journal_scopus_venue (
     id        INTEGER PRIMARY KEY,
     title     TEXT NOT NULL,
     issn_1    TEXT,
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
 
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
-    scopus_id   INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
+    scopus_id   INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('crossref', 'issn', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
@@ -189,7 +189,7 @@ CREATE INDEX IF NOT EXISTS journal_candidate_scopus ON journal_candidate (scopus
 
 CREATE TABLE IF NOT EXISTS journal_decision (
     id         INTEGER PRIMARY KEY,
-    scopus_id     INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
+    scopus_id     INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES journal_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
@@ -243,20 +243,20 @@ SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, 
        s.publisher, s.quartile, s.coverage, c.method, c.score, c.detail,
        e.papers, e.first_year, e.last_year, e.names, e.crossref, e.issns, e.doi_prefixes
 FROM journal_candidate c
-JOIN journal_scopus s ON s.id = c.scopus_id
+JOIN journal_scopus_venue s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile, s.coverage,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM journal_scopus s
+FROM journal_scopus_venue s
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_decision d
-WHERE NOT EXISTS (SELECT 1 FROM journal_scopus s WHERE s.id = d.scopus_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_scopus_venue s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
 DROP VIEW IF EXISTS journal_list;
@@ -266,7 +266,7 @@ SELECT d.dblp_key,
          ORDER BY last_year DESC, papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
 FROM journal_decision d
-JOIN journal_scopus s ON s.id = d.scopus_id
+JOIN journal_scopus_venue s ON s.id = d.scopus_id
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
 ORDER BY s.quartile, lower(s.title), d.dblp_key;
@@ -408,12 +408,19 @@ BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
 """
 
 REBUILT_EVIDENCE = {"conf_dblp_booktitle": "first_year", "conf_dblp_title": "proc_key"}
-ADDED_COLUMNS = {"journal_scopus": ["coverage"], "journal_dblp_name": ["first_year", "last_year"]}
+ADDED_COLUMNS = {"journal_scopus_venue": ["coverage"], "journal_dblp_name": ["first_year", "last_year"]}
 
 
 def migrate_journals(conn: sqlite3.Connection) -> None:
     tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     done = []
+    if "journal_scopus" in tables and "journal_scopus_venue" not in tables:
+        for (view,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
+            conn.execute(f"DROP VIEW {view}")
+        conn.execute("ALTER TABLE journal_scopus RENAME TO journal_scopus_venue")
+        conn.commit()
+        done.append("journal_scopus renamed to journal_scopus_venue")
+        tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     with conn:
         for table, cols in ADDED_COLUMNS.items():
             if table not in tables:
@@ -429,7 +436,9 @@ def migrate_journals(conn: sqlite3.Connection) -> None:
             conn.execute("DROP TABLE journal_candidate")
             done.append("journal_candidate (rebuilt)")
     if done:
-        print(f"migrated: {', '.join(done)}; run journal-hunter/a_extract.py and b_match.py to refill them")
+        refill = any("renamed" not in d for d in done)
+        print(f"migrated: {', '.join(done)}"
+              + ("; run journal-hunter/a_extract.py and b_match.py to refill them" if refill else ""))
 
 
 def migrate(conn: sqlite3.Connection) -> None:

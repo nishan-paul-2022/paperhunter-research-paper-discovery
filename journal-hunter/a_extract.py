@@ -61,7 +61,7 @@ def link_issns(url: str) -> set[str]:
 
 def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – Scopus rankings → journal_scopus")
+    print("  Phase 1 – Scopus rankings → journal_scopus_venue")
     print("━" * 70)
     rows, dropped = [], 0
     with open(scopus_path, encoding="utf-8", newline="") as f:
@@ -76,7 +76,7 @@ def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
                          r.get("Coverage", "").strip() or None))
     with conn:
         conn.executemany(
-            "INSERT INTO journal_scopus (id, title, issn_1, issn_2, publisher, quartile, coverage) "
+            "INSERT INTO journal_scopus_venue (id, title, issn_1, issn_2, publisher, quartile, coverage) "
             "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (id) DO UPDATE SET title = excluded.title, issn_1 = excluded.issn_1, "
             "issn_2 = excluded.issn_2, publisher = excluded.publisher, quartile = excluded.quartile, "
@@ -85,7 +85,7 @@ def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
         )
         conn.execute("CREATE TEMP TABLE scopus_ids (id INTEGER PRIMARY KEY)")
         conn.executemany("INSERT INTO scopus_ids VALUES (?)", [(r[0],) for r in rows])
-        removed = conn.execute("DELETE FROM journal_scopus WHERE id NOT IN (SELECT id FROM scopus_ids)").rowcount
+        removed = conn.execute("DELETE FROM journal_scopus_venue WHERE id NOT IN (SELECT id FROM scopus_ids)").rowcount
         conn.execute("DROP TABLE scopus_ids")
     print(f"  ✓  {len(rows)} Scopus journals  |  {dropped} rows without Q1–Q4 skipped  |  {removed} removed\n")
 
