@@ -1,52 +1,81 @@
 # 🏹 PaperHunter
 
-## Quick Start
+All data lives in `archive/paperhunter.db`.
 
-### 1. Install Requirements
+### 1. Install
 
 ```bash
 pip install lxml
 ```
 
-### 2. Setup Source Data
+### 2. Source data
+
+Save to `archive/`:
+
+- CORE conference ranking ([portal.core.edu.au/conf-ranks](http://portal.core.edu.au/conf-ranks/)) → `publication-core-2026.csv`
+- Scopus CS journal ranking ([scimagojr.com](https://www.scimagojr.com/journalrank.php?category=1700)) → `publication-scopus-computer-science-journal-2025.csv`
+
+### 3. Download DBLP
 
 ```bash
-# Download SJR journal rankings
-# Visit: https://www.scimagojr.com/journalrank.php?category=1700
-# Save as: journal-context/sjr-2025-cs.csv
-
-# Download CORE conference rankings
-# Visit: http://portal.core.edu.au/conf-ranks/
-# Save as: conference-context/core-2026.csv
+python3 archive/download.py
 ```
 
-### 3. Download DBLP Database
-```bash
-cd database && python3 download.py
-```
-
-### 4. Build Journal List
-
-Provide `journal-context/journal-matching-guide.md` to AI.
-
-**Output:** `journal-context/list-of-journals.csv`
-
-### 5. Build Conference List
-
-Provide `conference-context/conference-matching-guide.md` to AI.
-
-**Output:** `conference-context/list-of-conferences.csv`
-
-### 6. Extract Papers
+### 4. Conference list
 
 ```bash
-cd database && python3 extract.py
+python3 conference-hunter/a_extract.py
+python3 conference-hunter/b_match.py
 ```
 
-**Output:** `paper-inventory/*.csv` (32 files organized by ranking and year)
+Give `conference-hunter/c_conference_matching_guide.md` to the AI.
 
-### 7. Build Reference List
+**Output:** view `list_of_conferences`
 
-Provide `paper-hunter/paper-matching-guide.md` to AI.
+### 5. Journal list
 
-**Output:** `paper-reference/a-star-2026.csv`
+```bash
+python3 journal-hunter/a_extract.py
+python3 journal-hunter/b_match.py
+```
+
+Give `journal-hunter/c_journal_matching_guide.md` to the AI.
+
+**Output:** view `list_of_journals`
+
+### 6. Papers
+
+```bash
+python3 paper-hunter/a_extract.py
+```
+
+**Output:** table `dblp_paper`
+
+### 7. Paper details
+
+Put API keys in `paper-hunter/.env`:
+
+```
+OPENALEX_API_KEY_1=...
+OPENALEX_API_KEY_2=...
+S2_API_KEY=...
+```
+
+```bash
+cd paper-hunter
+python3 b_fetch.py fetch
+python3 b_fetch.py status
+```
+
+**Output:** tables `paper_detail`, `paper_term`, `paper_reference`
+
+### 8. Review
+
+Give `paper-hunter/e_paper_matching_guide.md` to the AI.
+
+```bash
+python3 d_review.py status
+python3 d_review.py accepted
+```
+
+**Output:** tables `paper_accepted`, `paper_rejected`

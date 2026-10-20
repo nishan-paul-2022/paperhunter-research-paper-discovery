@@ -69,7 +69,7 @@ Each claimed paper shows `title`, `abstract`, `tldr`, `keywords`, `topics`, `fie
 
 ## 8. Orchestrator procedure
 
-Run from `x/paper-hunter/`. Details must be fetched first (`b_fetch.py fetch`); only fetched papers can be claimed.
+Run from `x/paper-hunter/`. The pipeline is `a_extract.py` (DBLP papers of the listed venues → `dblp_paper`), `b_fetch.py fetch` (OpenAlex + Semantic Scholar → `paper_source`, built into `paper_detail` by `c_build.py`), then this review with `d_review.py`. Only fetched papers can be claimed.
 
 ```bash
 python3 b_fetch.py status        # how many papers have details
