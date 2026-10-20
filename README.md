@@ -38,9 +38,11 @@ Give `conference-hunter/c_conference_matching_guide.md` to the AI.
 ### 5. Journal list
 
 ```bash
-python3 journal-hunter/a_extract.py
+python3 journal-hunter/a_extract.py   # XML scan + Crossref ISSN lookups (~5.5k DOIs, ~1 h first time, cached)
 python3 journal-hunter/b_match.py
 ```
+
+Failed Crossref lookups retry with `a_extract.py --skip-xml`. `--mailto you@example.org` uses Crossref's faster polite pool.
 
 Give `journal-hunter/c_journal_matching_guide.md` to the AI.
 

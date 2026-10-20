@@ -130,7 +130,8 @@ CREATE TABLE IF NOT EXISTS journal_scopus (
     issn_1    TEXT,
     issn_2    TEXT,
     publisher TEXT,
-    quartile  TEXT NOT NULL CHECK (quartile IN ('Q1', 'Q2', 'Q3', 'Q4'))
+    quartile  TEXT NOT NULL CHECK (quartile IN ('Q1', 'Q2', 'Q3', 'Q4')),
+    coverage  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS journal_dblp_venue (
@@ -141,11 +142,26 @@ CREATE TABLE IF NOT EXISTS journal_dblp_venue (
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS journal_dblp_name (
-    dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
-    name     TEXT NOT NULL,
-    papers   INTEGER NOT NULL,
+    dblp_key   TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    papers     INTEGER NOT NULL,
+    first_year INTEGER,
+    last_year  INTEGER,
     PRIMARY KEY (dblp_key, name)
 ) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS journal_dblp_crossref (
+    doi       TEXT PRIMARY KEY,
+    dblp_key  TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
+    name      TEXT NOT NULL,
+    year      INTEGER NOT NULL,
+    status    INTEGER CHECK (status IN (200, 404)),
+    issn_1    TEXT,
+    issn_2    TEXT,
+    title     TEXT,
+    publisher TEXT
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS journal_dblp_crossref_key ON journal_dblp_crossref (dblp_key);
 
 CREATE TABLE IF NOT EXISTS journal_dblp_issn (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
@@ -164,7 +180,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     scopus_id   INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
-    method   TEXT NOT NULL CHECK (method IN ('issn', 'name')),
+    method   TEXT NOT NULL CHECK (method IN ('crossref', 'issn', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, scopus_id)
@@ -204,9 +220,15 @@ BEGIN SELECT RAISE(ABORT, 'Scopus journal cannot be both accepted and absent'); 
 DROP VIEW IF EXISTS journal_summary;
 CREATE VIEW journal_summary AS
 SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
-       (SELECT group_concat(n.name || ' (' || n.papers || ')', ' | ')
-          FROM (SELECT name, papers FROM journal_dblp_name WHERE dblp_key = j.dblp_key
-                ORDER BY papers DESC, name LIMIT 3) n) AS names,
+       (SELECT group_concat(n.name || ' (' || n.papers || ', ' || coalesce(n.first_year, '?') || '-'
+                            || coalesce(n.last_year, '?') || ')', ' | ')
+          FROM (SELECT name, papers, first_year, last_year FROM journal_dblp_name WHERE dblp_key = j.dblp_key
+                ORDER BY last_year DESC, papers DESC, name LIMIT 5) n) AS names,
+       (SELECT group_concat(x.title || ' [' || x.issns || '] (' || x.dois || ' DOIs, ' || x.lo || '-' || x.hi || ')', ' | ')
+          FROM (SELECT coalesce(title, '?') AS title, trim(coalesce(issn_1, '') || ' ' || coalesce(issn_2, '')) AS issns,
+                       count(*) AS dois, min(year) AS lo, max(year) AS hi
+                FROM journal_dblp_crossref WHERE dblp_key = j.dblp_key AND status = 200
+                GROUP BY 1, 2 ORDER BY hi DESC, dois DESC LIMIT 4) x) AS crossref,
        (SELECT group_concat(i.issn || ' (' || i.papers || ')', ' | ')
           FROM (SELECT issn, papers FROM journal_dblp_issn WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, issn LIMIT 4) i) AS issns,
@@ -218,21 +240,21 @@ FROM journal_dblp_venue j;
 DROP VIEW IF EXISTS journal_review;
 CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
-       s.publisher, s.quartile, c.method, c.score, c.detail,
-       e.papers, e.first_year, e.last_year, e.names, e.issns, e.doi_prefixes
+       s.publisher, s.quartile, s.coverage, c.method, c.score, c.detail,
+       e.papers, e.first_year, e.last_year, e.names, e.crossref, e.issns, e.doi_prefixes
 FROM journal_candidate c
 JOIN journal_scopus s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
-SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile,
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile, s.coverage,
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_scopus s
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
-SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL,
+SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
-       NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_decision d
 WHERE NOT EXISTS (SELECT 1 FROM journal_scopus s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
@@ -386,9 +408,32 @@ BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
 """
 
 REBUILT_EVIDENCE = {"conf_dblp_booktitle": "first_year", "conf_dblp_title": "proc_key"}
+ADDED_COLUMNS = {"journal_scopus": ["coverage"], "journal_dblp_name": ["first_year", "last_year"]}
+
+
+def migrate_journals(conn: sqlite3.Connection) -> None:
+    tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
+    done = []
+    with conn:
+        for table, cols in ADDED_COLUMNS.items():
+            if table not in tables:
+                continue
+            have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for col in cols:
+                if col not in have:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {'TEXT' if col == 'coverage' else 'INTEGER'}")
+                    done.append(f"{table}.{col}")
+        if "journal_candidate" in tables and "'crossref'" not in tables["journal_candidate"]:
+            conn.execute("DROP VIEW IF EXISTS journal_review")
+            conn.execute("DROP VIEW IF EXISTS journal_list")
+            conn.execute("DROP TABLE journal_candidate")
+            done.append("journal_candidate (rebuilt)")
+    if done:
+        print(f"migrated: {', '.join(done)}; run journal-hunter/a_extract.py and b_match.py to refill them")
 
 
 def migrate(conn: sqlite3.Connection) -> None:
+    migrate_journals(conn)
     tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     stale = [t for t, col in REBUILT_EVIDENCE.items()
              if t in tables and col not in {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}]
