@@ -31,6 +31,8 @@ CROSSREF_API = "https://api.crossref.org/works/"
 CROSSREF_POLITE_WORKERS = 3
 CROSSREF_PUBLIC_WORKERS = 1
 CROSSREF_AGENT = "paperhunter-journal-hunter/1.0"
+CROSSREF_BATCH = 100
+CROSSREF_FIELDS = "DOI,ISSN,issn-type,container-title,publisher"
 CROSSREF_PASSES = 3
 
 
@@ -218,32 +220,53 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     )
 
 
-def crossref_lookup(doi: str, mailto: str | None) -> tuple | None:
-    url = CROSSREF_API + urllib.parse.quote(doi, safe="/")
+def crossref_fetch(url: str, mailto: str | None) -> dict | None:
     agent = CROSSREF_AGENT
     if mailto:
-        url += "?mailto=" + urllib.parse.quote(mailto)
+        url += ("&" if "?" in url else "?") + "mailto=" + urllib.parse.quote(mailto)
         agent += f" (mailto:{mailto})"
     for attempt in range(4):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": agent})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                m = json.load(resp)["message"]
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return json.load(resp)["message"]
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                return (404, None, None, None, None)
+                return {}
             time.sleep(2 ** attempt * 2)
-            continue
         except (urllib.error.URLError, TimeoutError, ValueError, OSError):
             time.sleep(2 ** attempt * 2)
-            continue
-        typed = {t.get("type"): format_issn(t.get("value", "")) for t in m.get("issn-type") or []}
-        issns = [typed.get("print"), typed.get("electronic")]
-        issns += [format_issn(i) for i in m.get("ISSN") or []]
-        issns = list(dict.fromkeys(i for i in issns if i)) + [None, None]
-        titles = [html.unescape(" ".join(t.split())) for t in m.get("container-title") or []] or [None]
-        return (200, issns[0], issns[1], titles[0], m.get("publisher"))
     return None
+
+
+def crossref_row(m: dict) -> tuple:
+    typed = {t.get("type"): format_issn(t.get("value", "")) for t in m.get("issn-type") or []}
+    issns = [typed.get("print"), typed.get("electronic")]
+    issns += [format_issn(i) for i in m.get("ISSN") or []]
+    issns = list(dict.fromkeys(i for i in issns if i)) + [None, None]
+    titles = [html.unescape(" ".join(t.split())) for t in m.get("container-title") or []] or [None]
+    return (200, issns[0], issns[1], titles[0], m.get("publisher"))
+
+
+def crossref_lookup(doi: str, mailto: str | None) -> tuple | None:
+    m = crossref_fetch(CROSSREF_API + urllib.parse.quote(doi, safe="/"), mailto)
+    if m is None:
+        return None
+    return crossref_row(m) if m else (404, None, None, None, None)
+
+
+def crossref_batch(dois: list[str], mailto: str | None) -> dict[str, tuple] | None:
+    url = (CROSSREF_API.rstrip("/") + "?filter=" + ",".join("doi:" + urllib.parse.quote(d, safe="/") for d in dois)
+           + f"&select={CROSSREF_FIELDS}&rows={len(dois)}")
+    m = crossref_fetch(url, mailto)
+    if m is None:
+        return None
+    return {item["DOI"].lower(): crossref_row(item) for item in m.get("items") or []}
+
+
+def save_crossref(conn: sqlite3.Connection, doi: str, row: tuple) -> None:
+    conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, title = ?, publisher = ? "
+                 "WHERE doi = ?", (*row, doi))
 
 
 def load_crossref(conn: sqlite3.Connection) -> None:
@@ -260,19 +283,37 @@ def load_crossref(conn: sqlite3.Connection) -> None:
             break
         if attempt > 1:
             time.sleep(60)
-        print(f"  Pass {attempt}: {len(pending):,} DOIs to look up (answers already in the database are kept)\n")
-        done = failed = 0
+        print(f"  Pass {attempt}: {len(pending):,} DOIs to look up (answers already in the database are kept)")
+        batchable = [d for d in pending if "," not in d]
+        chunks = [batchable[i:i + CROSSREF_BATCH] for i in range(0, len(batchable), CROSSREF_BATCH)]
+        single = [d for d in pending if "," in d]
+        found = failed = 0
         with ThreadPoolExecutor(workers) as pool:
-            for doi, row in zip(pending, pool.map(lambda d: crossref_lookup(d, mailto), pending)):
+            for chunk, got in zip(chunks, pool.map(lambda c: crossref_batch(c, mailto), chunks)):
+                if got is None:
+                    failed += len(chunk)
+                    continue
+                for doi in chunk:
+                    row = got.get(doi.lower())
+                    if row:
+                        save_crossref(conn, doi, row)
+                        found += 1
+                    else:
+                        single.append(doi)
+                conn.commit()
+        print(f"    {len(chunks):,} batch requests: {found:,} found  |  {len(single):,} to look up one by one"
+              f"  |  {failed:,} failed")
+        done = 0
+        with ThreadPoolExecutor(workers) as pool:
+            for doi, row in zip(single, pool.map(lambda d: crossref_lookup(d, mailto), single)):
                 if row is None:
                     failed += 1
                 else:
-                    conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, title = ?, "
-                                 "publisher = ? WHERE doi = ?", (*row, doi))
+                    save_crossref(conn, doi, row)
                 done += 1
                 if done % 100 == 0:
                     conn.commit()
-                    print(f"  {done:,}/{len(pending):,}  |  failed: {failed}", end="\r", flush=True)
+                    print(f"    {done:,}/{len(single):,} single lookups", end="\r", flush=True)
         conn.commit()
         print()
     stats = dict(conn.execute("SELECT coalesce(status, 0), count(*) FROM journal_dblp_crossref GROUP BY 1"))
