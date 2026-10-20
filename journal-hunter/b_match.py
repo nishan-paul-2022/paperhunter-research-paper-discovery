@@ -11,7 +11,8 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 MIN_NAME_SCORE = 0.6
 MIN_NAME_SHARE = 0.15
 RECENT_NAME_YEARS = 3
-METHODS = ("dblp", "crossref", "name")
+METHODS = ("dblp", "crossref", "lineage", "name")
+MIN_LINEAGE_SOURCE_SCORE = 0.5
 STOPWORDS = set(
     "an the of on in for and to at with from by its de des du d la le les et fur und "
     "der die das y e em".split()
@@ -77,6 +78,38 @@ def name_score(d_toks: list[str], s_toks: list[str]) -> float:
     return min(1.0, covered / len(s_core))
 
 
+def lineage_graph(conn: sqlite3.Connection, table: str) -> dict[str, list[tuple[str, str]]]:
+    graph: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for pred, succ in conn.execute(f"SELECT predecessor_key, successor_key FROM {table}"):
+        graph[pred].append((succ, "successor"))
+        graph[succ].append((pred, "predecessor"))
+    return graph
+
+
+def lineage_reach(graph: dict[str, list[tuple[str, str]]], start: set[str]) -> dict[str, str]:
+    reached = {}
+    for direction in ("predecessor", "successor"):
+        queue = list(start)
+        while queue:
+            key = queue.pop()
+            for other, relation in graph.get(key, ()):
+                if relation == direction and other not in start and other not in reached:
+                    reached[other] = f"{other} is DBLP's {relation} of {key}"
+                    queue.append(other)
+    return reached
+
+
+def add_lineage(conn: sqlite3.Connection, evidence: dict, add) -> None:
+    graph = lineage_graph(conn, "journal_dblp_lineage")
+    strong: dict[int, set[str]] = defaultdict(set)
+    for (key, sid), found in evidence.items():
+        if "dblp" in found or found.get("crossref", (0,))[0] >= MIN_LINEAGE_SOURCE_SCORE:
+            strong[sid].add(key)
+    for sid, keys in strong.items():
+        for key, path in lineage_reach(graph, keys).items():
+            add(key, sid, "lineage", 1.0, f"DBLP lineage: {path}")
+
+
 def propose(conn: sqlite3.Connection) -> list[tuple]:
     scopus = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus_venue").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in scopus for i in (i1, i2) if i}
@@ -116,6 +149,8 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
                 f"({min(years)}-{max(years)}; key's newest {rows[-1][0]}), journal '{h[-1][2]}'")
     newest_issns = {key: f"{rows[-1][1] or '?'} {rows[-1][2] or ''}".strip() + f" '{rows[-1][3]}' ({rows[-1][0]})"
                     for key, rows in sampled.items()}
+
+    add_lineage(conn, evidence, add)
 
     names: dict[str, set[str]] = defaultdict(set)
     rows = conn.execute("SELECT dblp_key, name, papers, last_year FROM journal_dblp_name").fetchall()
@@ -174,6 +209,7 @@ def main() -> None:
     by_method = dict(conn.execute("SELECT method, count(*) FROM journal_candidate GROUP BY method").fetchall())
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)"
           f"  |  DBLP ISSN {by_method.get('dblp', 0)}  |  Crossref {by_method.get('crossref', 0)}"
+          f"  |  lineage {by_method.get('lineage', 0)}"
           f"  |  name {by_method.get('name', 0)}")
     print(f"  ├─ decisions:   {decisions}")
     print(f"  ├─ UNREVIEWED:  {issues.get('UNREVIEWED', 0)}")

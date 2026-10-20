@@ -177,6 +177,13 @@ CREATE TABLE IF NOT EXISTS journal_dblp_issn (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS journal_dblp_issn_issn ON journal_dblp_issn (issn);
 
+CREATE TABLE IF NOT EXISTS journal_dblp_lineage (
+    predecessor_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
+    successor_key   TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
+    PRIMARY KEY (predecessor_key, successor_key)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS journal_dblp_lineage_successor ON journal_dblp_lineage (successor_key);
+
 CREATE TABLE IF NOT EXISTS journal_dblp_doi (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     prefix   TEXT NOT NULL,
@@ -187,7 +194,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
 CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     scopus_id   INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
-    method   TEXT NOT NULL CHECK (method IN ('dblp', 'crossref', 'name')),
+    method   TEXT NOT NULL CHECK (method IN ('dblp', 'crossref', 'lineage', 'name')),
     score    REAL NOT NULL,
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, scopus_id)
@@ -447,7 +454,7 @@ def migrate_journals(conn: sqlite3.Connection) -> None:
             else:
                 done.append("journal_dblp_issn (rebuilt for DBLP ISSNs)")
         candidate = tables.get("journal_candidate", "")
-        if candidate and ("'dblp'" not in candidate or "'issn'" in candidate):
+        if candidate and ("'lineage'" not in candidate or "'issn'" in candidate):
             conn.execute("DROP VIEW IF EXISTS journal_review")
             conn.execute("DROP VIEW IF EXISTS journal_list")
             conn.execute("DROP TABLE journal_candidate")

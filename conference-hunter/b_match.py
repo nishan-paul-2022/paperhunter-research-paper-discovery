@@ -136,6 +136,27 @@ def full_title_keys(title: str, title_blobs: dict[str, str]) -> set[str]:
     return {key for key, blob in title_blobs.items() if name in blob}
 
 
+def lineage_graph(conn: sqlite3.Connection) -> dict[str, dict[str, set[str]]]:
+    graph: dict[str, dict[str, set[str]]] = {"predecessor": defaultdict(set), "successor": defaultdict(set)}
+    for pred, succ in conn.execute("SELECT predecessor_key, successor_key FROM conf_dblp_lineage"):
+        graph["successor"][pred].add(succ)
+        graph["predecessor"][succ].add(pred)
+    return graph
+
+
+def lineage_keys(keys: set[str], graph: dict[str, dict[str, set[str]]]) -> set[str]:
+    reached = set()
+    for edges in graph.values():
+        seen, queue = set(keys), list(keys)
+        while queue:
+            for other in edges.get(queue.pop(), ()):
+                if other not in seen:
+                    seen.add(other)
+                    queue.append(other)
+        reached |= seen
+    return reached - keys
+
+
 def propose(conn: sqlite3.Connection) -> list[tuple]:
     evidence = load_evidence(conn)
     by_acronym: dict[str, set[str]] = defaultdict(set)
@@ -151,6 +172,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
         for b in bts:
             by_booktitle[b].add(key)
     all_keys = sorted(evidence)
+    lineage = lineage_graph(conn)
     title_blobs: dict[str, str] = defaultdict(str)
     for key, title in conn.execute("SELECT dblp_key, title FROM conf_dblp_title"):
         title_blobs[key] += fold(title) + "\n"
@@ -161,6 +183,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
         keys = set().union(*(by_acronym.get(a, set()) for a in forms))
         primary = set().union(*(by_primary.get(a, set()) for a in forms))
         keys |= related_keys(primary, all_keys, booktitles, by_booktitle)
+        keys |= lineage_keys(primary, lineage)
         keys |= full_title_keys(title, title_blobs)
         for key in keys:
             e = evidence[key]

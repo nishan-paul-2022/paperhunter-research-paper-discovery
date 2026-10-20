@@ -171,7 +171,9 @@ On a first run every candidate and every CORE venue is open. On a rerun after a 
 
 Accept every series you find (§2); reject the near misses you examined. Only if nothing is found, write `absent` and list what you searched in the reason.
 
-**Step 4. Sweep for missed series (must end at 0 rows).** These are undecided series whose acronym, or whose non-workshop booktitle, equals a CORE acronym. Most rows are namesakes: write a `reject` for each. Real ones get an `accept`.
+**Step 4. Sweeps. Each must end at 0 rows.**
+
+4a. Missed series. These are undecided series whose acronym, or whose non-workshop booktitle, equals a CORE acronym. Most rows are namesakes: write a `reject` for each. Real ones get an `accept`.
 
 ```sql
 WITH bt AS (
@@ -191,11 +193,9 @@ WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = h.dblp_key
 ORDER BY v.rank, v.acronym;
 ```
 
-Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides acronym matches, the matcher proposes track keys named after a matched key (`conf/icse-seip`), keys that share a main booktitle with one (`conf/imw` IMC, `conf/ssspr` S+SSPR, `conf/symsac` SYMSAC), and keys whose proceedings titles contain the CORE full title (`conf/fpca`). Most are workshops and namesakes. Real ones need predecessor proof (§2). A row can name the wrong venue: `conf/agents` surfaces under EMAS, but it is AAMAS's predecessor. Decide by what the series is, not by the row's venue.
+Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides acronym matches, the matcher proposes track keys named after a matched key (`conf/icse-seip`), keys that share a main booktitle with one (`conf/imw` IMC, `conf/ssspr` S+SSPR, `conf/symsac` SYMSAC), keys whose proceedings titles contain the CORE full title (`conf/fpca`), and keys that `conf_dblp_lineage` links to a matched key (`conf/ftcs` for DSN, `conf/csmr` for SANER). Most are workshops and namesakes. Real ones need predecessor proof (§2). A row can name the wrong venue: `conf/agents` surfaces under EMAS, but it is AAMAS's predecessor. Decide by what the series is, not by the row's venue.
 
-**Step 4b. Venue history for A\* and A venues.** Renames with no shared words escape every query: LFP and FPCA→ICFP, SAIG and GCSE→GPCE, EWSA→ECSA, PSTV→FORTE, RANDOM→APPROX/RANDOM, InfoVis→IEEE VIS. For each A\* and A venue, look up its history on the conference site, its "previous editions" page or the proceedings front matter. Run the Step 3 searches on every former name you find, then accept or reject each series as in §2.
-
-**Step 4c. Sweep for linked series (must end at 0 rows).** These are series that DBLP links as predecessor or successor of an accepted series, with no decision for that venue. Most are real predecessors or mergers (FTCS → DSN, METRICS and ISESE → ESEM, CSMR → SANER, SoftVis → VISSOFT, PARLE → Euro-Par): accept them as in §2. Reject the rest with the reason (a workshop DBLP links to its parent, a minority partner of a merger).
+4b. Linked series. These are series that DBLP links as predecessor or successor of an accepted series, with no decision for that venue. Most are real predecessors or mergers (FTCS → DSN, METRICS and ISESE → ESEM, CSMR → SANER, SoftVis → VISSOFT, PARLE → Euro-Par): accept them as in §2. Reject the rest with the reason (a workshop DBLP links to its parent, a minority partner of a merger).
 
 ```sql
 WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM conf_dblp_lineage
@@ -210,7 +210,7 @@ WHERE d.verdict = 'accept'
 ORDER BY v.rank, v.acronym;
 ```
 
-**Step 5. Sweep for stale venues (must end at 0 rows).** These are venues whose newest accepted series ends more than two years ago and carries no tag yet. For each one, find where the venue went:
+4c. Stale venues. These are venues whose newest accepted series ends more than two years ago and carries no tag yet. For each one, find where the venue went:
 - a new key (the Step 3 searches, then `conf_dblp_lineage` of the old key);
 - a journal issue stream or a whole journal;
 - a mixed journal;
@@ -233,6 +233,8 @@ ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END
 
 A venue can also stay active in DBLP while its main track left: its newest booktitles are only `Companion`, `Abstracts`, `Workshops`, `Posters` or `X@Y`. Check that with `conf_dblp_booktitle` year spans and `conf_dblp_title` paper counts. Find where the main track went, then accept its journal series or add the `JOURNAL:` tag.
 
+**Step 5. Venue history for A\* and A venues.** Renames with no shared words escape every query: LFP and FPCA→ICFP, SAIG and GCSE→GPCE, EWSA→ECSA, PSTV→FORTE, RANDOM→APPROX/RANDOM, InfoVis→IEEE VIS. For each A\* and A venue, look up its history on the conference site, its "previous editions" page or the proceedings front matter. Run the Step 3 searches on every former name you find, then accept or reject each series as in §2.
+
 **Step 6. Audit accepts the matcher never proposed.** These were found by hand, so they carry the highest false-positive risk. Re-check each against §2, especially the predecessor proof. Fix any wrong one.
 
 ```sql
@@ -246,9 +248,7 @@ WHERE d.verdict = 'accept'
 
 **Step 8. Final gate.** All four must hold; otherwise go back to step 1.
 - `SELECT count(*) FROM conf_review;` returns 0.
-- The Step 4 query returns 0 rows.
-- The Step 4c query returns 0 rows.
-- The Step 5 query returns 0 rows.
+- The Step 4a, 4b and 4c queries return 0 rows.
 
 **Step 9. Report** (ten lines at most):
 - `SELECT ranking, count(*) FROM conf_list GROUP BY ranking;`

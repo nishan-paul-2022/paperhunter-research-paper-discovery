@@ -18,6 +18,7 @@ ARCHIVE_DIR = REPO_ROOT / "archive"
 CORE_SRC = ARCHIVE_DIR / "publication-core-2026.csv"
 XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
+ENV_PATH = REPO_ROOT / ".env"
 VALID_RANKS = ("A*", "A", "B", "C")
 DBLP_SPARQL = "https://sparql.dblp.org/sparql"
 DBLP_AGENT = "paperhunter-conference-hunter/1.0"
@@ -25,6 +26,14 @@ DBLP_LINEAGE_QUERY = (
     "PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?stream ?relation ?other WHERE { "
     "VALUES ?relation { dblp:predeccessorStream dblp:successorStream } ?stream ?relation ?other }"
 )
+
+
+def load_env() -> None:
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text().splitlines():
+            k, sep, v = line.strip().partition("=")
+            if sep and not k.startswith("#"):
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
@@ -183,11 +192,13 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
 
 
 def dblp_sparql(query: str) -> list[dict] | None:
+    mailto = os.environ.get("CONTACT_MAILTO", "").strip()
+    agent = DBLP_AGENT + (f" (mailto:{mailto})" if mailto else "")
     data = urllib.parse.urlencode({"query": query}).encode()
     for attempt in range(3):
         try:
             req = urllib.request.Request(DBLP_SPARQL, data=data, headers={
-                "User-Agent": DBLP_AGENT, "Accept": "application/sparql-results+json"})
+                "User-Agent": agent, "Accept": "application/sparql-results+json"})
             with urllib.request.urlopen(req, timeout=300) as resp:
                 return json.load(resp)["results"]["bindings"]
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError, OSError):
@@ -195,7 +206,7 @@ def dblp_sparql(query: str) -> list[dict] | None:
     return None
 
 
-def load_lineage(conn: sqlite3.Connection) -> None:
+def load_dblp_lineage(conn: sqlite3.Connection) -> None:
     print("━" * 70)
     print("  Phase 3 – DBLP predecessor/successor links (sparql.dblp.org) → conf_dblp_lineage")
     print("━" * 70)
@@ -229,10 +240,11 @@ def main() -> None:
     print("║         paperhunter  ·  Conference Evidence Loader                   ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {DB_PATH}\n")
+    load_env()
     conn = connect()
     load_core(conn, core_path)
     load_dblp(conn, xml_path)
-    load_lineage(conn)
+    load_dblp_lineage(conn)
     conn.close()
     print("━" * 70)
     print("  Done.  → Run b_match.py next")

@@ -31,6 +31,10 @@ DBLP_ISSN_QUERY = (
     "PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?stream ?issn WHERE { "
     "?stream a dblp:Journal ; dblp:issn ?issn . FILTER(STRSTARTS(STR(?issn), \"urn:issn:\")) }"
 )
+DBLP_LINEAGE_QUERY = (
+    "PREFIX dblp: <https://dblp.org/rdf/schema#> SELECT ?stream ?relation ?other WHERE { "
+    "VALUES ?relation { dblp:predeccessorStream dblp:successorStream } ?stream a dblp:Journal ; ?relation ?other }"
+)
 CROSSREF_POLITE_WORKERS = 3
 CROSSREF_PUBLIC_WORKERS = 1
 CROSSREF_AGENT = "paperhunter-journal-hunter/1.0"
@@ -202,7 +206,7 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
 
 
 def dblp_sparql(query: str) -> list[dict] | None:
-    mailto = os.environ.get("CROSSREF_MAILTO", "").strip()
+    mailto = os.environ.get("CONTACT_MAILTO", "").strip()
     agent = CROSSREF_AGENT + (f" (mailto:{mailto})" if mailto else "")
     data = urllib.parse.urlencode({"query": query}).encode()
     for attempt in range(3):
@@ -236,6 +240,29 @@ def load_dblp_issn(conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM journal_dblp_issn")
         conn.executemany("INSERT INTO journal_dblp_issn VALUES (?, ?)", sorted(pairs))
     print(f"  ✓  {len(pairs):,} ISSNs for {len({k for k, _ in pairs}):,} of {len(keys):,} keys\n")
+
+
+def load_dblp_lineage(conn: sqlite3.Connection) -> None:
+    print("━" * 70)
+    print("  Phase 4 – DBLP predecessor/successor links (sparql.dblp.org) → journal_dblp_lineage")
+    print("━" * 70)
+    rows = dblp_sparql(DBLP_LINEAGE_QUERY)
+    if rows is None:
+        kept = conn.execute("SELECT count(*) FROM journal_dblp_lineage").fetchone()[0]
+        print(f"  ✗ sparql.dblp.org did not answer: keeping the {kept:,} links stored by the last run\n")
+        return
+    keys = {k for (k,) in conn.execute("SELECT dblp_key FROM journal_dblp_venue")}
+    stream = lambda r, f: r[f]["value"].replace("https://dblp.org/streams/", "")
+    links = set()
+    for r in rows:
+        a, b = stream(r, "stream"), stream(r, "other")
+        pair = (a, b) if r["relation"]["value"].endswith("successorStream") else (b, a)
+        if pair[0] in keys and pair[1] in keys and pair[0] != pair[1]:
+            links.add(pair)
+    with conn:
+        conn.execute("DELETE FROM journal_dblp_lineage")
+        conn.executemany("INSERT INTO journal_dblp_lineage VALUES (?, ?)", sorted(links))
+    print(f"  ✓  {len(links):,} links between {len({k for p in links for k in p}):,} keys\n")
 
 
 def crossref_fetch(url: str, mailto: str | None) -> dict | None:
@@ -289,11 +316,11 @@ def save_crossref(conn: sqlite3.Connection, doi: str, row: tuple) -> None:
 
 def load_crossref(conn: sqlite3.Connection) -> None:
     print("━" * 70)
-    print("  Phase 4 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
+    print("  Phase 5 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
     print("━" * 70)
-    mailto = os.environ.get("CROSSREF_MAILTO", "").strip() or None
+    mailto = os.environ.get("CONTACT_MAILTO", "").strip() or None
     workers = CROSSREF_POLITE_WORKERS if mailto else CROSSREF_PUBLIC_WORKERS
-    print(f"  Crossref pool: {'polite (' + mailto + ')' if mailto else 'public (set CROSSREF_MAILTO in .env)'}"
+    print(f"  Crossref pool: {'polite (' + mailto + ')' if mailto else 'public (set CONTACT_MAILTO in .env)'}"
           f"  |  {workers} parallel requests\n")
     for attempt in range(1, CROSSREF_PASSES + 1):
         pending = [r[0] for r in conn.execute("SELECT doi FROM journal_dblp_crossref WHERE status IS NULL")]
@@ -358,6 +385,7 @@ def main() -> None:
     load_scopus(conn, scopus_path)
     load_dblp(conn, xml_path)
     load_dblp_issn(conn)
+    load_dblp_lineage(conn)
     load_crossref(conn)
     conn.close()
     print("━" * 70)
