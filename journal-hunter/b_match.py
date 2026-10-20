@@ -13,7 +13,7 @@ MIN_NAME_SHARE = 0.15
 RECENT_NAME_YEARS = 3
 METHODS = ("crossref", "issn", "name")
 STOPWORDS = set(
-    "a an the of on in for and to at with from by its de des du d la le les et fur und "
+    "an the of on in for and to at with from by its de des du d la le les et fur und "
     "der die das y e em".split()
 )
 OPTIONAL = {"acm", "ieee", "siam", "iet", "ieice", "ipsj", "informs", "ams", "elsevier", "springer"}

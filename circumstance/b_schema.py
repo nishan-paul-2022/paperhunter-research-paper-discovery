@@ -263,7 +263,7 @@ DROP VIEW IF EXISTS journal_list;
 CREATE VIEW journal_list AS
 SELECT d.dblp_key,
        (SELECT name FROM journal_dblp_name n WHERE n.dblp_key = d.dblp_key
-         ORDER BY papers DESC, name LIMIT 1) AS dblp_name,
+         ORDER BY last_year DESC, papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
 FROM journal_decision d
 JOIN journal_scopus s ON s.id = d.scopus_id

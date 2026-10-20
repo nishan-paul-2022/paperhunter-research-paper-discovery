@@ -67,7 +67,7 @@ The unit is the **whole key**. Accept key `K` for Scopus journal `J` only when `
 - Crossref (or link) ISSNs of `K`'s DOIs are `J`'s ISSNs **in its newest years**, and the names agree.
 - **Print/online gap.** Scopus lists only one edition's ISSN and Crossref gives the other (`journals/cma`: Crossref 0898-1221, Scopus 1873-7668). Prove it with `api.crossref.org/journals/<ISSN>` listing both ISSNs for the same title, and put `ISSN GAP:` with both ISSNs in the reason.
 - **Rename inside one key.** The name changes in `journal_dblp_name` and the Crossref ISSN changes at the same year, with the newest DOIs on `J`'s ISSN (`journals/jeric`: J. Educ. Resour. Comput. → ACM Trans. Comput. Educ.; `journals/program` → Data Technologies and Applications; `journals/vlc` → Journal of Computer Languages; `journals/ir` → Discover Computing).
-- **Predecessor key.** `K` ended and DBLP continues the same journal in a new key (`journals/jeric` 2001–2023 → `journals/toce`). Accept every key of the journal's lineage, but only for a **rename of the same journal**: the publisher or Scopus says "formerly `K`", or the ISSN carries over. Tag the reason `PREDECESSOR: continued as journals/<new> (<proof>)`. A different journal **absorbed** by `J` is a separate journal: reject it.
+- **Predecessor key.** `K` ended and DBLP continues the same journal in a new key (`journals/jeric` 2001–2023 → `journals/toce`). Accept every key of the journal's lineage, but only for a **rename of the same journal**: the publisher or Scopus says "formerly `K`", or the ISSN carries over. Tag the reason `PREDECESSOR: continued as journals/<new> (<proof>)`. When the journal was renamed and DBLP has no key for the new title yet (`journals/nle`, `journals/aicom`), tag it `PREDECESSOR: renamed <new title> <year> (<proof>)`. A different journal **absorbed** by `J` is a separate journal: reject it.
 - Journals that publish conference proceedings (PVLDB, PACMPL, TOG, TCHES, PoPETs) are still journals: accept them if Scopus lists them.
 
 **Reject**
@@ -106,7 +106,7 @@ INSERT INTO journal_decision (scopus_id, dblp_key, verdict, reason) VALUES
 - `reason` is one line of concrete evidence: the ISSN and its source (Crossref / link), the years, the publisher, and for renames the proof. "Same name" alone is not a reason.
 - **Reason tags**, required where they apply (the sweeps in §4 read them):
   - `ISSN GAP: <Crossref ISSN> = <Scopus ISSN> (<proof>)` on an accept whose Crossref ISSNs are not in Scopus.
-  - `PREDECESSOR: continued as journals/<new> (<proof>)` on an accept of a key that ended under a former title or ISSN.
+  - `PREDECESSOR: continued as journals/<new> (<proof>)` on every accepted key that is not the newest accepted key of its journal (Step 4e), or `PREDECESSOR: renamed <new title> <year> (<proof>)` on a key whose journal now has a title DBLP has not indexed yet (Step 4d).
   - `ENDED: last DBLP year <y>` on the newest accepted key of a journal that DBLP stopped indexing, after you confirmed there is no later key.
   - `SHARED KEY: <journals>` on rejects of a key holding several journals.
   - `NEW TITLE: <no predecessor, or conference series> (<what you checked>)` on `absent` journals whose Scopus coverage starts in the last three years (Step 4d).
@@ -220,6 +220,16 @@ WHERE d.verdict = 'absent' AND d.reason NOT LIKE '%NEW TITLE:%'
   AND CAST(substr(s.coverage, 1, 4) AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER) - 3;
 ```
 
+4e. Older keys of a journal without a `PREDECESSOR:` tag. Every accepted key that is not the newest accepted key of its journal is a predecessor, and its accept must carry the proof that it is the same journal under a former title, not a different journal absorbed by it (§2). Add the tag with the proof, or reject the key if there is no proof.
+
+```sql
+SELECT d.id, d.dblp_key, k.first_year, k.last_year, s.title, d.reason
+FROM journal_decision d JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key JOIN journal_scopus s ON s.id = d.scopus_id
+WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%PREDECESSOR:%'
+  AND EXISTS (SELECT 1 FROM journal_decision n JOIN journal_dblp_venue m ON m.dblp_key = n.dblp_key
+              WHERE n.scopus_id = d.scopus_id AND n.verdict = 'accept' AND m.last_year > k.last_year);
+```
+
 **Step 5. Audit name-only accepts.** These carry the highest false-positive risk. Re-check each against §2: full title, publisher, years, and the Crossref journal record. Fix any wrong one.
 
 ```sql
@@ -230,11 +240,11 @@ WHERE d.verdict = 'accept'
                   AND c.method IN ('crossref', 'issn'));
 ```
 
-**Step 6. Audit every `absent`.** Re-run Step 3 for each `absent` journal whose reason lacks the reverse probe or carries `DBLP web unreachable`.
+**Step 6. Audit every `absent`.** Re-run Step 3 for each `absent` journal whose reason lacks the reverse probe. If dblp.org is reachable in this run, also re-check every reason that carries `DBLP web unreachable` against the DBLP journal search, and drop the suffix once checked; if it is still unreachable, leave those rows as they are.
 
-**Step 7. Final gate.** All five must hold; otherwise go back to Step 1.
+**Step 7. Final gate.** All six must hold; otherwise go back to Step 1.
 - `SELECT count(*) FROM journal_review;` returns 0.
-- The Step 4a, 4b, 4c and 4d queries return 0 rows.
+- The Step 4a, 4b, 4c, 4d and 4e queries return 0 rows.
 
 **Step 8. Report** (ten lines at most):
 - `SELECT quartile, count(*) FROM journal_list GROUP BY quartile;`
@@ -269,4 +279,4 @@ WHERE d.verdict = 'accept'
 - Never accept `journals/corr` or a shared key; never write `absent` without running every search in Step 3.
 - Never claim a DBLP web check you did not make.
 - Every pair you examine gets a written verdict.
-- You are done only when the five checks in Step 7 hold.
+- You are done only when the six checks in Step 7 hold.
