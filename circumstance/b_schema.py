@@ -6,14 +6,14 @@ from pathlib import Path
 DB_PATH = Path(__file__).resolve().parent.parent / "archive" / "paperhunter.db"
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS core_venue (
+CREATE TABLE IF NOT EXISTS conf_core_venue (
     id      INTEGER PRIMARY KEY,
     title   TEXT NOT NULL UNIQUE,
     acronym TEXT NOT NULL,
     rank    TEXT NOT NULL CHECK (rank IN ('A*', 'A', 'B', 'C'))
 );
 
-CREATE TABLE IF NOT EXISTS dblp_venue (
+CREATE TABLE IF NOT EXISTS conf_dblp_venue (
     dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
     acronym    TEXT NOT NULL,
     papers     INTEGER NOT NULL,
@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS dblp_venue (
     last_year  INTEGER
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS dblp_booktitle (
-    dblp_key   TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS conf_dblp_booktitle (
+    dblp_key   TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
     booktitle  TEXT NOT NULL,
     papers     INTEGER NOT NULL,
     first_year INTEGER,
@@ -30,19 +30,19 @@ CREATE TABLE IF NOT EXISTS dblp_booktitle (
     PRIMARY KEY (dblp_key, booktitle)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS dblp_proceedings (
-    dblp_key  TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS conf_dblp_title (
+    dblp_key  TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
     proc_key  TEXT PRIMARY KEY,
     year      INTEGER NOT NULL,
     title     TEXT NOT NULL,
     publisher TEXT,
     papers    INTEGER NOT NULL
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS dblp_proceedings_key ON dblp_proceedings (dblp_key, year);
+CREATE INDEX IF NOT EXISTS conf_dblp_title_key ON conf_dblp_title (dblp_key, year);
 
 CREATE TABLE IF NOT EXISTS conf_candidate (
-    dblp_key          TEXT NOT NULL REFERENCES dblp_venue ON DELETE CASCADE,
-    core_id           INTEGER NOT NULL REFERENCES core_venue ON DELETE CASCADE,
+    dblp_key          TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
+    core_id           INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
     score             REAL NOT NULL,
     proceedings_title TEXT NOT NULL,
     PRIMARY KEY (dblp_key, core_id)
@@ -51,8 +51,8 @@ CREATE INDEX IF NOT EXISTS conf_candidate_core ON conf_candidate (core_id);
 
 CREATE TABLE IF NOT EXISTS conf_decision (
     id         INTEGER PRIMARY KEY,
-    core_id    INTEGER NOT NULL REFERENCES core_venue ON DELETE CASCADE,
-    dblp_key   TEXT REFERENCES dblp_venue ON DELETE CASCADE,
+    core_id    INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
+    dblp_key   TEXT REFERENCES conf_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -79,48 +79,48 @@ WHEN EXISTS (
 )
 BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 
-DROP VIEW IF EXISTS venue_evidence;
-CREATE VIEW venue_evidence AS
+DROP VIEW IF EXISTS conf_summary;
+CREATE VIEW conf_summary AS
 SELECT v.dblp_key, v.acronym, v.papers, v.first_year, v.last_year,
-       (SELECT count(*) FROM dblp_proceedings WHERE dblp_key = v.dblp_key) AS volumes,
+       (SELECT count(*) FROM conf_dblp_title WHERE dblp_key = v.dblp_key) AS volumes,
        (SELECT group_concat(b.booktitle || ' (' || b.papers || ', ' || coalesce(b.first_year, '?') || '-'
                             || coalesce(b.last_year, '?') || ')', ' | ')
-          FROM (SELECT booktitle, papers, first_year, last_year FROM dblp_booktitle WHERE dblp_key = v.dblp_key
+          FROM (SELECT booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE dblp_key = v.dblp_key
                 ORDER BY papers DESC, booktitle LIMIT 5) b) AS booktitles,
        (SELECT group_concat(p.title || ' (' || p.papers || ' papers)', ' | ')
-          FROM (SELECT title, papers FROM dblp_proceedings WHERE dblp_key = v.dblp_key
+          FROM (SELECT title, papers FROM conf_dblp_title WHERE dblp_key = v.dblp_key
                 ORDER BY year DESC, title DESC LIMIT 3) p) AS proceedings_titles
-FROM dblp_venue v;
+FROM conf_dblp_venue v;
 
-DROP VIEW IF EXISTS conf_needs_review;
-CREATE VIEW conf_needs_review AS
+DROP VIEW IF EXISTS conf_review;
+CREATE VIEW conf_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.title AS core_title, v.acronym, v.rank,
        c.score, c.proceedings_title AS detail,
        e.papers, e.first_year, e.last_year, e.booktitles, e.proceedings_titles
 FROM conf_candidate c
-JOIN core_venue v ON v.id = c.core_id
-JOIN venue_evidence e ON e.dblp_key = c.dblp_key
+JOIN conf_core_venue v ON v.id = c.core_id
+JOIN conf_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, v.id, v.title, v.acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM core_venue v
+FROM conf_core_venue v
 WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.core_id, NULL, NULL, NULL,
        NULL, 'conf_decision ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
        NULL, NULL, NULL, NULL, NULL
 FROM conf_decision d
-WHERE NOT EXISTS (SELECT 1 FROM core_venue v WHERE v.id = d.core_id)
-   OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dblp_venue k WHERE k.dblp_key = d.dblp_key));
+WHERE NOT EXISTS (SELECT 1 FROM conf_core_venue v WHERE v.id = d.core_id)
+   OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM conf_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
-DROP VIEW IF EXISTS list_of_conferences;
-CREATE VIEW list_of_conferences AS
+DROP VIEW IF EXISTS conf_list;
+CREATE VIEW conf_list AS
 SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.title, v.rank AS ranking
 FROM conf_decision d
-JOIN core_venue v ON v.id = d.core_id
-JOIN dblp_venue k ON k.dblp_key = d.dblp_key
-WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_needs_review)
+JOIN conf_core_venue v ON v.id = d.core_id
+JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
          lower(v.title), d.dblp_key;
 
@@ -271,7 +271,7 @@ SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venu
        r.rank,
        CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
 FROM dblp_paper p
-JOIN (SELECT dblp_key, ranking AS rank FROM list_of_conferences WHERE dblp_key LIKE 'conf/%'
+JOIN (SELECT dblp_key, ranking AS rank FROM conf_list WHERE dblp_key LIKE 'conf/%'
       UNION ALL
       SELECT dblp_key, quartile AS rank FROM list_of_journals) r ON r.dblp_key = p.venue_key;
 
@@ -385,14 +385,14 @@ WHEN EXISTS (SELECT 1 FROM paper_accepted WHERE paper_id = NEW.paper_id)
 BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
 """
 
-REBUILT_EVIDENCE = {"dblp_booktitle": "first_year", "dblp_proceedings": "proc_key"}
+REBUILT_EVIDENCE = {"conf_dblp_booktitle": "first_year", "conf_dblp_title": "proc_key"}
 
 
 def migrate(conn: sqlite3.Connection) -> None:
     tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     stale = [t for t, col in REBUILT_EVIDENCE.items()
              if t in tables and col not in {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}]
-    venue_stale = "dblp_venue" in tables and "journals/" not in tables["dblp_venue"]
+    venue_stale = "conf_dblp_venue" in tables and "journals/" not in tables["conf_dblp_venue"]
     if not stale and not venue_stale:
         return
     conn.execute("PRAGMA foreign_keys = OFF")
@@ -402,20 +402,20 @@ def migrate(conn: sqlite3.Connection) -> None:
     for t in stale:
         conn.execute(f"DROP TABLE {t}")
     if venue_stale:
-        conn.execute("""CREATE TABLE dblp_venue_new (
+        conn.execute("""CREATE TABLE conf_dblp_venue_new (
             dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
             acronym    TEXT NOT NULL,
             papers     INTEGER NOT NULL,
             first_year INTEGER,
             last_year  INTEGER
         ) WITHOUT ROWID""")
-        conn.execute("INSERT INTO dblp_venue_new SELECT dblp_key, substr(dblp_key, instr(dblp_key, '/') + 1), "
-                     "papers, first_year, last_year FROM dblp_venue")
-        conn.execute("DROP TABLE dblp_venue")
-        conn.execute("ALTER TABLE dblp_venue_new RENAME TO dblp_venue")
+        conn.execute("INSERT INTO conf_dblp_venue_new SELECT dblp_key, substr(dblp_key, instr(dblp_key, '/') + 1), "
+                     "papers, first_year, last_year FROM conf_dblp_venue")
+        conn.execute("DROP TABLE conf_dblp_venue")
+        conn.execute("ALTER TABLE conf_dblp_venue_new RENAME TO conf_dblp_venue")
     conn.commit()
     conn.execute("PRAGMA foreign_keys = ON")
-    print(f"migrated: rebuilt {', '.join(stale + ['dblp_venue'] * venue_stale)}; "
+    print(f"migrated: rebuilt {', '.join(stale + ['conf_dblp_venue'] * venue_stale)}; "
           "run conference-hunter/a_extract.py to refill the DBLP evidence")
 
 

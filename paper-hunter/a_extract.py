@@ -154,7 +154,7 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     print("Loading journal and conference lists...")
     journal_index = load_list(conn, "list_of_journals", "quartile")
-    conf_index = load_list(conn, "list_of_conferences", "ranking")
+    conf_index = load_list(conn, "conf_list", "ranking")
     print(f"  ✓ {len(journal_index)} journals loaded")
     print(f"  ✓ {len(conf_index)} conferences loaded")
     papers = scan_xml(XML_PATH, journal_index, conf_index)

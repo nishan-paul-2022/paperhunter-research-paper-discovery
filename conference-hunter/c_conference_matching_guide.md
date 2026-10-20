@@ -2,7 +2,7 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Fill and audit the table `conf_decision` in `archive/paperhunter.db` so that the view `list_of_conferences` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
+**Goal.** Fill and audit the table `conf_decision` in `archive/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
 
 **Ground rules.**
 - Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
@@ -14,7 +14,7 @@ You are the reviewer. Complete this task end to end with no human help and no qu
 
 ## 1. The data
 
-A **DBLP series** is one row of `dblp_venue`. There are three kinds:
+A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 
 | `dblp_key` | what it is | example |
 |---|---|---|
@@ -24,22 +24,22 @@ A **DBLP series** is one row of `dblp_venue`. There are three kinds:
 
 | object | what it holds |
 |---|---|
-| `core_venue(id, title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
-| `dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | one row per series. `acronym` is the key name or the issue label; `papers` and years cover its papers |
-| `dblp_booktitle(dblp_key, booktitle, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
-| `dblp_proceedings(dblp_key, proc_key, year, title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
+| `conf_core_venue(id, title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
+| `conf_dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | one row per series. `acronym` is the key name or the issue label; `papers` and years cover its papers |
+| `conf_dblp_booktitle(dblp_key, booktitle, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
+| `conf_dblp_title(dblp_key, proc_key, year, title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
 | `conf_candidate(dblp_key, core_id, score, proceedings_title)` | proposals from `b_match.py`. Every series whose name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title. `score` is the share of CORE title words found in the best proceedings title or booktitle, which is stored in `proceedings_title`. The score is a hint only: a low score does not make a reject, and a high one does not make an accept |
 | `conf_decision(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
-| `venue_evidence` | one summary row per series: acronym, years, number of volumes, top 5 booktitles with year spans, the 3 newest proceedings titles with paper counts |
-| `conf_needs_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` CORE venues, `INVALID` decisions |
-| `list_of_conferences` | final output; it stays empty while `conf_needs_review` has any row |
+| `conf_summary` | one summary row per series: acronym, years, number of volumes, top 5 booktitles with year spans, the 3 newest proceedings titles with paper counts |
+| `conf_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` CORE venues, `INVALID` decisions |
+| `conf_list` | final output; it stays empty while `conf_review` has any row |
 
-Look at a series' whole history before deciding, not just `venue_evidence`:
+Look at a series' whole history before deciding, not just `conf_summary`:
 
 ```sql
-SELECT year, proc_key, title, publisher, papers FROM dblp_proceedings WHERE dblp_key = 'conf/x' ORDER BY year;
-SELECT booktitle, papers, first_year, last_year FROM dblp_booktitle WHERE dblp_key = 'conf/x' ORDER BY papers DESC;
-SELECT * FROM dblp_venue WHERE dblp_key = 'conf/x';
+SELECT year, proc_key, title, publisher, papers FROM conf_dblp_title WHERE dblp_key = 'conf/x' ORDER BY year;
+SELECT booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE dblp_key = 'conf/x' ORDER BY papers DESC;
+SELECT * FROM conf_dblp_venue WHERE dblp_key = 'conf/x';
 ```
 
 Then check the web, which is authoritative and settles most doubts:
@@ -47,7 +47,7 @@ Then check the web, which is authoritative and settles most doubts:
 - DBLP venue search `https://dblp.org/search/venue/api?q=<words>&format=json&h=100` lists every DBLP venue whose name matches, with its key in `url`. Send at most one request per second.
 - The CORE portal and the conference's own website.
 
-If `dblp_venue` has no `acronym` column or `dblp_proceedings` has no `proc_key` column, stop and tell the humans to run `circumstance/b_schema.py` and then `conference-hunter/a_extract.py`.
+If `conf_dblp_venue` has no `acronym` column or `conf_dblp_title` has no `proc_key` column, stop and tell the humans to run `circumstance/b_schema.py` and then `conference-hunter/a_extract.py`.
 
 ---
 
@@ -101,11 +101,11 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
 
 ```sql
 INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
- ((SELECT id FROM core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
+ ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
   'Proceedings 1994-2025 "Selected Areas in Cryptography", Springer'),
- ((SELECT id FROM core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
+ ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
   'ACM/SIGAPP Symposium on Applied Computing, namesake'),
- ((SELECT id FROM core_venue WHERE title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
+ ((SELECT id FROM conf_core_venue WHERE title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
   'No series of its own; papers inside conf/miccai (SASHIMI@MICCAI); DBLP venue search: no hit');
 ```
 
@@ -115,7 +115,7 @@ INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
 | `reject` | the series | the series is not this venue. Record every pair you examined and turned down, so later runs do not re-examine it |
 | `absent` | `NULL` | the venue has no DBLP series of its own |
 
-- Refer to venues by `id` from `conf_needs_review.core_id`, or by title sub-select as above. Titles are unique; ids are not stable across CORE reloads.
+- Refer to venues by `id` from `conf_review.core_id`, or by title sub-select as above. Titles are unique; ids are not stable across CORE reloads.
 - `reason` is one line of concrete evidence: the proceedings name and year span, the publisher, and the predecessor proof. "Proceedings" alone is not a reason.
 - **Reason tags** on the newest accepted series of a venue, appended with `UPDATE conf_decision SET reason = reason || '; …' WHERE id = ?`:
   - `JOURNAL: since <year> in journals/<key>`: the main track moved into a mixed journal that cannot be accepted (§2).
@@ -137,7 +137,7 @@ INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
 **Step 0. Preflight.**
 
 ```sql
-SELECT issue, count(*) FROM conf_needs_review GROUP BY issue;
+SELECT issue, count(*) FROM conf_review GROUP BY issue;
 SELECT verdict, count(*) FROM conf_decision GROUP BY verdict;
 ```
 
@@ -151,12 +151,12 @@ On a first run every candidate and every CORE venue is open. On a rerun after a 
 1. The acronym, every former acronym and every former name from the CORE title, in series names, booktitles and proceedings titles:
 
    ```sql
-   SELECT dblp_key, acronym, papers, first_year, last_year FROM dblp_venue WHERE acronym LIKE '%abc%';
-   SELECT dblp_key, booktitle, papers, first_year, last_year FROM dblp_booktitle WHERE booktitle LIKE '%ABC%';
-   SELECT dblp_key, year, title, publisher FROM dblp_proceedings WHERE title LIKE '%Distinctive Words%';
+   SELECT dblp_key, acronym, papers, first_year, last_year FROM conf_dblp_venue WHERE acronym LIKE '%abc%';
+   SELECT dblp_key, booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE booktitle LIKE '%ABC%';
+   SELECT dblp_key, year, title, publisher FROM conf_dblp_title WHERE title LIKE '%Distinctive Words%';
    ```
 2. Distinctive words of the full title, which catches venues that DBLP files under an unexpected key (`conf/uss` for USENIX Security, `conf/mm` for ACM Multimedia, `conf/si3d` for I3D).
-3. The journal issue streams: `SELECT * FROM dblp_venue WHERE dblp_key LIKE 'journals/%#%'`.
+3. The journal issue streams: `SELECT * FROM conf_dblp_venue WHERE dblp_key LIKE 'journals/%#%'`.
 4. The DBLP venue search API and the conference website.
 
 Accept every series you find (§2); reject the near misses you examined. Only if nothing is found, write `absent` and list what you searched in the reason.
@@ -167,15 +167,15 @@ Accept every series you find (§2); reject the near misses you examined. Only if
 WITH bt AS (
   SELECT dblp_key, lower(trim(CASE WHEN instr(booktitle, ' (') > 0
            THEN substr(booktitle, 1, instr(booktitle, ' (') - 1) ELSE booktitle END)) AS b
-  FROM dblp_booktitle WHERE booktitle NOT LIKE '%@%'
+  FROM conf_dblp_booktitle WHERE booktitle NOT LIKE '%@%'
 ), hit AS (
-  SELECT v.id AS core_id, k.dblp_key FROM core_venue v JOIN dblp_venue k ON lower(k.acronym) = lower(v.acronym)
+  SELECT v.id AS core_id, k.dblp_key FROM conf_core_venue v JOIN conf_dblp_venue k ON lower(k.acronym) = lower(v.acronym)
   UNION
-  SELECT v.id, bt.dblp_key FROM core_venue v JOIN bt ON bt.b = lower(v.acronym)
+  SELECT v.id, bt.dblp_key FROM conf_core_venue v JOIN bt ON bt.b = lower(v.acronym)
 )
 SELECT h.core_id, v.rank, v.acronym, v.title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceedings_titles
-FROM hit h JOIN core_venue v ON v.id = h.core_id JOIN dblp_venue k ON k.dblp_key = h.dblp_key
-JOIN venue_evidence e ON e.dblp_key = h.dblp_key
+FROM hit h JOIN conf_core_venue v ON v.id = h.core_id JOIN conf_dblp_venue k ON k.dblp_key = h.dblp_key
+JOIN conf_summary e ON e.dblp_key = h.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = h.dblp_key
                   AND (d.core_id = h.core_id OR d.verdict = 'accept'))
 ORDER BY v.rank, v.acronym;
@@ -193,22 +193,22 @@ Then accept the new series, or tag the newest accepted series with `JOURNAL:` or
 SELECT v.id, v.rank, v.acronym, v.title,
        group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS series,
        max(k.last_year) AS newest
-FROM core_venue v
+FROM conf_core_venue v
 JOIN conf_decision d ON d.core_id = v.id AND d.verdict = 'accept'
-JOIN dblp_venue k ON k.dblp_key = d.dblp_key
+JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
 GROUP BY v.id
 HAVING newest < CAST(strftime('%Y', 'now') AS INTEGER) - 2
    AND sum(d.reason LIKE '%JOURNAL:%' OR d.reason LIKE '%ENDED:%') = 0
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, newest;
 ```
 
-A venue can also stay active in DBLP while its main track left: its newest booktitles are only `Companion`, `Abstracts`, `Workshops`, `Posters` or `X@Y`. Check that with `dblp_booktitle` year spans and `dblp_proceedings` paper counts. Find where the main track went, then accept its journal series or add the `JOURNAL:` tag.
+A venue can also stay active in DBLP while its main track left: its newest booktitles are only `Companion`, `Abstracts`, `Workshops`, `Posters` or `X@Y`. Check that with `conf_dblp_booktitle` year spans and `conf_dblp_title` paper counts. Find where the main track went, then accept its journal series or add the `JOURNAL:` tag.
 
 **Step 6. Audit accepts the matcher never proposed.** These were found by hand, so they carry the highest false-positive risk. Re-check each against §2, especially the predecessor proof. Fix any wrong one.
 
 ```sql
 SELECT d.id, v.acronym, v.title, d.dblp_key, d.reason, e.booktitles, e.proceedings_titles
-FROM conf_decision d JOIN core_venue v ON v.id = d.core_id JOIN venue_evidence e ON e.dblp_key = d.dblp_key
+FROM conf_decision d JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
 ```
@@ -216,12 +216,12 @@ WHERE d.verdict = 'accept'
 **Step 7. Audit every `absent`.** Re-run the Step 3 searches, including the journal streams and the DBLP venue search API, for each `absent` venue. DBLP adds venues over time.
 
 **Step 8. Final gate.** All three must hold; otherwise go back to step 1.
-- `SELECT count(*) FROM conf_needs_review;` returns 0.
+- `SELECT count(*) FROM conf_review;` returns 0.
 - The Step 4 query returns 0 rows.
 - The Step 5 query returns 0 rows.
 
 **Step 9. Report** (ten lines at most):
-- `SELECT ranking, count(*) FROM list_of_conferences GROUP BY ranking;`
+- `SELECT ranking, count(*) FROM conf_list GROUP BY ranking;`
 - CORE venues covered vs `absent`, out of all CORE venues;
 - decisions added, changed and deleted in this run;
 - every `accept` you reversed, or added during the audits (Steps 4–7), as series → venue;

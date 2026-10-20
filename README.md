@@ -15,7 +15,7 @@ Save to `archive/`:
 - CORE conference ranking ([portal.core.edu.au/conf-ranks](http://portal.core.edu.au/conf-ranks/)) → `publication-core-2026.csv`
 - Scopus CS journal ranking ([scimagojr.com](https://www.scimagojr.com/journalrank.php?category=1700)) → `publication-scopus-computer-science-journal-2025.csv`
 
-### 3. Circumstance
+### 3. Context
 
 ```bash
 python3 circumstance/a_download.py
@@ -33,7 +33,7 @@ python3 conference-hunter/b_match.py
 
 Give `conference-hunter/c_conference_matching_guide.md` to the AI.
 
-**Output:** view `list_of_conferences`
+**Output:** view `conf_list`
 
 ### 5. Journal list
 

@@ -76,13 +76,13 @@ def edition_acronyms(proceedings_title: str) -> set[str]:
 
 def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
     booktitles: dict[str, list[tuple[str, int]]] = defaultdict(list)
-    for key, booktitle, n in conn.execute("SELECT dblp_key, booktitle, papers FROM dblp_booktitle"):
+    for key, booktitle, n in conn.execute("SELECT dblp_key, booktitle, papers FROM conf_dblp_booktitle"):
         booktitles[key].append((booktitle, n))
     proceedings: dict[str, list[str]] = defaultdict(list)
-    for key, title in conn.execute("SELECT dblp_key, title FROM dblp_proceedings ORDER BY dblp_key, year DESC"):
+    for key, title in conn.execute("SELECT dblp_key, title FROM conf_dblp_title ORDER BY dblp_key, year DESC"):
         proceedings[key].append(title)
     evidence = {}
-    for key, acronym in conn.execute("SELECT dblp_key, acronym FROM dblp_venue"):
+    for key, acronym in conn.execute("SELECT dblp_key, acronym FROM conf_dblp_venue"):
         bts = booktitles.get(key, [])
         total = sum(n for _, n in bts) or 1
         acronyms = key_forms(acronym)
@@ -109,7 +109,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
         for a in e["acronyms"]:
             by_acronym[a].add(key)
     pairs = []
-    for core_id, title, acronym in conn.execute("SELECT id, title, acronym FROM core_venue"):
+    for core_id, title, acronym in conn.execute("SELECT id, title, acronym FROM conf_core_venue"):
         ct = tokens(strip_parens(title)) or tokens(title)
         keys = set().union(*(by_acronym.get(a, set()) for a in acronym_forms(acronym, title)))
         for key in keys:
@@ -125,7 +125,7 @@ def main() -> None:
         sys.exit(f"Database not found: {DB_PATH}  (run circumstance/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
-    if not conn.execute("SELECT count(*) FROM dblp_venue").fetchone()[0]:
+    if not conn.execute("SELECT count(*) FROM conf_dblp_venue").fetchone()[0]:
         sys.exit("No DBLP evidence in the database  (run a_extract.py first)")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
@@ -136,9 +136,9 @@ def main() -> None:
     with conn:
         conn.execute("DELETE FROM conf_candidate")
         conn.executemany("INSERT INTO conf_candidate VALUES (?, ?, ?, ?)", pairs)
-    issues = dict(conn.execute("SELECT issue, count(*) FROM conf_needs_review GROUP BY issue").fetchall())
+    issues = dict(conn.execute("SELECT issue, count(*) FROM conf_review GROUP BY issue").fetchall())
     decisions = conn.execute("SELECT count(*) FROM conf_decision").fetchone()[0]
-    final = conn.execute("SELECT count(*) FROM list_of_conferences").fetchone()[0]
+    final = conn.execute("SELECT count(*) FROM conf_list").fetchone()[0]
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)")
     print(f"  ├─ decisions:   {decisions}")
     print(f"  ├─ UNREVIEWED:  {issues.get('UNREVIEWED', 0)}")
@@ -148,7 +148,7 @@ def main() -> None:
     if issues:
         print("  ✗ Review needed → give conference-hunter/c_conference_matching_guide.md to the AI")
     else:
-        print("  ✓ Review complete → list_of_conferences is final")
+        print("  ✓ Review complete → conf_list is final")
     print()
     conn.close()
 

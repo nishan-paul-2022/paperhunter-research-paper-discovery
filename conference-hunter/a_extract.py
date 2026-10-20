@@ -27,7 +27,7 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
 
 def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – CORE rankings → core_venue")
+    print("  Phase 1 – CORE rankings → conf_core_venue")
     print("━" * 70)
     rows, dropped = [], 0
     with open(core_path, encoding="utf-8", newline="") as f:
@@ -42,14 +42,14 @@ def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
         sys.exit(f"Duplicate CORE titles: {duplicates}")
     with conn:
         conn.executemany(
-            "INSERT INTO core_venue (title, acronym, rank) VALUES (?, ?, ?) "
+            "INSERT INTO conf_core_venue (title, acronym, rank) VALUES (?, ?, ?) "
             "ON CONFLICT (title) DO UPDATE SET acronym = excluded.acronym, rank = excluded.rank",
             rows,
         )
         conn.execute("CREATE TEMP TABLE core_titles (title TEXT PRIMARY KEY)")
         conn.executemany("INSERT INTO core_titles VALUES (?)", [(t,) for t, _, _ in rows])
         removed = conn.execute(
-            "DELETE FROM core_venue WHERE title NOT IN (SELECT title FROM core_titles)"
+            "DELETE FROM conf_core_venue WHERE title NOT IN (SELECT title FROM core_titles)"
         ).rowcount
         conn.execute("DROP TABLE core_titles")
     print(f"  ✓  {len(rows)} CORE venues  |  {dropped} rows outside A*–C skipped  |  {removed} removed\n")
@@ -139,13 +139,13 @@ def scan_xml(xml_path: Path):
 
 def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 2 – DBLP evidence → dblp_venue, dblp_booktitle, dblp_proceedings")
+    print("  Phase 2 – DBLP evidence → conf_dblp_venue, conf_dblp_booktitle, conf_dblp_title")
     print("━" * 70)
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~20–30 min)\n")
     venues, bts, pts = scan_xml(xml_path)
     with conn:
         conn.executemany(
-            "INSERT INTO dblp_venue (dblp_key, acronym, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?) "
+            "INSERT INTO conf_dblp_venue (dblp_key, acronym, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT (dblp_key) DO UPDATE SET acronym = excluded.acronym, papers = excluded.papers, "
             "first_year = excluded.first_year, last_year = excluded.last_year",
             venues,
@@ -153,17 +153,17 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
         conn.execute("CREATE TEMP TABLE scanned (dblp_key TEXT PRIMARY KEY)")
         conn.executemany("INSERT INTO scanned VALUES (?)", [(v[0],) for v in venues])
         removed = conn.execute(
-            "DELETE FROM dblp_venue WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
+            "DELETE FROM conf_dblp_venue WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
         ).rowcount
         conn.execute("DROP TABLE scanned")
-        conn.execute("DELETE FROM dblp_booktitle")
-        conn.execute("DELETE FROM dblp_proceedings")
+        conn.execute("DELETE FROM conf_dblp_booktitle")
+        conn.execute("DELETE FROM conf_dblp_title")
         conn.executemany(
-            "INSERT INTO dblp_booktitle (dblp_key, booktitle, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO conf_dblp_booktitle (dblp_key, booktitle, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?)",
             bts,
         )
         conn.executemany(
-            "INSERT INTO dblp_proceedings (dblp_key, proc_key, year, title, publisher, papers) "
+            "INSERT INTO conf_dblp_title (dblp_key, proc_key, year, title, publisher, papers) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             pts,
         )
@@ -191,7 +191,7 @@ def main() -> None:
     conn = connect()
     load_core(conn, core_path)
     if args.skip_xml:
-        n = conn.execute("SELECT count(*) FROM dblp_venue").fetchone()[0]
+        n = conn.execute("SELECT count(*) FROM conf_dblp_venue").fetchone()[0]
         if not n:
             sys.exit("--skip-xml given but the database has no DBLP evidence yet")
         print(f"  Skipping XML scan: keeping {n:,} DBLP keys already loaded\n")
