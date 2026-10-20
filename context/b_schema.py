@@ -3,7 +3,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "paperhunter.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "archive" / "paperhunter.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS core_venue (

@@ -29,7 +29,7 @@ _FETCHED = "EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id)"
 
 def open_db():
     if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH} (run archive/schema.py first)")
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run context/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH, timeout=300, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

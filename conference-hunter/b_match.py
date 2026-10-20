@@ -122,7 +122,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
 
 def main() -> None:
     if not DB_PATH.exists():
-        sys.exit(f"Database not found: {DB_PATH}  (run archive/schema.py first)")
+        sys.exit(f"Database not found: {DB_PATH}  (run context/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
     if not conn.execute("SELECT count(*) FROM dblp_venue").fetchone()[0]:

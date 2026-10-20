@@ -23,7 +23,7 @@ DOI_PREFIX = re.compile(r"doi\.org/(10\.\d{4,9})/", re.I)
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run archive/schema.py first)")
+        sys.exit(f"Database not found: {path}  (run context/b_schema.py first)")
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

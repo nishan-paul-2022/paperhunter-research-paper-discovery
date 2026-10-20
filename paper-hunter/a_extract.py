@@ -150,7 +150,7 @@ def main():
     if not XML_PATH.exists():
         sys.exit(f"ERROR: paper-dblp.xml not found at {XML_PATH}")
     if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH} (run archive/schema.py first)")
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run context/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     print("Loading journal and conference lists...")
     journal_index = load_list(conn, "list_of_journals", "quartile")
