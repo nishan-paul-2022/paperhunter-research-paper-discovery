@@ -49,11 +49,10 @@ Web sources, authoritative when the data above leaves doubt:
 - **Crossref journal record** `https://api.crossref.org/journals/<ISSN>`: title, publisher and **all** ISSNs of a journal. Settles whether two ISSNs are the print and electronic editions of one journal.
 - **Crossref recent works** `https://api.crossref.org/journals/<ISSN>/works?rows=5&sort=published&order=desc&select=DOI,container-title,published`: recent DOIs of a Scopus journal. Find their DBLP key in the dump: `grep -i -F -m1 'doi.org/<DOI></ee>' -B15 archive/paper-dblp.xml | grep 'key="journals/'`. Many DOIs at once: write them, one per line as `doi.org/<DOI><`, to a file and run `grep -i -F -f <file> archive/paper-dblp.xml` in one pass (≈1 minute).
 - **Scopus/SJR page** `https://www.scimagojr.com/journalsearch.php?q=<Sourceid>&tip=sid`: title history, ISSNs and coverage.
-- **DBLP journal page** `https://dblp.org/db/journals/<name>/`: full title and ISSNs, often links predecessor and successor ("continued as").
 - The publisher's journal page, for renames ("formerly …") and mergers.
 - Send at most one request per second to any one API.
 
-**If dblp.org is unreachable.** dblp.org and its mirrors (`dblp.uni-trier.de`, `dblp.dagstuhl.de`) sit behind one bot wall. If one answers with a "Making sure you're not a bot" page, the others will too: do not retry them. The tables above, the dump `archive/paper-dblp.xml` (`grep 'key="journals/x/'` for a key's articles) and Crossref replace it. Never write that you checked DBLP when you could not; append `DBLP web unreachable` to every `absent` reason written without it.
+**Do not use dblp.org** or its mirrors. All DBLP evidence comes from the tables above and the dump `archive/paper-dblp.xml` (`grep 'key="journals/x/'` for a key's articles); titles, ISSNs and renames come from Crossref, Scopus and the publishers.
 
 If `journal_dblp_crossref` does not exist, or `SELECT count(*) FROM journal_dblp_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `journal-hunter/b_match.py`.
 
@@ -240,7 +239,7 @@ WHERE d.verdict = 'accept'
                   AND c.method IN ('crossref', 'issn'));
 ```
 
-**Step 6. Audit every `absent`.** Re-run Step 3 for each `absent` journal whose reason lacks the reverse probe. If dblp.org is reachable in this run, also re-check every reason that carries `DBLP web unreachable` against the DBLP journal search, and drop the suffix once checked; if it is still unreachable, leave those rows as they are.
+**Step 6. Audit every `absent`.** Re-run Step 3 for each `absent` journal whose reason lacks the reverse probe.
 
 **Step 7. Final gate.** All six must hold; otherwise go back to Step 1.
 - `SELECT count(*) FROM journal_review;` returns 0.
@@ -252,7 +251,7 @@ WHERE d.verdict = 'accept'
 - decisions added, changed and deleted in this run;
 - every `accept` you reversed or added during Steps 4–6;
 - counts of `ISSN GAP:`, `PREDECESSOR:`, `ENDED:`, `SHARED KEY:` and `NEW TITLE:` tags;
-- whether DBLP and Crossref were reachable, and how many reasons carry `DBLP web unreachable`.
+- whether Crossref was reachable.
 
 ---
 
@@ -277,6 +276,5 @@ WHERE d.verdict = 'accept'
 - One key maps to at most one Scopus journal; one journal may have several keys. Find them all.
 - Never accept on a name alone: an ISSN (Crossref or link) or a proven print/online gap must agree, or, for a key with no Crossref evidence, the full title, publisher and years must all agree.
 - Never accept `journals/corr` or a shared key; never write `absent` without running every search in Step 3.
-- Never claim a DBLP web check you did not make.
 - Every pair you examine gets a written verdict.
 - You are done only when the six checks in Step 7 hold.
