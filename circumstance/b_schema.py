@@ -412,7 +412,7 @@ SELECT p.dblp_key, d.role, d.p, p.year, p.title, p.authors, p.venue, p.venue_key
 FROM paper_decision d
 JOIN paper_dblp p ON p.id = d.paper_id
 LEFT JOIN paper_detail x ON x.paper_id = d.paper_id
-WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM paper_review)
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM paper_review WHERE issue <> 'UNFETCHED')
 ORDER BY CASE d.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evaluation' THEN 2 ELSE 3 END,
          d.p DESC, p.dblp_key;
 """

@@ -59,8 +59,6 @@ python3 paper-hunter/a_extract.py
 python3 paper-hunter/b_details.py
 ```
 
-Rerun `b_details.py` until `paper_review` shows no `UNFETCHED` papers (an API's daily budget can stop it; run it again the next day).
-
-Give `paper-hunter/c_search.md` to the AI.
+Give `paper-hunter/c_search.md` to the AI; it reviews every paper fetched so far. When an API's daily budget stops `b_details.py`, run it again the next day, then give the prompt to the AI again: only the newly fetched papers are reviewed.
 
 **Output:** view `paper_list`

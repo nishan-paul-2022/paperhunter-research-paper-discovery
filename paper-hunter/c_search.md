@@ -1,6 +1,6 @@
 # Paper-Hunter Review Guide
 
-This is the **master prompt** for AI reviewers and for the orchestrator that runs them. Every fetched paper is read once and decided in the table `paper_decision`: **accepted** with a role (`baseline`, `benchmark`, `evaluation`, `survey`), or **rejected** with a reject class. The view `paper_list` holds the accepted papers once the view `paper_review` is empty.
+This is the **master prompt** for AI reviewers and for the orchestrator that runs them. Every fetched paper is read once and decided in the table `paper_decision`: **accepted** with a role (`baseline`, `benchmark`, `evaluation`, `survey`), or **rejected** with a reject class. The review works on whatever `paper-hunter/b_details.py` has fetched so far; papers fetched later are reviewed on the next run. The view `paper_list` holds the accepted papers once every fetched paper is decided.
 
 ---
 
@@ -44,11 +44,11 @@ Tie-breaks: if a paper ships both a benchmark and an agent, the headline decides
 | `black_box` | SOFT | black-box or gray-box start (IP/URL/scope, tools or shell only, limited hints) | full source code and the exact vulnerability are handed over (white-box) |
 | `long_horizon` | SOFT | any chaining across steps: state, memory, planning, attack graph, multi-step CTF | one one-shot action, no iteration |
 
-Accept requires `agent=y` and `offense=y`. A `baseline` additionally needs `black_box` and `long_horizon` not `n`. Use `p` for implied-but-incomplete, `u` for not evidenced.
+Accept requires `agent=y` and `offense=y`. A `baseline` additionally needs `black_box` and `long_horizon` not `n`. Use `p` for implied-but-incomplete, `u` for not evidenced. A system that is handed its target vulnerability up front (a given CVE, a known vulnerable binary or application) is at most `black_box = p`.
 
 ## 5. Reject classes
 
-`off_domain` (not security at all) · `security_other` · `defensive_only` · `vuln_detection_or_code_scan` · `generic_llm_security` · `static_qa_benchmark` · `frontmatter` (proceedings front matter, editorials, TOCs; `is_paratext: true` is a strong hint) · **`llm_no_offense`** = near-domain: non-LLM autonomous pentest (RL, planners, attack-graph tools), advisory copilots, one-shot exploit generation, adversary-emulation without LLM agents, defence agents evaluated against LLM attackers. Pick the class that is true, not the nearest convenient one.
+`off_domain` (not security at all) · `security_other` · `defensive_only` · `vuln_detection_or_code_scan` · `generic_llm_security` · `static_qa_benchmark` · `frontmatter` (proceedings front matter, editorials, TOCs; `is_paratext: true` is a strong hint) · **`llm_no_offense`** = near-domain: non-LLM autonomous pentest (RL, planners, attack-graph tools), advisory copilots, one-shot exploit generation, adversary-emulation without LLM agents, defence agents evaluated against LLM attackers. Pick the class that is true, not the nearest convenient one. A paper that is not about security at all is `off_domain`, even when it is about code, program repair, static analysis, Q&A sets or datasets.
 
 ---
 
@@ -57,7 +57,8 @@ Accept requires `agent=y` and `offense=y`. A `baseline` additionally needs `blac
 Each paper shows `title`, `abstract`, `tldr`, `keywords`, `topics`, `fields`, `work_type`, `is_paratext`. Read the abstract when there is one; it decides almost every paper. The TLDR, keywords and topics are machine-generated hints, useful when the abstract is missing, never a reason to override a clear abstract.
 
 - **Accept** needs a verbatim quote of 4–45 words from the `title`, `abstract` or `tldr` (`quote_src`) that supports the verdict. Copy it exactly, character for character (dashes, quotes, accents); the database refuses a quote that is not in the stored text.
-- **Reject** needs no quote. A one-line reason is enough for clearly off-domain papers; near-domain rejects (§5 `llm_no_offense`, `defensive_only`, `generic_llm_security`, …) deserve a specific reason.
+- **Reject** needs no quote.
+- **Every reason** says what this paper actually does, taken from its abstract, TLDR or keywords ("mmWave radar point-cloud model detecting post-fall immobility; not security"). Never just repeat the title, and never write a generic "not security". Near-domain rejects (§5 `llm_no_offense`, `defensive_only`, `generic_llm_security`, …) name the exact missing element (no LLM, advisory only, one-shot, defensive).
 - **No abstract:** decide from title, TLDR and keywords. If the paper still looks in scope, accept with an honest `p` and quote the title or TLDR; if it is clearly out of scope, reject.
 
 ## 7. Decision
@@ -77,8 +78,8 @@ Work from the repository root `/home/nishan/Documents/paperhunter-research-paper
 | `paper_source(paper_id, src, via, found, raw, fetched_at)` | the raw OpenAlex and Semantic Scholar answers, from `paper-hunter/b_details.py`. Never read it |
 | `paper_detail(paper_id, abstract, abstract_src, tldr, keywords, topics, fields, work_type, is_paratext, is_retracted, language, arxiv_id, openalex_id, s2_id)` | one merged row per paper that either API found: the evidence you judge. `keywords`, `topics`, `fields` are `; `-separated. A paper neither API found has no row; judge it from its title |
 | `paper_decision(paper_id, verdict, role, p, agent, offense, black_box, long_horizon, quote, quote_src, reject_class, reason, reviewer, decided_at)` | **your output**, one row per paper |
-| `paper_review` | to-do list: `UNFETCHED` (details not fetched yet: not your work), `UNDECIDED` (fetched, no decision), `INVALID` (an accept whose quote is no longer in the stored text) |
-| `paper_list` | final output: the accepted papers. It stays empty while `paper_review` has any row |
+| `paper_review` | to-do list: `UNFETCHED` (details not fetched yet: skip them; they become `UNDECIDED` after a later `b_details.py` run), `UNDECIDED` (fetched, no decision), `INVALID` (an accept whose quote is no longer in the stored text) |
+| `paper_list` | final output: the accepted papers. It stays empty while `paper_review` has any `UNDECIDED` or `INVALID` row; `UNFETCHED` papers do not block it |
 
 The database refuses a decision that breaks the rules of §3–§7:
 - a paper that is not `UNDECIDED` (unknown, not fetched, or already decided);
@@ -92,6 +93,13 @@ If an insert is refused, your record is wrong: fix exactly what the error names,
 ## 9. Worker procedure (give this to each sub-agent)
 
 > You are a PAPER-HUNTER reviewer. Read sections 1–8 and 11–12 of `paper-hunter/c_search.md`. Your name: `<NAME>`. Your share: papers with `paper_id % <W> = <K>`. Work from the repository root.
+>
+> **Hard rules.** Breaking any of them voids your decisions; they are detected in §10 Step 4 and deleted.
+> - Read papers only with the step 1 command, unchanged: 20 at a time, your share only. Never dump, list or query undecided papers any other way.
+> - Never filter, sort, triage or pre-classify papers with keywords, regexes or scripts. Every paper is read in full: title, abstract, TLDR, keywords, topics.
+> - Write every record yourself after reading that paper. Never generate records in a loop, from a template, a default or an `else` branch.
+> - Store each batch before you read the next one.
+>
 > Loop until step 1 prints `[]`:
 > 1. Read your next 20 papers:
 >    ```bash
@@ -106,7 +114,7 @@ If an insert is refused, your record is wrong: fix exactly what the error names,
 >    print(json.dumps([dict(r) for r in rows], indent=1, ensure_ascii=False))
 >    EOF
 >    ```
-> 2. Judge every paper individually (§1–7). Write one JSON array of records (§11) to `/tmp/<NAME>.json`.
+> 2. Judge every paper individually (§1–7) from its full printed text. Write one JSON array of the 20 records (§11) to `/tmp/<NAME>.json`.
 > 3. Store them; each record is inserted on its own and reported `ok` or `REFUSED` with the reason:
 >    ```bash
 >    python3 - <<'EOF'
@@ -132,19 +140,25 @@ If an insert is refused, your record is wrong: fix exactly what the error names,
 
 ## 10. Orchestrator procedure
 
+The orchestrator never reviews papers: it never reads `UNDECIDED` papers and never writes decisions for workers. It runs the preflight, starts the workers, audits their work and takes the second look.
+
 **Step 0. Preflight.**
 
 ```sql
+SELECT CURRENT_TIMESTAMP;
 SELECT issue, count(*) FROM paper_review GROUP BY issue;
 SELECT verdict, count(*) FROM paper_decision GROUP BY verdict;
 ```
 
+Note the timestamp: it marks the start of this run (Step 4).
+
 - `paper_dblp` empty: stop and tell the humans to run `paper-hunter/a_extract.py`, then `paper-hunter/b_details.py`.
-- Any `UNFETCHED` row: stop and tell the humans to run `paper-hunter/b_details.py` (when an API's daily budget runs out, again the next day) until `UNFETCHED` is gone.
+- No `UNDECIDED` and no `INVALID` row: nothing to review. Report (§14) and stop; if `UNFETCHED` rows remain, tell the humans to run `paper-hunter/b_details.py` again.
+- `UNFETCHED` rows never stop the review: work on the fetched papers.
 
 **Step 1. `INVALID`.** For each row, delete the decision (`DELETE FROM paper_decision WHERE paper_id = ?`); the paper comes back as `UNDECIDED`.
 
-**Step 2. Review.** Spawn `W` parallel workers (§9), worker `K` = 0 … `W`−1, each with its own name. When a worker finishes or dies, start it again with the same `K` until no `UNDECIDED` row is left.
+**Step 2. Review.** Spawn `W` parallel sub-agents as workers (§9), worker `K` = 0 … `W`−1, each with its own name, even for a small set (`W = 1` is fine for fewer than 200 papers). Give each one the §9 text with `<NAME>`, `<W>` and `<K>` filled in. When a worker finishes or dies, start it again with the same `K` until no `UNDECIDED` row is left.
 
 **Step 3. Read the result.**
 
@@ -153,19 +167,37 @@ SELECT role, count(*) FROM paper_decision WHERE verdict = 'accept' GROUP BY role
 SELECT reject_class, count(*) FROM paper_decision WHERE verdict = 'reject' GROUP BY reject_class ORDER BY 2 DESC;
 ```
 
-**Step 4. Second look.** Re-read every accept and every reject with `p >= 0.3` against §2–5 and §12, with the same evidence the workers saw:
+**Step 4a. Shortcut audit.** Each query must return 0 rows. Every decision a query returns was not reviewed as §9 requires: delete it (`DELETE FROM paper_decision WHERE paper_id = ?`; for the third query, all of that worker's decisions in this run) and go back to Step 2.
 
 ```sql
-SELECT d.paper_id, d.verdict, d.role, d.p, d.reject_class, d.quote, d.reason, p.title, x.abstract, x.tldr, x.keywords
+-- copy-paste reasons
+SELECT substr(reason, 1, 20) AS start, count(*), group_concat(paper_id) FROM paper_decision
+WHERE decided_at >= '<Step 0 timestamp>' GROUP BY 1 HAVING count(*) > 3;
+-- reasons that repeat the title instead of the content
+SELECT d.paper_id, d.reason FROM paper_decision d JOIN paper_dblp p ON p.id = d.paper_id
+WHERE d.decided_at >= '<Step 0 timestamp>' AND length(p.title) >= 30
+  AND instr(lower(d.reason), lower(substr(p.title, 1, 30))) > 0;
+-- bulk inserts: more than one batch stored in the same second
+SELECT reviewer, decided_at, count(*) FROM paper_decision
+WHERE decided_at >= '<Step 0 timestamp>' AND reviewer <> 'orchestrator' GROUP BY 1, 2 HAVING count(*) > 20;
+```
+
+**Step 4b. Second look.** Re-read every accept and every reject with `p >= 0.3` decided in this run against §2–5 and §12, printing **all** of this evidence for each row:
+
+```sql
+SELECT d.paper_id, d.verdict, d.role, d.p, d.agent, d.offense, d.black_box, d.long_horizon, d.reject_class, d.quote, d.reason,
+       p.title, x.abstract, x.tldr, x.keywords, x.topics
 FROM paper_decision d JOIN paper_dblp p ON p.id = d.paper_id LEFT JOIN paper_detail x ON x.paper_id = d.paper_id
-WHERE d.verdict = 'accept' OR d.p >= 0.3
+WHERE (d.verdict = 'accept' OR d.p >= 0.3) AND d.decided_at >= '<Step 0 timestamp>' AND d.reviewer <> 'orchestrator'
 ORDER BY d.verdict, d.role, d.p;
 ```
 
-To correct a decision, delete it and insert the right record with your own name as `reviewer` (the worker's step 3). Check that every accepted paper is truly agentic and offensive and that its role is its headline contribution. Accepted papers with the same title (a workshop and a main-track version, a conference paper and its journal extension) are separate publications: keep both if both are in scope.
+Mark each decision you confirm with `UPDATE paper_decision SET reviewer = 'orchestrator' WHERE paper_id = ?`. To correct one, delete it and insert the right record with `reviewer` = `orchestrator` (the worker's step 3). Check that every accepted paper is truly agentic and offensive and that its role is its headline contribution. Accepted papers with the same title (a workshop and a main-track version, a conference paper and its journal extension) are separate publications: keep both if both are in scope.
 
-**Step 5. Final gate.** Both must hold; otherwise go back to Step 0.
-- `SELECT count(*) FROM paper_review;` returns 0.
+**Step 5. Final gate.** All must hold; otherwise go back to Step 0.
+- `SELECT count(*) FROM paper_review WHERE issue <> 'UNFETCHED';` returns 0.
+- The three Step 4a queries return 0 rows.
+- The Step 4b query returns 0 rows: every accept and every reject with `p >= 0.3` of this run is marked `orchestrator`.
 - `SELECT count(*) FROM paper_list;` equals the number of accepts.
 
 ## 11. Review record
@@ -215,7 +247,7 @@ Reject (the criteria are optional on a reject):
 
 ## 14. Final message
 
-At most four short lines: papers decided, accepted count, accepted counts by role (`baseline`, `benchmark`, `evaluation`, `survey`), and the top reject classes.
+At most five short lines: papers decided (in this run and in total), accepted count, accepted counts by role (`baseline`, `benchmark`, `evaluation`, `survey`), the top reject classes, and the number of papers still `UNFETCHED`.
 
 ---
 
