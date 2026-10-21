@@ -1,10 +1,10 @@
-__pycache__/
+.env
 .vscode/
+__pycache__/
 paper-dblp.xml
 paper-dblp.xml.gz
 paperhunter-backup.db
 paperhunter.db
-paperhunter.db-wal
 paperhunter.db-shm
-.env
+paperhunter.db-wal
 x/
