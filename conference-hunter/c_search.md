@@ -52,7 +52,7 @@ Then check these sources:
     FILTER(STRSTARTS(?dblp, "conf/") && LANG(?label) = "en" && CONTAINS(LCASE(?label), "multimedia")) }
   ```
 - **The conference's own website**, its "previous editions" or history page, and the proceedings front matter (web search), for renames and mergers that `conf_dblp_lineage` lacks (SAIG and GCSE → GPCE).
-- **The local dump** `archive/paper-dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
+- **The local dump** `archive/dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
 - The CORE portal.
 
 **Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.

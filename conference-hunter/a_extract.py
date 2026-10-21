@@ -15,8 +15,8 @@ from pathlib import Path
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 ARCHIVE_DIR = REPO_ROOT / "archive"
-CORE_SRC = ARCHIVE_DIR / "publication-core-2026.csv"
-XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
+CORE_SRC = ARCHIVE_DIR / "venue-core-2026.csv"
+XML_PATH = ARCHIVE_DIR / "dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 VALID_RANKS = ("A*", "A", "B", "C")
@@ -234,7 +234,7 @@ def main() -> None:
     if not core_path.exists():
         sys.exit(f"CORE CSV not found: {core_path}")
     if not xml_path.exists():
-        sys.exit(f"paper-dblp.xml not found: {xml_path}\nRun the downloader first.")
+        sys.exit(f"dblp.xml not found: {xml_path}\nRun the downloader first.")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║         paperhunter  ·  Conference Evidence Loader                   ║")

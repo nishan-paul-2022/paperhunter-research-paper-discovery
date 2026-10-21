@@ -50,12 +50,12 @@ SELECT * FROM journal_dblp_venue WHERE dblp_key = 'journals/x';
 
 Web sources, authoritative when the data above leaves doubt:
 - **Crossref journal record** `https://api.crossref.org/journals/<ISSN>`: title, publisher and **all** ISSNs of a journal. Settles whether two ISSNs are the print and electronic editions of one journal.
-- **Crossref recent works** `https://api.crossref.org/journals/<ISSN>/works?rows=5&sort=published&order=desc&select=DOI,container-title,published`: recent DOIs of a Scopus journal. Find their DBLP key in the dump: `grep -i -F -m1 'doi.org/<DOI></ee>' -B15 archive/paper-dblp.xml | grep 'key="journals/'`. Many DOIs at once: write them, one per line as `doi.org/<DOI><`, to a file and run `grep -i -F -f <file> archive/paper-dblp.xml` in one pass (≈1 minute).
+- **Crossref recent works** `https://api.crossref.org/journals/<ISSN>/works?rows=5&sort=published&order=desc&select=DOI,container-title,published`: recent DOIs of a Scopus journal. Find their DBLP key in the dump: `grep -i -F -m1 'doi.org/<DOI></ee>' -B15 archive/dblp.xml | grep 'key="journals/'`. Many DOIs at once: write them, one per line as `doi.org/<DOI><`, to a file and run `grep -i -F -f <file> archive/dblp.xml` in one pass (≈1 minute).
 - **Scopus/SJR page** `https://www.scimagojr.com/journalsearch.php?q=<Sourceid>&tip=sid`: title history, ISSNs and coverage.
 - The publisher's journal page, for renames ("formerly …") and mergers.
 - Send at most one request per second to any one API.
 
-**Do not use the dblp.org web pages** or their mirrors (they sit behind a bot wall). All DBLP evidence comes from the tables above and the dump `archive/paper-dblp.xml` (`grep 'key="journals/x/'` for a key's articles); titles, ISSNs and renames come from Crossref, Scopus and the publishers.
+**Do not use the dblp.org web pages** or their mirrors (they sit behind a bot wall). All DBLP evidence comes from the tables above and the dump `archive/dblp.xml` (`grep 'key="journals/x/'` for a key's articles); titles, ISSNs and renames come from Crossref, Scopus and the publishers.
 
 If `journal_dblp_crossref`, `journal_dblp_issn` or `journal_dblp_lineage` does not exist, `journal_dblp_issn` or `journal_dblp_lineage` is empty, or `SELECT count(*) FROM journal_dblp_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `journal-hunter/b_match.py`.
 

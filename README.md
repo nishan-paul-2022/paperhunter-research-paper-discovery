@@ -18,8 +18,8 @@ pip install lxml
 
 Save to `archive/`:
 
-- CORE conference ranking ([portal.core.edu.au/conf-ranks](http://portal.core.edu.au/conf-ranks/)) → `publication-core-2026.csv`
-- Scopus CS journal ranking ([scimagojr.com](https://www.scimagojr.com/journalrank.php?category=1700)) → `publication-scopus-computer-science-journal-2025.csv`
+- CORE conference ranking ([portal.core.edu.au/conf-ranks](http://portal.core.edu.au/conf-ranks/)) → `venue-core-2026.csv`
+- Scopus CS journal ranking ([scimagojr.com](https://www.scimagojr.com/journalrank.php?category=1700)) → `venue-scopus-computer-science-journal-2025.csv`
 
 ### 4. Context
 
@@ -28,7 +28,7 @@ python3 circumstance/a_download.py
 python3 circumstance/b_schema.py
 ```
 
-**Output:** `archive/paper-dblp.xml`, `archive/paperhunter.db` with every table and view
+**Output:** `archive/dblp.xml`, `archive/paperhunter.db` with every table and view
 
 ### 5. Conference list
 

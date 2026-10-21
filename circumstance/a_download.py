@@ -7,10 +7,10 @@ import urllib.request
 from pathlib import Path
 
 ARCHIVE_DIR = Path(__file__).resolve().parent.parent / "archive"
-GZ_PATH = ARCHIVE_DIR / "paper-dblp.xml.gz"
-XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
+GZ_PATH = ARCHIVE_DIR / "dblp.xml.gz"
+XML_PATH = ARCHIVE_DIR / "dblp.xml"
 DTD_PATH = ARCHIVE_DIR / "dblp.dtd"
-MD5_PATH = ARCHIVE_DIR / "paper-dblp.xml.gz.md5"
+MD5_PATH = ARCHIVE_DIR / "dblp.xml.gz.md5"
 
 BASE = "https://dblp.org/xml"
 URL_GZ = f"{BASE}/dblp.xml.gz"
@@ -152,7 +152,7 @@ def main() -> None:
     elif GZ_PATH.exists():
         print("Calculating checksum of existing local zip...", end="\r", flush=True)
         local_md5 = _calc_local_md5(GZ_PATH)
-        MD5_PATH.write_text(f"{local_md5}  paper-dblp.xml.gz\n")
+        MD5_PATH.write_text(f"{local_md5}  dblp.xml.gz\n")
         print(" " * 60, end="\r")
 
     need_new_gz = (not GZ_PATH.exists()) or (local_md5 != remote_md5)
@@ -160,14 +160,14 @@ def main() -> None:
     if need_new_gz:
         if GZ_PATH.exists():
             print("New DBLP release detected. Downloading update...")
-        _download(URL_GZ, GZ_PATH, "paper-dblp.xml.gz")
+        _download(URL_GZ, GZ_PATH, "dblp.xml.gz")
 
         downloaded_md5 = _calc_local_md5(GZ_PATH)
         if downloaded_md5 != remote_md5:
             GZ_PATH.unlink(missing_ok=True)
             sys.exit(f"Checksum mismatch on downloaded zip!\nExpected: {remote_md5}\nGot: {downloaded_md5}")
 
-        MD5_PATH.write_text(f"{remote_md5}  paper-dblp.xml.gz\n")
+        MD5_PATH.write_text(f"{remote_md5}  dblp.xml.gz\n")
 
     if not DTD_PATH.exists() or need_new_gz:
         _download(URL_DTD, DTD_PATH, "dblp.dtd")

@@ -10,7 +10,7 @@ from lxml import etree
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 ARCHIVE_DIR = REPO_ROOT / "archive"
-XML_PATH = ARCHIVE_DIR / "paper-dblp.xml"
+XML_PATH = ARCHIVE_DIR / "dblp.xml"
 DB_PATH = ARCHIVE_DIR / "paperhunter.db"
 YEARS = [2023, 2024, 2025, 2026]
 
@@ -148,7 +148,7 @@ def write_papers(conn, papers):
 
 def main():
     if not XML_PATH.exists():
-        sys.exit(f"ERROR: paper-dblp.xml not found at {XML_PATH}")
+        sys.exit(f"ERROR: dblp.xml not found at {XML_PATH}")
     if not DB_PATH.exists():
         sys.exit(f"ERROR: database not found at {DB_PATH} (run circumstance/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
