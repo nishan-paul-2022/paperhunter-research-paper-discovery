@@ -1,34 +1,10 @@
-# Python cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.python-version
-
-# Logs
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
 .vscode/
-.idea/
-*.swp
-*.swo
-
-# DBLP paper-database files
-dblp.xml
-dblp.xml.gz
 paper-dblp.xml
 paper-dblp.xml.gz
+paperhunter-backup.db
 paperhunter.db
 paperhunter.db-wal
 paperhunter.db-shm
-
-paper-supplement/
-
-# API keys
 .env
-.fetch.lock
+x/
