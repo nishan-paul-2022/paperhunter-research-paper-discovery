@@ -3,8 +3,6 @@
 __pycache__/
 paper-dblp.xml
 paper-dblp.xml.gz
-paperhunter-backup.db
 paperhunter.db
-paperhunter.db-shm
-paperhunter.db-wal
+paperhunter-backup.db
 x/
