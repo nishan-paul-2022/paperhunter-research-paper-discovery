@@ -37,7 +37,7 @@ python3 conference-hunter/a_extract.py
 python3 conference-hunter/b_match.py
 ```
 
-Give `conference-hunter/c_conference_matching_guide.md` to the AI.
+Give `conference-hunter/c_search.md` to the AI.
 
 **Output:** view `conf_list`
 
@@ -48,7 +48,7 @@ python3 journal-hunter/a_extract.py
 python3 journal-hunter/b_match.py
 ```
 
-Give `journal-hunter/c_journal_matching_guide.md` to the AI.
+Give `journal-hunter/c_search.md` to the AI.
 
 **Output:** view `journal_list`
 
@@ -61,7 +61,7 @@ python3 b_fetch.py fetch
 python3 b_fetch.py status
 ```
 
-Give `paper-hunter/e_paper_matching_guide.md` to the AI.
+Give `paper-hunter/e_search.md` to the AI.
 
 ```bash
 python3 d_review.py status

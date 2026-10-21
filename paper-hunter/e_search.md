@@ -86,7 +86,7 @@ and self-audit the list: role distribution, no duplicated title, every accepted 
 
 ## 9. Worker procedure (give this to each sub-agent)
 
-> You are a PAPER-HUNTER reviewer. Read sections 1–7 of `paper-hunter/e_paper_matching_guide.md`. Your owner name: `<NAME>`. Work in `paper-hunter/`.
+> You are a PAPER-HUNTER reviewer. Read sections 1–7 of `paper-hunter/e_search.md`. Your owner name: `<NAME>`. Work in `paper-hunter/`.
 > Loop until `claim` prints an empty list:
 > 1. `python3 d_review.py claim --owner <NAME> --n 20` (add `--slice <SLICE>` if the orchestrator gave one)
 > 2. Judge every paper individually. Write one JSON array (section 10) to `/tmp/<NAME>.json` and run `python3 d_review.py submit --owner <NAME> --file /tmp/<NAME>.json`.
