@@ -288,30 +288,16 @@ CREATE TABLE IF NOT EXISTS paper_dblp (
     id        INTEGER PRIMARY KEY,
     dblp_key  TEXT NOT NULL UNIQUE,
     venue_key TEXT NOT NULL,
-    kind      TEXT NOT NULL CHECK (kind IN ('conference', 'journal')),
     year      INTEGER NOT NULL,
     title     TEXT NOT NULL,
     authors   TEXT NOT NULL,
     venue     TEXT NOT NULL,
-    ee        TEXT,
-    url       TEXT,
     doi       TEXT
 );
 CREATE INDEX IF NOT EXISTS paper_dblp_venue ON paper_dblp (venue_key);
-CREATE INDEX IF NOT EXISTS paper_dblp_year ON paper_dblp (year);
-
-DROP VIEW IF EXISTS paper_inventory;
-CREATE VIEW paper_inventory AS
-SELECT p.id, p.dblp_key, p.venue_key, p.kind, p.year, p.title, p.authors, p.venue, p.ee, p.url, p.doi,
-       r.rank,
-       CASE r.rank WHEN 'A*' THEN 'a-star' ELSE lower(r.rank) END || '-' || p.year AS slice
-FROM paper_dblp p
-JOIN (SELECT dblp_key, ranking AS rank FROM conf_list WHERE dblp_key LIKE 'conf/%'
-      UNION ALL
-      SELECT dblp_key, quartile AS rank FROM journal_list) r ON r.dblp_key = p.venue_key;
 
 CREATE TABLE IF NOT EXISTS paper_source (
-    paper_id   INTEGER NOT NULL REFERENCES paper_dblp(id),
+    paper_id   INTEGER NOT NULL REFERENCES paper_dblp ON DELETE CASCADE,
     src        TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
     via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
     found      INTEGER NOT NULL CHECK (found IN (0, 1)),
@@ -322,102 +308,113 @@ CREATE TABLE IF NOT EXISTS paper_source (
 );
 
 CREATE TABLE IF NOT EXISTS paper_detail (
-    paper_id      INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
-    openalex_id   TEXT,
-    s2_id         TEXT,
-    corpus_id     INTEGER,
-    arxiv_id      TEXT,
-    abstract      TEXT,
-    abstract_src  TEXT CHECK (abstract_src IN ('s2', 'openalex')),
-    tldr          TEXT,
-    language      TEXT,
-    work_type     TEXT,
-    is_retracted  INTEGER CHECK (is_retracted IN (0, 1)),
-    is_paratext   INTEGER CHECK (is_paratext IN (0, 1)),
-    is_oa         INTEGER CHECK (is_oa IN (0, 1)),
-    oa_status     TEXT,
-    oa_url        TEXT,
-    pdf_url       TEXT,
-    text_availability TEXT,
-    primary_topic TEXT,
-    subfield      TEXT,
-    field         TEXT,
-    domain        TEXT,
-    reference_count INTEGER,
-    citation_count  INTEGER,
-    influential_citation_count INTEGER,
-    built_at      INTEGER NOT NULL
+    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
+    abstract     TEXT,
+    abstract_src TEXT CHECK (abstract_src IN ('s2', 'openalex')),
+    tldr         TEXT,
+    keywords     TEXT,
+    topics       TEXT,
+    fields       TEXT,
+    work_type    TEXT,
+    is_paratext  INTEGER CHECK (is_paratext IN (0, 1)),
+    is_retracted INTEGER CHECK (is_retracted IN (0, 1)),
+    language     TEXT,
+    arxiv_id     TEXT,
+    openalex_id  TEXT,
+    s2_id        TEXT,
+    CHECK ((abstract IS NULL) = (abstract_src IS NULL))
 );
 
-CREATE TABLE IF NOT EXISTS paper_term (
-    paper_id INTEGER NOT NULL REFERENCES paper_dblp(id),
-    kind     TEXT NOT NULL CHECK (kind IN ('keyword', 'topic', 'field')),
-    name     TEXT NOT NULL,
-    score    REAL,
-    PRIMARY KEY (paper_id, kind, name)
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS paper_term_name ON paper_term (kind, name);
-
-CREATE TABLE IF NOT EXISTS paper_reference (
-    paper_id INTEGER NOT NULL REFERENCES paper_dblp(id),
-    src      TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
-    ref_id   TEXT NOT NULL,
-    doi      TEXT,
-    dblp_key TEXT,
-    arxiv_id TEXT,
-    PRIMARY KEY (paper_id, src, ref_id)
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS paper_reference_ref ON paper_reference (ref_id);
-
-DROP VIEW IF EXISTS paper_card;
-CREATE VIEW paper_card AS
-SELECT p.id AS paper_id, p.dblp_key, p.title, p.year, p.venue, p.kind, p.doi,
-       d.abstract, d.abstract_src, d.tldr, d.work_type, d.is_paratext, d.language,
-       d.primary_topic, d.subfield, d.field,
-       (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'keyword') AS keywords,
-       (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'topic') AS topics,
-       (SELECT group_concat(name, '; ') FROM paper_term t WHERE t.paper_id = p.id AND t.kind = 'field') AS fields,
-       d.arxiv_id, d.oa_url, d.pdf_url, d.openalex_id, d.s2_id
-FROM paper_dblp p JOIN paper_detail d ON d.paper_id = p.id;
-
-CREATE TABLE IF NOT EXISTS paper_review_claim (
-    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
-    owner    TEXT NOT NULL,
-    until    INTEGER NOT NULL
+CREATE TABLE IF NOT EXISTS paper_decision (
+    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
+    verdict      TEXT NOT NULL CHECK (verdict IN ('accept', 'reject')),
+    role         TEXT CHECK (role IN ('baseline', 'benchmark', 'evaluation', 'survey')),
+    p            REAL NOT NULL CHECK (p >= 0 AND p <= 1),
+    agent        TEXT CHECK (agent IN ('y', 'p', 'n', 'u')),
+    offense      TEXT CHECK (offense IN ('y', 'p', 'n', 'u')),
+    black_box    TEXT CHECK (black_box IN ('y', 'p', 'n', 'u')),
+    long_horizon TEXT CHECK (long_horizon IN ('y', 'p', 'n', 'u')),
+    quote        TEXT,
+    quote_src    TEXT CHECK (quote_src IN ('title', 'abstract', 'tldr')),
+    reject_class TEXT CHECK (reject_class IN ('off_domain', 'security_other', 'defensive_only',
+                                              'vuln_detection_or_code_scan', 'generic_llm_security',
+                                              'static_qa_benchmark', 'llm_no_offense', 'frontmatter')),
+    reason       TEXT NOT NULL CHECK (length(trim(reason)) >= 10
+                                      AND length(trim(reason)) - length(replace(trim(reason), ' ', '')) < 60),
+    reviewer     TEXT NOT NULL CHECK (length(trim(reviewer)) > 0),
+    decided_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (verdict <> 'accept' OR (role IS NOT NULL AND p >= 0.5 AND agent = 'y' AND offense = 'y'
+                                   AND black_box IS NOT NULL AND long_horizon IS NOT NULL
+                                   AND quote_src IS NOT NULL AND reject_class IS NULL
+                                   AND length(trim(quote)) - length(replace(trim(quote), ' ', '')) BETWEEN 3 AND 44)),
+    CHECK (verdict <> 'reject' OR (reject_class IS NOT NULL AND p < 0.5
+                                   AND role IS NULL AND quote IS NULL AND quote_src IS NULL)),
+    CHECK (role IS NOT 'baseline' OR (black_box <> 'n' AND long_horizon <> 'n'))
 );
 
-CREATE TABLE IF NOT EXISTS paper_accepted (
-    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
-    role         TEXT NOT NULL CHECK (role IN ('baseline', 'benchmark', 'evaluation', 'survey')),
-    p            REAL NOT NULL CHECK (p >= 0.5 AND p <= 1),
-    agent        TEXT NOT NULL CHECK (agent = 'y'),
-    offense      TEXT NOT NULL CHECK (offense = 'y'),
-    black_box    TEXT NOT NULL CHECK (black_box IN ('y', 'p', 'n', 'u')),
-    long_horizon TEXT NOT NULL CHECK (long_horizon IN ('y', 'p', 'n', 'u')),
-    quote        TEXT NOT NULL,
-    quote_src    TEXT NOT NULL CHECK (quote_src IN ('title', 'abstract', 'tldr')),
-    reason       TEXT NOT NULL,
-    by           TEXT NOT NULL,
-    at           INTEGER NOT NULL,
-    CHECK (role <> 'baseline' OR (black_box <> 'n' AND long_horizon <> 'n'))
-);
+DROP VIEW IF EXISTS paper_review;
+CREATE VIEW paper_review AS
+SELECT 'UNFETCHED' AS issue, p.id AS paper_id, p.dblp_key,
+       'run paper-hunter/b_details.py' AS detail
+FROM paper_dblp p
+WHERE NOT EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 's2'
+                    AND (s.found = 1 OR s.via = 'title'))
+   OR (NOT EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 'openalex'
+                     AND (s.found = 1 OR s.via = 'title'))
+       AND NOT EXISTS (SELECT 1 FROM paper_detail d WHERE d.paper_id = p.id AND d.abstract IS NOT NULL))
+UNION ALL
+SELECT 'UNDECIDED', p.id, p.dblp_key, NULL
+FROM paper_dblp p
+WHERE NOT EXISTS (SELECT 1 FROM paper_decision d WHERE d.paper_id = p.id)
+  AND EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 's2'
+                AND (s.found = 1 OR s.via = 'title'))
+  AND (EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 'openalex'
+                 AND (s.found = 1 OR s.via = 'title'))
+       OR EXISTS (SELECT 1 FROM paper_detail d WHERE d.paper_id = p.id AND d.abstract IS NOT NULL))
+UNION ALL
+SELECT 'INVALID', d.paper_id, p.dblp_key,
+       'quote no longer in the stored ' || d.quote_src || ': delete the decision and review the paper again'
+FROM paper_decision d
+JOIN paper_dblp p ON p.id = d.paper_id
+LEFT JOIN paper_detail x ON x.paper_id = d.paper_id
+WHERE d.verdict = 'accept'
+  AND coalesce(instr(lower(CASE d.quote_src WHEN 'title' THEN p.title WHEN 'abstract' THEN x.abstract ELSE x.tldr END),
+                     lower(trim(d.quote))), 0) = 0;
 
-CREATE TABLE IF NOT EXISTS paper_rejected (
-    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp(id),
-    reject_class TEXT NOT NULL CHECK (reject_class IN ('off_domain', 'security_other', 'defensive_only', 'vuln_detection_or_code_scan', 'generic_llm_security', 'static_qa_benchmark', 'llm_no_offense', 'frontmatter')),
-    p            REAL NOT NULL CHECK (p >= 0 AND p < 0.5),
-    reason       TEXT NOT NULL,
-    by           TEXT NOT NULL,
-    at           INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS paper_rejected_class ON paper_rejected (reject_class);
+CREATE TRIGGER IF NOT EXISTS paper_decision_fetched BEFORE INSERT ON paper_decision
+WHEN NOT EXISTS (SELECT 1 FROM paper_review r WHERE r.paper_id = NEW.paper_id AND r.issue = 'UNDECIDED')
+BEGIN SELECT RAISE(ABORT, 'paper is not UNDECIDED in paper_review (unknown, not fetched yet, or already decided)'); END;
 
-CREATE TRIGGER IF NOT EXISTS paper_accepted_not_rejected BEFORE INSERT ON paper_accepted
-WHEN EXISTS (SELECT 1 FROM paper_rejected WHERE paper_id = NEW.paper_id)
-BEGIN SELECT RAISE(ABORT, 'paper is already rejected'); END;
-CREATE TRIGGER IF NOT EXISTS paper_rejected_not_accepted BEFORE INSERT ON paper_rejected
-WHEN EXISTS (SELECT 1 FROM paper_accepted WHERE paper_id = NEW.paper_id)
-BEGIN SELECT RAISE(ABORT, 'paper is already accepted'); END;
+CREATE TRIGGER IF NOT EXISTS paper_decision_quote_ins BEFORE INSERT ON paper_decision
+WHEN NEW.verdict = 'accept' AND NOT EXISTS (
+    SELECT 1 FROM paper_dblp p LEFT JOIN paper_detail d ON d.paper_id = p.id
+    WHERE p.id = NEW.paper_id
+      AND instr(lower(CASE NEW.quote_src WHEN 'title' THEN p.title WHEN 'abstract' THEN d.abstract ELSE d.tldr END),
+                lower(trim(NEW.quote))) > 0
+)
+BEGIN SELECT RAISE(ABORT, 'quote not found verbatim in the stored quote_src text'); END;
+
+CREATE TRIGGER IF NOT EXISTS paper_decision_quote_upd BEFORE UPDATE ON paper_decision
+WHEN NEW.verdict = 'accept' AND NOT EXISTS (
+    SELECT 1 FROM paper_dblp p LEFT JOIN paper_detail d ON d.paper_id = p.id
+    WHERE p.id = NEW.paper_id
+      AND instr(lower(CASE NEW.quote_src WHEN 'title' THEN p.title WHEN 'abstract' THEN d.abstract ELSE d.tldr END),
+                lower(trim(NEW.quote))) > 0
+)
+BEGIN SELECT RAISE(ABORT, 'quote not found verbatim in the stored quote_src text'); END;
+
+DROP VIEW IF EXISTS paper_list;
+CREATE VIEW paper_list AS
+SELECT p.dblp_key, d.role, d.p, p.year, p.title, p.authors, p.venue, p.venue_key,
+       coalesce((SELECT c.ranking FROM conf_list c WHERE c.dblp_key = p.venue_key),
+                (SELECT j.quartile FROM journal_list j WHERE j.dblp_key = p.venue_key)) AS rank,
+       p.doi, x.arxiv_id, d.quote, d.reason
+FROM paper_decision d
+JOIN paper_dblp p ON p.id = d.paper_id
+LEFT JOIN paper_detail x ON x.paper_id = d.paper_id
+WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM paper_review)
+ORDER BY CASE d.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evaluation' THEN 2 ELSE 3 END,
+         d.p DESC, p.dblp_key;
 """
 
 REBUILT_EVIDENCE = {"conf_dblp_booktitle": "first_year", "conf_dblp_title": "proc_key"}
@@ -465,7 +462,31 @@ def migrate_journals(conn: sqlite3.Connection) -> None:
               + ("; run journal-hunter/a_extract.py and b_match.py to refill them" if refill else ""))
 
 
+OLD_PAPER_TABLES = ("paper_term", "paper_reference", "paper_review_claim", "paper_accepted", "paper_rejected")
+OLD_PAPER_COLUMNS = {"paper_dblp": "kind", "paper_detail": "built_at"}
+
+
+def migrate_papers(conn: sqlite3.Connection) -> None:
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    old = [t for t in OLD_PAPER_TABLES if t in tables]
+    old += [t for t, col in OLD_PAPER_COLUMNS.items()
+            if t in tables and col in {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}]
+    if not old:
+        return
+    drop = [t for t in (*OLD_PAPER_TABLES, "paper_source", "paper_detail", "paper_dblp") if t in tables]
+    filled = [t for t in drop if conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()]
+    if filled:
+        sys.exit(f"old paper tables hold data ({', '.join(filled)}): empty or drop them, then rerun")
+    with conn:
+        for view in ("paper_inventory", "paper_card", "paper_review", "paper_list"):
+            conn.execute(f"DROP VIEW IF EXISTS {view}")
+        for t in drop:
+            conn.execute(f"DROP TABLE {t}")
+    print(f"migrated: dropped the old empty paper tables ({', '.join(drop)})")
+
+
 def migrate(conn: sqlite3.Connection) -> None:
+    migrate_papers(conn)
     migrate_journals(conn)
     tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     stale = [t for t, col in REBUILT_EVIDENCE.items()

@@ -55,17 +55,12 @@ Give `journal-hunter/c_search.md` to the AI.
 ### 7. Papers
 
 ```bash
-cd paper-hunter
-python3 a_extract.py
-python3 b_fetch.py fetch
-python3 b_fetch.py status
+python3 paper-hunter/a_extract.py
+python3 paper-hunter/b_details.py
 ```
 
-Give `paper-hunter/e_search.md` to the AI.
+Rerun `b_details.py` until `paper_review` shows no `UNFETCHED` papers (an API's daily budget can stop it; run it again the next day).
 
-```bash
-python3 d_review.py status
-python3 d_review.py accepted
-```
+Give `paper-hunter/c_search.md` to the AI.
 
-**Output:** tables `paper_dblp`, `paper_detail`, `paper_term`, `paper_reference`, `paper_accepted`, `paper_rejected`
+**Output:** view `paper_list`

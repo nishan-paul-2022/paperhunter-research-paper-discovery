@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import argparse
 import difflib
 import fcntl
 import gzip
+import html
 import json
 import os
 import re
@@ -17,30 +17,29 @@ import urllib.request
 import zlib
 from pathlib import Path
 
-import c_build
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 DB_PATH = SCRIPT_DIR.parent / "archive" / "paperhunter.db"
+LOCK_PATH = SCRIPT_DIR / ".details.lock"
 
 OPENALEX = "https://api.openalex.org"
 S2 = "https://api.semanticscholar.org/graph/v1"
 OA_BATCH, S2_BATCH = 100, 500
 S2_INTERVAL = 1.1
 S2_TRIES = 10
-LOCK_PATH = SCRIPT_DIR / ".fetch.lock"
 OA_SELECT = ",".join((
-    "id", "doi", "title", "publication_year", "publication_date", "ids", "language", "type", "indexed_in",
-    "open_access", "primary_location", "best_oa_location", "locations", "is_retracted", "is_paratext",
-    "primary_topic", "topics", "keywords", "referenced_works_count", "referenced_works", "cited_by_count",
-    "fwci", "has_fulltext", "abstract_inverted_index", "updated_date"))
+    "id", "doi", "title", "publication_year", "language", "type", "is_retracted", "is_paratext",
+    "keywords", "topics", "abstract_inverted_index", "locations"))
 S2_FIELDS = ",".join((
-    "paperId", "corpusId", "externalIds", "url", "title", "abstract", "venue", "year", "publicationDate",
-    "publicationTypes", "referenceCount", "citationCount", "influentialCitationCount", "isOpenAccess",
-    "openAccessPdf", "fieldsOfStudy", "s2FieldsOfStudy", "tldr", "textAvailability",
-    "references.paperId", "references.externalIds"))
+    "paperId", "externalIds", "title", "abstract", "year", "tldr", "fieldsOfStudy", "s2FieldsOfStudy"))
 TITLE_MATCH = 0.93
 YEAR_SLACK = 2
 MAX_FAILED_BATCHES = 3
+MIN_ABSTRACT = 120
+BUILD_BATCH = 2000
+
+_TAG = re.compile(r"</?(?:[\w-]+:)?([\w-]+)[^>]*>")
+_BLOCK = {"p", "title", "sec", "br", "div", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6"}
+_ARXIV_URL = re.compile(r"arxiv\.org/(?:abs|pdf)/([^\s?#v]+(?:v\d+)?)")
 
 
 class FetchError(Exception):
@@ -234,6 +233,98 @@ def pack(rec):
     return zlib.compress(json.dumps(rec, separators=(",", ":"), ensure_ascii=False).encode(), 6)
 
 
+def unpack(blob):
+    return json.loads(zlib.decompress(blob)) if blob else None
+
+
+def clean_text(s):
+    s = _TAG.sub(lambda m: " " if m.group(1).lower() in _BLOCK else "", s or "")
+    s = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", html.unescape(s))).strip()
+    s = re.sub(r"^abstract\b[\s:.–—-]*", "", s, flags=re.IGNORECASE)
+    return s.lstrip(" :.–—-")
+
+
+def openalex_abstract(inverted):
+    if not isinstance(inverted, dict):
+        return ""
+    return " ".join(w for _, w in sorted((i, w) for w, idxs in inverted.items() for i in idxs or []))
+
+
+def _short_id(url):
+    return url.rsplit("/", 1)[-1] if isinstance(url, str) and url else None
+
+
+def _flag(v):
+    return None if v is None else int(bool(v))
+
+
+def _names(items):
+    ranked = sorted((it for it in items or [] if isinstance(it, dict) and it.get("display_name")),
+                    key=lambda it: -(it.get("score") or 0))
+    return "; ".join(dict.fromkeys(it["display_name"] for it in ranked)) or None
+
+
+DETAIL_COLS = ("paper_id", "abstract", "abstract_src", "tldr", "keywords", "topics", "fields", "work_type",
+               "is_paratext", "is_retracted", "language", "arxiv_id", "openalex_id", "s2_id")
+
+
+def derive(paper_id, oa, s2):
+    oa, s2 = oa or {}, s2 or {}
+    abstract, abstract_src = None, None
+    for src, text in (("s2", clean_text(s2.get("abstract"))),
+                      ("openalex", clean_text(openalex_abstract(oa.get("abstract_inverted_index"))))):
+        if len(text) >= MIN_ABSTRACT:
+            abstract, abstract_src = text, src
+            break
+    arxiv = (s2.get("externalIds") or {}).get("ArXiv")
+    for loc in oa.get("locations") or []:
+        m = _ARXIV_URL.search((loc or {}).get("landing_page_url") or "")
+        if m and not arxiv:
+            arxiv = m.group(1)
+    fields = [f.get("category") if isinstance(f, dict) else f
+              for f in (s2.get("fieldsOfStudy") or []) + (s2.get("s2FieldsOfStudy") or [])]
+    return (
+        paper_id,
+        abstract,
+        abstract_src,
+        clean_text((s2.get("tldr") or {}).get("text")) or None,
+        _names(oa.get("keywords")),
+        _names(oa.get("topics")),
+        "; ".join(dict.fromkeys(f for f in fields if isinstance(f, str) and f)) or None,
+        oa.get("type"),
+        _flag(oa.get("is_paratext")),
+        _flag(oa.get("is_retracted")),
+        oa.get("language"),
+        arxiv,
+        _short_id(oa.get("id")),
+        s2.get("paperId"),
+    )
+
+
+def build(conn, paper_ids):
+    ids = sorted(set(paper_ids))
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        marks = ",".join("?" * len(chunk))
+        raw = {}
+        for pid, src, blob in conn.execute(
+                f"SELECT paper_id, src, raw FROM paper_source WHERE found = 1 AND paper_id IN ({marks})", chunk):
+            raw.setdefault(pid, {})[src] = unpack(blob)
+        conn.execute(f"DELETE FROM paper_detail WHERE paper_id IN ({marks})", chunk)
+        conn.executemany(f"INSERT INTO paper_detail ({','.join(DETAIL_COLS)}) "
+                         f"VALUES ({','.join('?' * len(DETAIL_COLS))})",
+                         [derive(pid, recs.get("openalex"), recs.get("s2")) for pid, recs in raw.items()])
+
+
+def build_all(conn):
+    ids = [r[0] for r in conn.execute("SELECT DISTINCT paper_id FROM paper_source WHERE found = 1")]
+    for i in range(0, len(ids), BUILD_BATCH):
+        with conn:
+            build(conn, ids[i:i + BUILD_BATCH])
+        print(f"\r  built {min(i + BUILD_BATCH, len(ids)):,}/{len(ids):,}", end="", flush=True)
+    print()
+
+
 def store(conn, src, via, results):
     now = int(time.time())
     with conn:
@@ -241,14 +332,14 @@ def store(conn, src, via, results):
             "INSERT OR REPLACE INTO paper_source (paper_id, src, via, found, raw, fetched_at) VALUES (?,?,?,?,?,?)",
             [(pid, src, via, int(rec is not None), pack(rec) if rec is not None else None, now)
              for pid, rec in results])
-        c_build.build(conn, [pid for pid, rec in results if rec is not None])
+        build(conn, [pid for pid, rec in results if rec is not None])
 
 
 class Worker(threading.Thread):
 
-    def __init__(self, source, targets, retry_missing, gaps_only=False, after=None):
+    def __init__(self, source, targets, gaps_only=False, after=None):
         super().__init__(name=source.name)
-        self.source, self.targets, self.retry_missing = source, targets, retry_missing
+        self.source, self.targets = source, targets
         self.gaps_only, self.after = gaps_only, after
         self.stats = {"doi_asked": 0, "doi_found": 0, "title_asked": 0, "title_found": 0}
         self.error = None
@@ -289,8 +380,7 @@ class Worker(threading.Thread):
 
     def doi_phase(self, conn):
         done = self.state(conn)
-        todo = [p for p in self.targets if p["doi"] and (
-            p["id"] not in done or (self.retry_missing and not done[p["id"]][1]))]
+        todo = [p for p in self.targets if p["doi"] and p["id"] not in done]
         by_doi = {}
         for p in todo:
             by_doi.setdefault(p["doi"], []).append(p["id"])
@@ -314,9 +404,7 @@ class Worker(threading.Thread):
             self.log(f"title phase waits for {self.after.name} to finish")
             self.after.join()
         done = self.state(conn)
-        todo = [p for p in self.targets if (not p["doi"] and p["id"] not in done)
-                or done.get(p["id"]) == ("doi", 0)
-                or (self.retry_missing and done[p["id"]] == ("title", 0))]
+        todo = [p for p in self.targets if (not p["doi"] and p["id"] not in done) or done.get(p["id"]) == ("doi", 0)]
         if self.gaps_only:
             have = {r[0] for r in conn.execute("SELECT paper_id FROM paper_detail WHERE abstract IS NOT NULL")}
             todo = [p for p in todo if p["id"] not in have]
@@ -338,65 +426,18 @@ class Worker(threading.Thread):
             store(conn, self.source.name, "title", pending)
 
 
-def select_targets(conn, slices, keys, limit):
-    sql = "SELECT id, dblp_key, doi, title, year FROM paper_dblp"
-    where, args = [], []
-    if slices:
-        where.append(f"id IN (SELECT id FROM paper_inventory WHERE slice IN ({','.join('?' * len(slices))}))")
-        args += slices
-    if keys:
-        where.append(f"dblp_key IN ({','.join('?' * len(keys))})")
-        args += keys
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY id"
-    if limit:
-        sql += f" LIMIT {int(limit)}"
-    cols = ("id", "dblp_key", "doi", "title", "year")
-    return [dict(zip(cols, r)) for r in conn.execute(sql, args)]
-
-
 def take_lock():
     f = open(LOCK_PATH, "w")
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        sys.exit("ERROR: another b_fetch.py fetch is already running (the S2 key allows one process)")
+        sys.exit("ERROR: another b_details.py is already running (the S2 key allows one process)")
     return f
 
 
-def cmd_fetch(a):
-    lock = take_lock()
-    conn = open_db()
-    targets = select_targets(conn, a.slice, a.key, a.limit)
-    conn.close()
-    if not targets:
-        sys.exit("ERROR: no papers match (check --slice / --key)")
-    sources = [s() for s in (OpenAlex, SemanticScholar) if not a.source or s.name == a.source]
-    print(f"{len(targets):,} target papers  ({sum(1 for p in targets if p['doi']):,} with DOI)")
-    for s in sources:
-        if not s.keyed:
-            print(f"WARNING: no API key for {s.name}; running at the keyless rate limit")
-    s2 = next((Worker(s, targets, a.retry_missing) for s in sources if s.name == "s2"), None)
-    oa = next((Worker(s, targets, a.retry_missing, gaps_only=True, after=s2)
-               for s in sources if s.name == "openalex"), None)
-    workers = [w for w in (oa, s2) if w]
-    t0 = time.time()
-    for w in workers:
-        w.start()
-    for w in workers:
-        w.join()
-    print(f"\nDone in {time.time() - t0:,.0f} s")
-    for w in workers:
-        print(f"  {w.name:8} {json.dumps(w.stats)}" + (f"  ERROR: {w.error}" if w.error else ""))
-    if any(w.error for w in workers):
-        sys.exit(1)
-
-
-def cmd_status(a):
-    conn = open_db()
+def status(conn):
     total = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
-    print(f"paper_dblp: {total:,} papers\n")
+    print(f"\npaper_dblp: {total:,} papers\n")
     print(f"{'source':9} {'via':6} {'found':>10} {'missing':>10}")
     for src, via, found, missing in conn.execute(
             "SELECT src, via, sum(found), sum(1 - found) FROM paper_source GROUP BY src, via ORDER BY src, via"):
@@ -406,56 +447,49 @@ def cmd_status(a):
     if n:
         for label, cond in (("abstract", "abstract IS NOT NULL"), ("  from s2", "abstract_src = 's2'"),
                             ("  from openalex", "abstract_src = 'openalex'"), ("tldr", "tldr IS NOT NULL"),
-                            ("primary_topic", "primary_topic IS NOT NULL"), ("arxiv_id", "arxiv_id IS NOT NULL"),
-                            ("pdf_url", "pdf_url IS NOT NULL"), ("is_paratext", "is_paratext = 1")):
+                            ("keywords", "keywords IS NOT NULL"), ("topics", "topics IS NOT NULL"),
+                            ("fields", "fields IS NOT NULL"), ("arxiv_id", "arxiv_id IS NOT NULL"),
+                            ("is_paratext", "is_paratext = 1"), ("is_retracted", "is_retracted = 1")):
             k = conn.execute(f"SELECT count(*) FROM paper_detail WHERE {cond}").fetchone()[0]
             print(f"  {label:16} {k:>10,}  {100 * k / n:5.1f}%")
-        for table in ("paper_term", "paper_reference"):
-            print(f"{table}: {conn.execute(f'SELECT count(*) FROM {table}').fetchone()[0]:,} rows")
-    conn.close()
-
-
-def cmd_show(a):
-    conn = open_db()
-    conn.row_factory = sqlite3.Row
-    card = conn.execute("SELECT * FROM paper_card WHERE dblp_key = ?", (a.dblp_key,)).fetchone()
-    if card is None:
-        sys.exit(f"no details stored for {a.dblp_key}")
-    for k in card.keys():
-        if card[k] is not None:
-            print(f"{k:14} {card[k]}")
-    for r in conn.execute("SELECT src, via, found, length(raw) AS bytes FROM paper_source WHERE paper_id = ?",
-                          (card["paper_id"],)):
-        print(f"source         {r['src']} via {r['via']}: {'found' if r['found'] else 'missing'}"
-              + (f" ({r['bytes']:,} bytes compressed)" if r["found"] else ""))
-    refs = conn.execute("SELECT src, count(*) FROM paper_reference WHERE paper_id = ? GROUP BY src",
-                        (card["paper_id"],)).fetchall()
-    print("references     " + ", ".join(f"{s}: {n}" for s, n in refs))
-    conn.close()
-
-
-def open_db():
-    if not DB_PATH.exists():
-        sys.exit(f"ERROR: database not found at {DB_PATH} (run circumstance/b_schema.py first)")
-    conn = sqlite3.connect(DB_PATH, timeout=300)
-    return conn
+    print("\npaper_review:")
+    for issue, k in conn.execute("SELECT issue, count(*) FROM paper_review GROUP BY issue ORDER BY issue"):
+        print(f"  {issue:16} {k:>10,}")
 
 
 def main():
     load_env()
-    ap = argparse.ArgumentParser()
-    sub = ap.add_subparsers(dest="cmd", required=True)
-    f = sub.add_parser("fetch", help="fetch records from OpenAlex and Semantic Scholar")
-    f.add_argument("--slice", action="append", help="paper_inventory slice, e.g. a-star-2025 (repeatable)")
-    f.add_argument("--key", action="append", help="DBLP key of one paper (repeatable)")
-    f.add_argument("--limit", type=int, help="only the first N target papers")
-    f.add_argument("--source", choices=("openalex", "s2"), help="only this API")
-    f.add_argument("--retry-missing", action="store_true", help="ask again for papers an API did not know")
-    sub.add_parser("status", help="coverage per source and field")
-    s = sub.add_parser("show", help="what is stored for one paper")
-    s.add_argument("dblp_key")
-    a = ap.parse_args()
-    {"fetch": cmd_fetch, "status": cmd_status, "show": cmd_show}[a.cmd](a)
+    lock = take_lock()
+    if not DB_PATH.exists():
+        sys.exit(f"ERROR: database not found at {DB_PATH} (run circumstance/b_schema.py first)")
+    conn = sqlite3.connect(DB_PATH, timeout=300)
+    cols = ("id", "dblp_key", "doi", "title", "year")
+    targets = [dict(zip(cols, r)) for r in conn.execute(f"SELECT {', '.join(cols)} FROM paper_dblp ORDER BY id")]
+    if not targets:
+        sys.exit("ERROR: paper_dblp is empty (run a_extract.py first)")
+    print(f"{len(targets):,} papers  ({sum(1 for p in targets if p['doi']):,} with DOI)")
+    s2, oa = SemanticScholar(), OpenAlex()
+    for s in (s2, oa):
+        if not s.keyed:
+            print(f"WARNING: no API key for {s.name}; running at the keyless rate limit")
+    s2_worker = Worker(s2, targets)
+    oa_worker = Worker(oa, targets, gaps_only=True, after=s2_worker)
+    workers = [oa_worker, s2_worker]
+    t0 = time.time()
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join()
+    print(f"\nFetched in {time.time() - t0:,.0f} s")
+    for w in workers:
+        print(f"  {w.name:8} {json.dumps(w.stats)}" + (f"  ERROR: {w.error}" if w.error else ""))
+    print("\nRebuilding paper_detail from paper_source...")
+    build_all(conn)
+    status(conn)
+    conn.close()
+    lock.close()
+    if any(w.error for w in workers):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

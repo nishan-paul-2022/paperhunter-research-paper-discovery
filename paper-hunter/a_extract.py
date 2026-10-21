@@ -44,20 +44,17 @@ def extract_doi(element):
     return None
 
 
-def parse_paper(element, venue_key, kind):
+def parse_paper(element, venue_key):
     year_str = extract_text(element, "year")
     if not year_str.isdigit() or int(year_str) not in YEARS:
         return None
     return (
         element.get("key", ""),
         venue_key,
-        kind,
         int(year_str),
         " ".join("".join(element.find("title").itertext()).split()) if element.find("title") is not None else "",
         extract_authors(element),
         extract_text(element, "journal") or extract_text(element, "booktitle"),
-        extract_text(element, "ee") or None,
-        extract_text(element, "url") or None,
         extract_doi(element),
     )
 
@@ -89,9 +86,9 @@ def scan_xml(xml_path, journal_index, conf_index):
         parts = elem.get("key", "").split("/")
         if len(parts) >= 3:
             venue_key = "/".join(parts[:2])
-            index, kind = (journal_index, "journal") if elem.tag == "article" else (conf_index, "conference")
+            index = journal_index if elem.tag == "article" else conf_index
             if venue_key in index:
-                paper = parse_paper(elem, venue_key, kind)
+                paper = parse_paper(elem, venue_key)
                 if paper:
                     papers.append(paper)
                     ranks[index[venue_key]] += 1
@@ -115,34 +112,27 @@ def scan_xml(xml_path, journal_index, conf_index):
 def write_papers(conn, papers):
     print("Syncing paper_dblp...")
     before = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
-    users = [t for t in ("paper_source", "paper_accepted", "paper_rejected")
-             if conn.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone()]
-    used = " OR ".join(f"id IN (SELECT paper_id FROM {t})" for t in users)
     with conn:
         conn.executemany(
-            "INSERT INTO paper_dblp (dblp_key, venue_key, kind, year, title, authors, venue, ee, url, doi) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (dblp_key) DO UPDATE SET "
-            "venue_key = excluded.venue_key, kind = excluded.kind, year = excluded.year, title = excluded.title, "
-            "authors = excluded.authors, venue = excluded.venue, ee = excluded.ee, url = excluded.url, "
-            "doi = excluded.doi",
+            "INSERT INTO paper_dblp (dblp_key, venue_key, year, title, authors, venue, doi) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (dblp_key) DO UPDATE SET "
+            "venue_key = excluded.venue_key, year = excluded.year, title = excluded.title, "
+            "authors = excluded.authors, venue = excluded.venue, doi = excluded.doi",
             papers,
         )
         conn.execute("CREATE TEMP TABLE extracted (dblp_key TEXT PRIMARY KEY)")
         conn.executemany("INSERT INTO extracted VALUES (?)", [(p[0],) for p in papers])
-        stale = "dblp_key NOT IN (SELECT dblp_key FROM extracted)"
-        kept = 0
-        if used:
-            kept = conn.execute(f"SELECT count(*) FROM paper_dblp WHERE {stale} AND ({used})").fetchone()[0]
-            stale += f" AND NOT ({used})"
-        removed = conn.execute(f"DELETE FROM paper_dblp WHERE {stale}").rowcount
+        removed = conn.execute("DELETE FROM paper_dblp WHERE dblp_key NOT IN (SELECT dblp_key FROM extracted)").rowcount
         conn.execute("DROP TABLE extracted")
     after = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
     print(f"  ✓ {len(papers):,} papers extracted  |  {after - before + removed:,} new  |  {removed:,} removed"
-          + (f"  |  {kept:,} no longer in DBLP but kept (used by paper-hunter)" if kept else ""))
+          + ("  (their details and decisions too)" if removed else ""))
     print()
-    print("Papers per slice (paper_inventory):")
-    for s, n in conn.execute("SELECT slice, count(*) FROM paper_inventory GROUP BY slice ORDER BY slice"):
-        print(f"  {s:<14} {n:>8,}")
+    print("Papers per year:")
+    for y, conf, jour in conn.execute(
+            "SELECT year, sum(venue_key LIKE 'conf/%'), sum(venue_key LIKE 'journals/%') FROM paper_dblp "
+            "GROUP BY year ORDER BY year"):
+        print(f"  {y}   conferences {conf:>8,}   journals {jour:>8,}")
     print()
 
 
@@ -152,6 +142,7 @@ def main():
     if not DB_PATH.exists():
         sys.exit(f"ERROR: database not found at {DB_PATH} (run circumstance/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
     print("Loading journal and conference lists...")
     journal_index = load_list(conn, "journal_list", "quartile")
     conf_index = load_list(conn, "conf_list", "ranking")
@@ -161,7 +152,7 @@ def main():
     write_papers(conn, papers)
     conn.close()
     print("━" * 70)
-    print("  Done! Papers are in paper_dblp (view: paper_inventory) of archive/paperhunter.db")
+    print("  Done! Papers are in paper_dblp of archive/paperhunter.db  → Run b_details.py next")
     print("━" * 70)
     print()
 
