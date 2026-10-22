@@ -326,11 +326,10 @@ def build_all(conn):
 
 
 def store(conn, src, via, results):
-    now = int(time.time())
     with conn:
         conn.executemany(
-            "INSERT OR REPLACE INTO paper_source (paper_id, src, via, found, raw, fetched_at) VALUES (?,?,?,?,?,?)",
-            [(pid, src, via, int(rec is not None), pack(rec) if rec is not None else None, now)
+            "INSERT OR REPLACE INTO paper_source (paper_id, src, via, found, raw) VALUES (?,?,?,?,?)",
+            [(pid, src, via, int(rec is not None), pack(rec) if rec is not None else None)
              for pid, rec in results])
         build(conn, [pid for pid, rec in results if rec is not None])
 

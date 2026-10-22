@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -302,7 +303,7 @@ CREATE TABLE IF NOT EXISTS paper_source (
     via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
     found      INTEGER NOT NULL CHECK (found IN (0, 1)),
     raw        BLOB,
-    fetched_at INTEGER NOT NULL,
+    fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (paper_id, src),
     CHECK ((found = 1) = (raw IS NOT NULL))
 );
@@ -485,8 +486,24 @@ def migrate_papers(conn: sqlite3.Connection) -> None:
     print(f"migrated: dropped the old empty paper tables ({', '.join(drop)})")
 
 
+def migrate_fetched_at(conn: sqlite3.Connection) -> None:
+    types = {r[1]: r[2] for r in conn.execute("PRAGMA table_info(paper_source)")}
+    if types.get("fetched_at") != "INTEGER":
+        return
+    ddl = re.search(r"CREATE TABLE IF NOT EXISTS paper_source \(.*?\n\);", SCHEMA, re.S).group(0)
+    with conn:
+        conn.execute("CREATE TEMP TABLE paper_source_old AS SELECT * FROM paper_source")
+        conn.execute("DROP TABLE paper_source")
+        conn.execute(ddl)
+        conn.execute("INSERT INTO paper_source (paper_id, src, via, found, raw, fetched_at) "
+                     "SELECT paper_id, src, via, found, raw, datetime(fetched_at, 'unixepoch') FROM temp.paper_source_old")
+        conn.execute("DROP TABLE temp.paper_source_old")
+    print("migrated: paper_source.fetched_at is now a readable UTC timestamp")
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     migrate_papers(conn)
+    migrate_fetched_at(conn)
     migrate_journals(conn)
     tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     stale = [t for t, col in REBUILT_EVIDENCE.items()
