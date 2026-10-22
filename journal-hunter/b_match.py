@@ -201,12 +201,12 @@ def main() -> None:
     print()
     pairs = propose(conn)
     with conn:
-        conn.execute("DELETE FROM journal_candidate")
-        conn.executemany("INSERT INTO journal_candidate VALUES (?, ?, ?, ?)", pairs)
+        conn.execute("DELETE FROM journal_candidate_rule")
+        conn.executemany("INSERT INTO journal_candidate_rule VALUES (?, ?, ?, ?)", pairs)
     issues = dict(conn.execute("SELECT issue, count(*) FROM journal_review GROUP BY issue").fetchall())
-    decisions = conn.execute("SELECT count(*) FROM journal_decision").fetchone()[0]
+    decisions = conn.execute("SELECT count(*) FROM journal_candidate_ai").fetchone()[0]
     final = conn.execute("SELECT count(*) FROM journal_list").fetchone()[0]
-    by_method = dict(conn.execute("SELECT method, count(*) FROM journal_candidate GROUP BY method").fetchall())
+    by_method = dict(conn.execute("SELECT method, count(*) FROM journal_candidate_rule GROUP BY method").fetchall())
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)"
           f"  |  DBLP ISSN {by_method.get('dblp', 0)}  |  Crossref {by_method.get('crossref', 0)}"
           f"  |  lineage {by_method.get('lineage', 0)}"

@@ -185,10 +185,10 @@ def main() -> None:
     print()
     pairs = propose(conn)
     with conn:
-        conn.execute("DELETE FROM conf_candidate")
-        conn.executemany("INSERT INTO conf_candidate VALUES (?, ?, ?, ?)", pairs)
+        conn.execute("DELETE FROM conf_candidate_rule")
+        conn.executemany("INSERT INTO conf_candidate_rule VALUES (?, ?, ?, ?)", pairs)
     issues = dict(conn.execute("SELECT issue, count(*) FROM conf_review GROUP BY issue").fetchall())
-    decisions = conn.execute("SELECT count(*) FROM conf_decision").fetchone()[0]
+    decisions = conn.execute("SELECT count(*) FROM conf_candidate_ai").fetchone()[0]
     final = conn.execute("SELECT count(*) FROM conf_list").fetchone()[0]
     print(f"  ✓  {len(pairs)} candidate pairs ({len({p[0] for p in pairs})} DBLP keys)")
     print(f"  ├─ decisions:   {decisions}")

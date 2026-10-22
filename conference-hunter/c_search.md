@@ -2,12 +2,12 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Fill and audit the table `conf_decision` in `archive/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
+**Goal.** Fill and audit the table `conf_candidate_ai` in `archive/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
 
 **Ground rules.**
 - Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
-- Change only `conf_decision`. Never alter the schema or any other table.
-- Trust nothing in the database blindly. `conf_candidate` is a wide machine proposal: most pairs that share an acronym are namesakes, and some true pairs are still never proposed. Existing `conf_decision` rows may be wrong or incomplete. You audit both.
+- Change only `conf_candidate_ai`. Never alter the schema or any other table.
+- Trust nothing in the database blindly. `conf_candidate_rule` is a wide machine proposal: most pairs that share an acronym are namesakes, and some true pairs are still never proposed. Existing `conf_candidate_ai` rows may be wrong or incomplete. You audit both.
 - You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by the candidate method, a pattern or a rule alone.
 
 ---
@@ -29,8 +29,8 @@ A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 | `conf_dblp_booktitle(dblp_key, booktitle, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
 | `conf_dblp_title(dblp_key, proc_key, year, title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
 | `conf_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between series (from `sparql.dblp.org`): renames, mergers, new keys (`conf/ftcs` → `conf/dsn`, `conf/wcre` and `conf/csmr` → `conf/saner`, `conf/atal` → `conf/ifaamas`). Authoritative where present, but DBLP records links for only a few hundred series: a missing link proves nothing |
-| `conf_candidate(dblp_key, core_id, method, detail)` | proposals from `b_match.py` (Step 4a lists examples). `method` lists every rule that proposed the pair, and `detail` says what each one matched: `acronym` (series name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title: `acronym "icse"`), `related` (a track key or a key sharing a main booktitle with a strong match: `track of conf/icse`, `shares booktitle "IMC" with conf/imc`), `lineage` (linked in `conf_dblp_lineage` to a strong match: `predecessor of conf/dsn`), `title` (its proceedings titles contain the CORE full title). `lineage` pairs are mostly real predecessors and successors; pairs from `related` or `title` alone are mostly workshops and namesakes. The method is a hint only: it never makes an accept or a reject on its own |
-| `conf_decision(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
+| `conf_candidate_rule(dblp_key, core_id, method, detail)` | proposals from `b_match.py` (Step 4a lists examples). `method` lists every rule that proposed the pair, and `detail` says what each one matched: `acronym` (series name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title: `acronym "icse"`), `related` (a track key or a key sharing a main booktitle with a strong match: `track of conf/icse`, `shares booktitle "IMC" with conf/imc`), `lineage` (linked in `conf_dblp_lineage` to a strong match: `predecessor of conf/dsn`), `title` (its proceedings titles contain the CORE full title). `lineage` pairs are mostly real predecessors and successors; pairs from `related` or `title` alone are mostly workshops and namesakes. The method is a hint only: it never makes an accept or a reject on its own |
+| `conf_candidate_ai(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
 | `conf_summary` | one summary row per series: acronym, years, number of volumes, top 5 booktitles with year spans, the 3 newest proceedings titles with paper counts |
 | `conf_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` CORE venues, `INVALID` decisions |
 | `conf_list` | final output; it stays empty while `conf_review` has any row |
@@ -110,7 +110,7 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
 ## 3. Writing decisions
 
 ```sql
-INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
+INSERT INTO conf_candidate_ai (core_id, dblp_key, verdict, reason) VALUES
  ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
   'Proceedings 1994-2025 "Selected Areas in Cryptography", Springer'),
  ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
@@ -127,7 +127,7 @@ INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
 
 - Refer to venues by `id` from `conf_review.core_id`, or by title sub-select as above. Titles are unique; ids are not stable across CORE reloads.
 - `reason` is one line of concrete evidence: the proceedings name and year span, the publisher, and the predecessor proof. "Proceedings" alone is not a reason.
-- **Reason tags** on the newest accepted series of a venue, appended with `UPDATE conf_decision SET reason = reason || '; …' WHERE id = ?`:
+- **Reason tags** on the newest accepted series of a venue, appended with `UPDATE conf_candidate_ai SET reason = reason || '; …' WHERE id = ?`:
   - `JOURNAL: since <year> in journals/<key>`: the main track moved into a mixed journal that cannot be accepted (§2).
   - `ENDED: last DBLP edition <year>`: you confirmed there is no later series anywhere. The series stopped, or DBLP stopped indexing it.
 - The database refuses:
@@ -148,7 +148,7 @@ INSERT INTO conf_decision (core_id, dblp_key, verdict, reason) VALUES
 
 ```sql
 SELECT issue, count(*) FROM conf_review GROUP BY issue;
-SELECT verdict, count(*) FROM conf_decision GROUP BY verdict;
+SELECT verdict, count(*) FROM conf_candidate_ai GROUP BY verdict;
 ```
 
 On a first run every candidate and every CORE venue is open. On a rerun after a new DBLP dump, CORE edition or matcher change, only the new pairs are open, but the audits in steps 4–7 always run in full.
@@ -188,7 +188,7 @@ WITH bt AS (
 SELECT h.core_id, v.rank, v.acronym, v.title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceedings_titles
 FROM hit h JOIN conf_core_venue v ON v.id = h.core_id JOIN conf_dblp_venue k ON k.dblp_key = h.dblp_key
 JOIN conf_summary e ON e.dblp_key = h.dblp_key
-WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = h.dblp_key
+WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = h.dblp_key
                   AND (d.core_id = h.core_id OR d.verdict = 'accept'))
 ORDER BY v.rank, v.acronym;
 ```
@@ -202,11 +202,11 @@ WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM conf_dblp_lin
               UNION SELECT successor_key, predecessor_key FROM conf_dblp_lineage)
 SELECT d.core_id, v.rank, v.acronym, v.title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
        e.proceedings_titles
-FROM conf_decision d JOIN link l ON l.a = d.dblp_key
+FROM conf_candidate_ai d JOIN link l ON l.a = d.dblp_key
 JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_dblp_venue k ON k.dblp_key = l.b
 JOIN conf_summary e ON e.dblp_key = l.b
 WHERE d.verdict = 'accept'
-  AND NOT EXISTS (SELECT 1 FROM conf_decision x WHERE x.dblp_key = l.b AND (x.core_id = d.core_id OR x.verdict = 'accept'))
+  AND NOT EXISTS (SELECT 1 FROM conf_candidate_ai x WHERE x.dblp_key = l.b AND (x.core_id = d.core_id OR x.verdict = 'accept'))
 ORDER BY v.rank, v.acronym;
 ```
 
@@ -223,7 +223,7 @@ SELECT v.id, v.rank, v.acronym, v.title,
        group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS series,
        max(k.last_year) AS newest
 FROM conf_core_venue v
-JOIN conf_decision d ON d.core_id = v.id AND d.verdict = 'accept'
+JOIN conf_candidate_ai d ON d.core_id = v.id AND d.verdict = 'accept'
 JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
 GROUP BY v.id
 HAVING newest < CAST(strftime('%Y', 'now') AS INTEGER) - 2
@@ -239,9 +239,9 @@ A venue can also stay active in DBLP while its main track left: its newest bookt
 
 ```sql
 SELECT d.id, v.acronym, v.title, d.dblp_key, d.reason, e.booktitles, e.proceedings_titles
-FROM conf_decision d JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
+FROM conf_candidate_ai d JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept'
-  AND NOT EXISTS (SELECT 1 FROM conf_candidate c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
+  AND NOT EXISTS (SELECT 1 FROM conf_candidate_rule c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
 ```
 
 **Step 7. Audit every `absent`.** Re-run the Step 3 searches, including the journal streams and Wikidata, for each `absent` venue. DBLP adds venues over time.

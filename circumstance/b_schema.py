@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS conf_dblp_lineage (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS conf_dblp_lineage_successor ON conf_dblp_lineage (successor_key);
 
-CREATE TABLE IF NOT EXISTS conf_candidate (
+CREATE TABLE IF NOT EXISTS conf_candidate_rule (
     dblp_key          TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
     core_id           INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
     method            TEXT NOT NULL CHECK (method <> '' AND trim(replace(replace(replace(replace(
@@ -55,9 +55,9 @@ CREATE TABLE IF NOT EXISTS conf_candidate (
     detail            TEXT NOT NULL,
     PRIMARY KEY (dblp_key, core_id)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS conf_candidate_core ON conf_candidate (core_id);
+CREATE INDEX IF NOT EXISTS conf_candidate_rule_core ON conf_candidate_rule (core_id);
 
-CREATE TABLE IF NOT EXISTS conf_decision (
+CREATE TABLE IF NOT EXISTS conf_candidate_ai (
     id         INTEGER PRIMARY KEY,
     core_id    INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES conf_dblp_venue ON DELETE CASCADE,
@@ -66,22 +66,22 @@ CREATE TABLE IF NOT EXISTS conf_decision (
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK ((verdict = 'absent') = (dblp_key IS NULL))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS conf_decision_pair ON conf_decision (dblp_key, core_id) WHERE dblp_key IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS conf_decision_one_venue_per_key ON conf_decision (dblp_key) WHERE verdict = 'accept';
-CREATE UNIQUE INDEX IF NOT EXISTS conf_decision_one_absent ON conf_decision (core_id) WHERE verdict = 'absent';
-CREATE INDEX IF NOT EXISTS conf_decision_core ON conf_decision (core_id);
+CREATE UNIQUE INDEX IF NOT EXISTS conf_candidate_ai_pair ON conf_candidate_ai (dblp_key, core_id) WHERE dblp_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS conf_candidate_ai_one_venue_per_key ON conf_candidate_ai (dblp_key) WHERE verdict = 'accept';
+CREATE UNIQUE INDEX IF NOT EXISTS conf_candidate_ai_one_absent ON conf_candidate_ai (core_id) WHERE verdict = 'absent';
+CREATE INDEX IF NOT EXISTS conf_candidate_ai_core ON conf_candidate_ai (core_id);
 
-CREATE TRIGGER IF NOT EXISTS conf_decision_accept_vs_absent_ins BEFORE INSERT ON conf_decision
+CREATE TRIGGER IF NOT EXISTS conf_candidate_ai_accept_vs_absent_ins BEFORE INSERT ON conf_candidate_ai
 WHEN EXISTS (
-    SELECT 1 FROM conf_decision d WHERE d.core_id = NEW.core_id
+    SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = NEW.core_id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
 BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 
-CREATE TRIGGER IF NOT EXISTS conf_decision_accept_vs_absent_upd BEFORE UPDATE ON conf_decision
+CREATE TRIGGER IF NOT EXISTS conf_candidate_ai_accept_vs_absent_upd BEFORE UPDATE ON conf_candidate_ai
 WHEN EXISTS (
-    SELECT 1 FROM conf_decision d WHERE d.core_id = NEW.core_id AND d.id <> NEW.id
+    SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = NEW.core_id AND d.id <> NEW.id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
@@ -105,27 +105,27 @@ CREATE VIEW conf_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.title AS core_title, v.acronym, v.rank,
        c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.booktitles, e.proceedings_titles
-FROM conf_candidate c
+FROM conf_candidate_rule c
 JOIN conf_core_venue v ON v.id = c.core_id
 JOIN conf_summary e ON e.dblp_key = c.dblp_key
-WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
+WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, v.id, v.title, v.acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_core_venue v
-WHERE NOT EXISTS (SELECT 1 FROM conf_decision d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
+WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.core_id, NULL, NULL, NULL,
-       NULL, 'conf_decision ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
+       NULL, 'conf_candidate_ai ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
        NULL, NULL, NULL, NULL, NULL
-FROM conf_decision d
+FROM conf_candidate_ai d
 WHERE NOT EXISTS (SELECT 1 FROM conf_core_venue v WHERE v.id = d.core_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM conf_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
 DROP VIEW IF EXISTS conf_list;
 CREATE VIEW conf_list AS
 SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.title, v.rank AS ranking
-FROM conf_decision d
+FROM conf_candidate_ai d
 JOIN conf_core_venue v ON v.id = d.core_id
 JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
@@ -192,16 +192,16 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
     PRIMARY KEY (dblp_key, prefix)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS journal_candidate (
+CREATE TABLE IF NOT EXISTS journal_candidate_rule (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     scopus_id   INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('dblp', 'crossref', 'lineage', 'name')),
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, scopus_id)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS journal_candidate_scopus ON journal_candidate (scopus_id);
+CREATE INDEX IF NOT EXISTS journal_candidate_rule_scopus ON journal_candidate_rule (scopus_id);
 
-CREATE TABLE IF NOT EXISTS journal_decision (
+CREATE TABLE IF NOT EXISTS journal_candidate_ai (
     id         INTEGER PRIMARY KEY,
     scopus_id     INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES journal_dblp_venue ON DELETE CASCADE,
@@ -210,22 +210,22 @@ CREATE TABLE IF NOT EXISTS journal_decision (
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK ((verdict = 'absent') = (dblp_key IS NULL))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_pair ON journal_decision (dblp_key, scopus_id) WHERE dblp_key IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_journal_per_key ON journal_decision (dblp_key) WHERE verdict = 'accept';
-CREATE UNIQUE INDEX IF NOT EXISTS journal_decision_one_absent ON journal_decision (scopus_id) WHERE verdict = 'absent';
-CREATE INDEX IF NOT EXISTS journal_decision_scopus ON journal_decision (scopus_id);
+CREATE UNIQUE INDEX IF NOT EXISTS journal_candidate_ai_pair ON journal_candidate_ai (dblp_key, scopus_id) WHERE dblp_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS journal_candidate_ai_one_journal_per_key ON journal_candidate_ai (dblp_key) WHERE verdict = 'accept';
+CREATE UNIQUE INDEX IF NOT EXISTS journal_candidate_ai_one_absent ON journal_candidate_ai (scopus_id) WHERE verdict = 'absent';
+CREATE INDEX IF NOT EXISTS journal_candidate_ai_scopus ON journal_candidate_ai (scopus_id);
 
-CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_ins BEFORE INSERT ON journal_decision
+CREATE TRIGGER IF NOT EXISTS journal_candidate_ai_accept_vs_absent_ins BEFORE INSERT ON journal_candidate_ai
 WHEN EXISTS (
-    SELECT 1 FROM journal_decision d WHERE d.scopus_id = NEW.scopus_id
+    SELECT 1 FROM journal_candidate_ai d WHERE d.scopus_id = NEW.scopus_id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
 BEGIN SELECT RAISE(ABORT, 'Scopus journal cannot be both accepted and absent'); END;
 
-CREATE TRIGGER IF NOT EXISTS journal_decision_accept_vs_absent_upd BEFORE UPDATE ON journal_decision
+CREATE TRIGGER IF NOT EXISTS journal_candidate_ai_accept_vs_absent_upd BEFORE UPDATE ON journal_candidate_ai
 WHEN EXISTS (
-    SELECT 1 FROM journal_decision d WHERE d.scopus_id = NEW.scopus_id AND d.id <> NEW.id
+    SELECT 1 FROM journal_candidate_ai d WHERE d.scopus_id = NEW.scopus_id AND d.id <> NEW.id
       AND ((NEW.verdict = 'accept' AND d.verdict = 'absent')
         OR (NEW.verdict = 'absent' AND d.verdict = 'accept'))
 )
@@ -255,20 +255,20 @@ CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, s.coverage, c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.doi_prefixes
-FROM journal_candidate c
+FROM journal_candidate_rule c
 JOIN journal_scopus_venue s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
-WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile, s.coverage,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_scopus_venue s
-WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
+WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
-       NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
+       NULL, 'journal_candidate_ai ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM journal_decision d
+FROM journal_candidate_ai d
 WHERE NOT EXISTS (SELECT 1 FROM journal_scopus_venue s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
@@ -278,7 +278,7 @@ SELECT d.dblp_key,
        (SELECT name FROM journal_dblp_name n WHERE n.dblp_key = d.dblp_key
          ORDER BY last_year DESC, papers DESC, name LIMIT 1) AS dblp_name,
        s.title, s.issn_1, s.issn_2, s.quartile
-FROM journal_decision d
+FROM journal_candidate_ai d
 JOIN journal_scopus_venue s ON s.id = d.scopus_id
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
