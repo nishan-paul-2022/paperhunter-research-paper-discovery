@@ -58,17 +58,17 @@ def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
             rows.append((r["Title"].strip(), r["Acronym"].strip(), rank))
     duplicates = [t for t, n in Counter(t for t, _, _ in rows).items() if n > 1]
     if duplicates:
-        sys.exit(f"Duplicate CORE titles: {duplicates}")
+        sys.exit(f"Duplicate core_title values: {duplicates}")
     with conn:
         conn.executemany(
-            "INSERT INTO conf_core_venue (title, acronym, rank) VALUES (?, ?, ?) "
-            "ON CONFLICT (title) DO UPDATE SET acronym = excluded.acronym, rank = excluded.rank",
+            "INSERT INTO conf_core_venue (core_title, acronym, rank) VALUES (?, ?, ?) "
+            "ON CONFLICT (core_title) DO UPDATE SET acronym = excluded.acronym, rank = excluded.rank",
             rows,
         )
-        conn.execute("CREATE TEMP TABLE core_titles (title TEXT PRIMARY KEY)")
+        conn.execute("CREATE TEMP TABLE core_titles (core_title TEXT PRIMARY KEY)")
         conn.executemany("INSERT INTO core_titles VALUES (?)", [(t,) for t, _, _ in rows])
         removed = conn.execute(
-            "DELETE FROM conf_core_venue WHERE title NOT IN (SELECT title FROM core_titles)"
+            "DELETE FROM conf_core_venue WHERE core_title NOT IN (SELECT core_title FROM core_titles)"
         ).rowcount
         conn.execute("DROP TABLE core_titles")
     print(f"  ✓  {len(rows)} CORE venues  |  {dropped} rows outside A*–C skipped  |  {removed} removed\n")
@@ -96,7 +96,7 @@ def scan_xml(xml_path: Path):
     seen = 0
     papers: Counter = Counter()
     years: dict[str, tuple[int, int]] = {}
-    booktitles: dict[str, Counter] = defaultdict(Counter)
+    book_titles: dict[str, Counter] = defaultdict(Counter)
     bt_years: dict[tuple[str, str], tuple[int, int]] = {}
     crossrefs: Counter = Counter()
     proceedings: dict[str, tuple[str, int, str, str | None]] = {}
@@ -132,16 +132,16 @@ def scan_xml(xml_path: Path):
                 streams = []
                 if el.tag == "proceedings" and parts[0] == "conf":
                     title_el = el.find("title")
-                    title = " ".join("".join(title_el.itertext()).split()) if title_el is not None else ""
-                    if title:
+                    proceeding_title = " ".join("".join(title_el.itertext()).split()) if title_el is not None else ""
+                    if proceeding_title:
                         publisher = " ".join((el.findtext("publisher") or "").split()) or None
-                        proceedings[key] = (prefix, year, title, publisher)
-            for stream, booktitle in streams:
+                        proceedings[key] = (prefix, year, proceeding_title, publisher)
+            for stream, book_title in streams:
                 papers[stream] += 1
                 widen(years, stream, year)
-                if booktitle:
-                    booktitles[stream][booktitle] += 1
-                    widen(bt_years, (stream, booktitle), year)
+                if book_title:
+                    book_titles[stream][book_title] += 1
+                    widen(bt_years, (stream, book_title), year)
         if seen % 500_000 == 0:
             pct = f.tell() * 100 // size
             print(f"  {pct:3}%  |  records scanned: {seen:,}  |  venue keys: {len(papers):,}", end="\r", flush=True)
@@ -151,14 +151,14 @@ def scan_xml(xml_path: Path):
     f.close()
     print(f"  100%  |  records scanned: {seen:,}  |  venue keys: {len(papers):,}")
     venues = [(k, venue_acronym(k), n, *years.get(k, (None, None))) for k, n in papers.items()]
-    bts = [(k, b, n, *bt_years.get((k, b), (None, None))) for k in papers for b, n in booktitles[k].items()]
+    bts = [(k, b, n, *bt_years.get((k, b), (None, None))) for k in papers for b, n in book_titles[k].items()]
     pts = [(k, pk, y, t, p, crossrefs[pk]) for pk, (k, y, t, p) in proceedings.items() if k in papers]
     return venues, bts, pts
 
 
 def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 2 – DBLP evidence → conf_dblp_venue, conf_dblp_booktitle, conf_dblp_title")
+    print("  Phase 2 – DBLP evidence → conf_dblp_venue, conf_dblp_book_title, conf_dblp_proceeding_title")
     print("━" * 70)
     print(f"  Scanning {xml_path.name}  ({xml_path.stat().st_size // 1_000_000} MB, ~20–30 min)\n")
     venues, bts, pts = scan_xml(xml_path)
@@ -175,20 +175,20 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
             "DELETE FROM conf_dblp_venue WHERE dblp_key NOT IN (SELECT dblp_key FROM scanned)"
         ).rowcount
         conn.execute("DROP TABLE scanned")
-        conn.execute("DELETE FROM conf_dblp_booktitle")
-        conn.execute("DELETE FROM conf_dblp_title")
+        conn.execute("DELETE FROM conf_dblp_book_title")
+        conn.execute("DELETE FROM conf_dblp_proceeding_title")
         conn.executemany(
-            "INSERT INTO conf_dblp_booktitle (dblp_key, booktitle, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO conf_dblp_book_title (dblp_key, book_title, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?)",
             bts,
         )
         conn.executemany(
-            "INSERT INTO conf_dblp_title (dblp_key, proc_key, year, title, publisher, papers) "
+            "INSERT INTO conf_dblp_proceeding_title (dblp_key, proceeding_key, year, proceeding_title, publisher, papers) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             pts,
         )
     kinds = Counter("stream" if "#" in v[0] else v[0].split("/")[0] for v in venues)
     print(f"\n  ✓  {kinds['conf']:,} conf keys  |  {kinds['journals']:,} journals  |  {kinds['stream']:,} journal "
-          f"issue streams  |  {len(bts):,} booktitles  |  {len(pts):,} proceedings  |  {removed} keys removed\n")
+          f"issue streams  |  {len(bts):,} book_titles  |  {len(pts):,} proceeding_titles  |  {removed} keys removed\n")
 
 
 def dblp_sparql(query: str) -> list[dict] | None:

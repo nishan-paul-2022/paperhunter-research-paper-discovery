@@ -7,10 +7,10 @@ DB_PATH = Path(__file__).resolve().parent.parent / "archive" / "paperhunter.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conf_core_venue (
-    id      INTEGER PRIMARY KEY,
-    title   TEXT NOT NULL UNIQUE,
-    acronym TEXT NOT NULL,
-    rank    TEXT NOT NULL CHECK (rank IN ('A*', 'A', 'B', 'C'))
+    id         INTEGER PRIMARY KEY,
+    core_title TEXT NOT NULL UNIQUE,
+    acronym    TEXT NOT NULL,
+    rank       TEXT NOT NULL CHECK (rank IN ('A*', 'A', 'B', 'C'))
 );
 
 CREATE TABLE IF NOT EXISTS conf_dblp_venue (
@@ -21,24 +21,24 @@ CREATE TABLE IF NOT EXISTS conf_dblp_venue (
     last_year  INTEGER
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS conf_dblp_booktitle (
+CREATE TABLE IF NOT EXISTS conf_dblp_book_title (
     dblp_key   TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
-    booktitle  TEXT NOT NULL,
+    book_title TEXT NOT NULL,
     papers     INTEGER NOT NULL,
     first_year INTEGER,
     last_year  INTEGER,
-    PRIMARY KEY (dblp_key, booktitle)
+    PRIMARY KEY (dblp_key, book_title)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS conf_dblp_title (
-    dblp_key  TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
-    proc_key  TEXT PRIMARY KEY,
-    year      INTEGER NOT NULL,
-    title     TEXT NOT NULL,
-    publisher TEXT,
-    papers    INTEGER NOT NULL
+CREATE TABLE IF NOT EXISTS conf_dblp_proceeding_title (
+    dblp_key         TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
+    proceeding_key   TEXT PRIMARY KEY,
+    year             INTEGER NOT NULL,
+    proceeding_title TEXT NOT NULL,
+    publisher        TEXT,
+    papers           INTEGER NOT NULL
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS conf_dblp_title_key ON conf_dblp_title (dblp_key, year);
+CREATE INDEX IF NOT EXISTS conf_dblp_proceeding_title_key ON conf_dblp_proceeding_title (dblp_key, year);
 
 CREATE TABLE IF NOT EXISTS conf_dblp_lineage (
     predecessor_key TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
@@ -90,27 +90,27 @@ BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 DROP VIEW IF EXISTS conf_summary;
 CREATE VIEW conf_summary AS
 SELECT v.dblp_key, v.acronym, v.papers, v.first_year, v.last_year,
-       (SELECT count(*) FROM conf_dblp_title WHERE dblp_key = v.dblp_key) AS volumes,
-       (SELECT group_concat(b.booktitle || ' (' || b.papers || ', ' || coalesce(b.first_year, '?') || '-'
+       (SELECT count(*) FROM conf_dblp_proceeding_title WHERE dblp_key = v.dblp_key) AS volumes,
+       (SELECT group_concat(b.book_title || ' (' || b.papers || ', ' || coalesce(b.first_year, '?') || '-'
                             || coalesce(b.last_year, '?') || ')', ' | ')
-          FROM (SELECT booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE dblp_key = v.dblp_key
-                ORDER BY papers DESC, booktitle LIMIT 5) b) AS booktitles,
-       (SELECT group_concat(p.title || ' (' || p.papers || ' papers)', ' | ')
-          FROM (SELECT title, papers FROM conf_dblp_title WHERE dblp_key = v.dblp_key
-                ORDER BY year DESC, title DESC LIMIT 3) p) AS proceedings_titles
+          FROM (SELECT book_title, papers, first_year, last_year FROM conf_dblp_book_title WHERE dblp_key = v.dblp_key
+                ORDER BY papers DESC, book_title LIMIT 5) b) AS book_titles,
+       (SELECT group_concat(p.proceeding_title || ' (' || p.papers || ' papers)', ' | ')
+          FROM (SELECT proceeding_title, papers FROM conf_dblp_proceeding_title WHERE dblp_key = v.dblp_key
+                ORDER BY year DESC, proceeding_title DESC LIMIT 3) p) AS proceeding_titles
 FROM conf_dblp_venue v;
 
 DROP VIEW IF EXISTS conf_review;
 CREATE VIEW conf_review AS
-SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.title AS core_title, v.acronym, v.rank,
+SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.core_title, v.acronym, v.rank,
        c.method, c.detail,
-       e.papers, e.first_year, e.last_year, e.booktitles, e.proceedings_titles
+       e.papers, e.first_year, e.last_year, e.book_titles, e.proceeding_titles
 FROM conf_candidate_rule c
 JOIN conf_core_venue v ON v.id = c.core_id
 JOIN conf_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
-SELECT 'UNCOVERED', NULL, v.id, v.title, v.acronym, v.rank,
+SELECT 'UNCOVERED', NULL, v.id, v.core_title, v.acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_core_venue v
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
@@ -124,13 +124,13 @@ WHERE NOT EXISTS (SELECT 1 FROM conf_core_venue v WHERE v.id = d.core_id)
 
 DROP VIEW IF EXISTS conf_list;
 CREATE VIEW conf_list AS
-SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.title, v.rank AS ranking
+SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.core_title, v.rank AS ranking
 FROM conf_candidate_ai d
 JOIN conf_core_venue v ON v.id = d.core_id
 JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
-         lower(v.title), d.dblp_key;
+         lower(v.core_title), d.dblp_key;
 
 CREATE TABLE IF NOT EXISTS journal_scopus_venue (
     id        INTEGER PRIMARY KEY,

@@ -24,22 +24,22 @@ A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 
 | object | what it holds |
 |---|---|
-| `conf_core_venue(id, title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
+| `conf_core_venue(id, core_title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The core_title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
 | `conf_dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | one row per series. `acronym` is the key name or the issue label; `papers` and years cover its papers |
-| `conf_dblp_booktitle(dblp_key, booktitle, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
-| `conf_dblp_title(dblp_key, proc_key, year, title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
+| `conf_dblp_book_title(dblp_key, book_title, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
+| `conf_dblp_proceeding_title(dblp_key, proceeding_key, year, proceeding_title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full proceeding_title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
 | `conf_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between series (from `sparql.dblp.org`): renames, mergers, new keys (`conf/ftcs` → `conf/dsn`, `conf/wcre` and `conf/csmr` → `conf/saner`, `conf/atal` → `conf/ifaamas`). Authoritative where present, but DBLP records links for only a few hundred series: a missing link proves nothing |
-| `conf_candidate_rule(dblp_key, core_id, method, detail)` | proposals from `b_match.py` (Step 4a lists examples). `method` lists every rule that proposed the pair, and `detail` says what each one matched: `acronym` (series name, booktitle, journal name or edition acronym equals the CORE acronym or a former acronym from the CORE title: `acronym "icse"`), `related` (a track key or a key sharing a main booktitle with a strong match: `track of conf/icse`, `shares booktitle "IMC" with conf/imc`), `lineage` (linked in `conf_dblp_lineage` to a strong match: `predecessor of conf/dsn`), `title` (its proceedings titles contain the CORE full title). `lineage` pairs are mostly real predecessors and successors; pairs from `related` or `title` alone are mostly workshops and namesakes. The method is a hint only: it never makes an accept or a reject on its own |
+| `conf_candidate_rule(dblp_key, core_id, method, detail)` | proposals from `b_match.py` (Step 4a lists examples). `method` lists every rule that proposed the pair, and `detail` says what each one matched: `acronym` (series name, book_title, journal name or edition acronym equals the CORE acronym or a former acronym from the core_title: `acronym "icse"`), `related` (a track key or a key sharing a main book_title with a strong match: `track of conf/icse`, `shares book_title "IMC" with conf/imc`), `lineage` (linked in `conf_dblp_lineage` to a strong match: `predecessor of conf/dsn`), `title` (its proceeding_titles contain the core_title). `lineage` pairs are mostly real predecessors and successors; pairs from `related` or `title` alone are mostly workshops and namesakes. The method is a hint only: it never makes an accept or a reject on its own |
 | `conf_candidate_ai(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
-| `conf_summary` | one summary row per series: acronym, years, number of volumes, top 5 booktitles with year spans, the 3 newest proceedings titles with paper counts |
+| `conf_summary` | one summary row per series: acronym, years, number of volumes, top 5 book_titles with year spans, the 3 newest proceeding_titles with paper counts |
 | `conf_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` CORE venues, `INVALID` decisions |
 | `conf_list` | final output; it stays empty while `conf_review` has any row |
 
 Look at a series' whole history before deciding, not just `conf_summary`:
 
 ```sql
-SELECT year, proc_key, title, publisher, papers FROM conf_dblp_title WHERE dblp_key = 'conf/x' ORDER BY year;
-SELECT booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE dblp_key = 'conf/x' ORDER BY papers DESC;
+SELECT year, proceeding_key, proceeding_title, publisher, papers FROM conf_dblp_proceeding_title WHERE dblp_key = 'conf/x' ORDER BY year;
+SELECT book_title, papers, first_year, last_year FROM conf_dblp_book_title WHERE dblp_key = 'conf/x' ORDER BY papers DESC;
 SELECT * FROM conf_dblp_venue WHERE dblp_key = 'conf/x';
 SELECT * FROM conf_dblp_lineage WHERE 'conf/x' IN (predecessor_key, successor_key);
 ```
@@ -57,7 +57,7 @@ Then check these sources:
 
 **Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.
 
-If `conf_dblp_venue` has no `acronym` column, `conf_dblp_title` has no `proc_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py`, then `conference-hunter/a_extract.py`, then `conference-hunter/b_match.py`.
+If `conf_dblp_venue` has no `acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py`, then `conference-hunter/a_extract.py`, then `conference-hunter/b_match.py`.
 
 ---
 
@@ -66,9 +66,9 @@ If `conf_dblp_venue` has no `acronym` column, `conf_dblp_title` has no `proc_key
 The unit is the **whole series**. Accept series `S` for venue `V` only when `S` is `V`'s own proceedings, meaning the bulk of `S`'s volumes or issues are proceedings of `V`'s own event under its current or a former name.
 
 **Accept**
-- The proceedings titles name `V` itself.
+- The proceeding_titles name `V` itself.
 - A predecessor or successor series of `V` (rename, merger, takeover). It must be backed by at least one of:
-  - the CORE title (`was`, `previously`, `merger of`, `combined`);
+  - the core_title (`was`, `previously`, `merger of`, `combined`);
   - a `conf_dblp_lineage` link between the two;
   - continuous edition numbering ("15th" follows "14th") or an explicit statement on the conference site.
 
@@ -80,13 +80,13 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
     - `journals/pacmse#FSE`, `#ISSTA`
     - `journals/pacmhci#CSCW`, `#MHCI`, `#CHI PLAY`, …
     - `journals/pacmnet#CoNEXT`
-  - **Whole journals that are entirely one conference's proceedings:** `journals/pvldb` (VLDB), `journals/popets` (PETS), `journals/tches` (CHES), `journals/tosc` (FSE crypto), `journals/pomacs` (SIGMETRICS). Verify each from its proceedings titles and the journal's own site.
-- A key that holds a **track of `V`'s own event** split out by DBLP. Example: `conf/icse-seip`, whose title is "International Conference on Software Engineering: Software Engineering in Practice". The main key already counts the same tracks in other years.
+  - **Whole journals that are entirely one conference's proceedings:** `journals/pvldb` (VLDB), `journals/popets` (PETS), `journals/tches` (CHES), `journals/tosc` (FSE crypto), `journals/pomacs` (SIGMETRICS). Verify each from its proceeding_titles and the journal's own site.
+- A key that holds a **track of `V`'s own event** split out by DBLP. Example: `conf/icse-seip`, whose proceeding_title is "International Conference on Software Engineering: Software Engineering in Practice". The main key already counts the same tracks in other years.
 - `V`'s companion, Findings, workshop or poster volumes **inside `V`'s own key**. These count with the key; you cannot split a series.
 
 **Reject**
-- **Namesakes**: another conference with the same acronym. Decide by full title and publisher, never by acronym.
-- **Separate events held with `V`**, even when the title mentions `V`. This covers co-located workshops and symposia with their own name and edition count (`conf/forge` and `conf/mobilesoft` at ICSE; `conf/ecom` "co-located with SIGIR").
+- **Namesakes**: another conference with the same acronym. Decide by proceeding_title and publisher, never by acronym.
+- **Separate events held with `V`**, even when the proceeding_title mentions `V`. This covers co-located workshops and symposia with their own name and edition count (`conf/forge` and `conf/mobilesoft` at ICSE; `conf/ecom` "co-located with SIGIR").
 - **Regional or national spin-offs**: `conf/sigir-ap` (SIGIR Asia-Pacific), `conf/dcscw` (German CSCW).
 - **Umbrella or federated keys** whose volumes are mostly other venues: `conf/visigrapp`, and the Springer SCF series (`conf/icws2`, `conf/cloud2`, `conf/bigdata2`, `conf/services2`).
 - **Keys where `V` is only a minority partner**, joint for a few years: `conf/ram` (CIS joint only since 2015), `conf/imagapp`.
@@ -103,7 +103,7 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
 
 **One series → at most one venue.** If a series plausibly fits two CORE venues, accept the one it actually is and reject the other with the reason.
 
-**`absent`** means `V` has **no DBLP series of its own**. Use it only after the search in §4 step 3 finds nothing. If `V`'s papers sit inside another venue's key, it is still `absent`, and the reason must point there: `papers indexed inside conf/ic3k (booktitle KEOD)`.
+**`absent`** means `V` has **no DBLP series of its own**. Use it only after the search in §4 step 3 finds nothing. If `V`'s papers sit inside another venue's key, it is still `absent`, and the reason must point there: `papers indexed inside conf/ic3k (book_title KEOD)`.
 
 ---
 
@@ -111,11 +111,11 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
 
 ```sql
 INSERT INTO conf_candidate_ai (core_id, dblp_key, verdict, reason) VALUES
- ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
+ ((SELECT id FROM conf_core_venue WHERE core_title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
   'Proceedings 1994-2025 "Selected Areas in Cryptography", Springer'),
- ((SELECT id FROM conf_core_venue WHERE title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
+ ((SELECT id FROM conf_core_venue WHERE core_title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
   'ACM/SIGAPP Symposium on Applied Computing, namesake'),
- ((SELECT id FROM conf_core_venue WHERE title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
+ ((SELECT id FROM conf_core_venue WHERE core_title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
   'No series of its own; papers inside conf/miccai (SASHIMI@MICCAI); Wikidata: no DBLP series');
 ```
 
@@ -125,7 +125,7 @@ INSERT INTO conf_candidate_ai (core_id, dblp_key, verdict, reason) VALUES
 | `reject` | the series | the series is not this venue. Record every pair you examined and turned down, so later runs do not re-examine it |
 | `absent` | `NULL` | the venue has no DBLP series of its own |
 
-- Refer to venues by `id` from `conf_review.core_id`, or by title sub-select as above. Titles are unique; ids are not stable across CORE reloads.
+- Refer to venues by `id` from `conf_review.core_id`, or by core_title sub-select as above. core_title values are unique; ids are not stable across CORE reloads.
 - `reason` is one line of concrete evidence: the proceedings name and year span, the publisher, and the predecessor proof. "Proceedings" alone is not a reason.
 - **Reason tags** on the newest accepted series of a venue, appended with `UPDATE conf_candidate_ai SET reason = reason || '; …' WHERE id = ?`:
   - `JOURNAL: since <year> in journals/<key>`: the main track moved into a mixed journal that cannot be accepted (§2).
@@ -158,14 +158,14 @@ On a first run every candidate and every CORE venue is open. On a rerun after a 
 **Step 2. `UNREVIEWED`** (`dblp_key` → `core_title`). Apply §2 to the series' full history and write `accept` or `reject`. A series with several candidates gets at most one `accept`. Expect most of these rows to be namesakes.
 
 **Step 3. `UNCOVERED`** (no accepted series and no `absent` row). Run all of these searches before concluding anything:
-1. The acronym, every former acronym and every former name from the CORE title, in series names, booktitles and proceedings titles:
+1. The acronym, every former acronym and every former name from the core_title, in series names, book_titles and proceeding_titles:
 
    ```sql
    SELECT dblp_key, acronym, papers, first_year, last_year FROM conf_dblp_venue WHERE acronym LIKE '%abc%';
-   SELECT dblp_key, booktitle, papers, first_year, last_year FROM conf_dblp_booktitle WHERE booktitle LIKE '%ABC%';
-   SELECT dblp_key, year, title, publisher FROM conf_dblp_title WHERE title LIKE '%Distinctive Words%';
+   SELECT dblp_key, book_title, papers, first_year, last_year FROM conf_dblp_book_title WHERE book_title LIKE '%ABC%';
+   SELECT dblp_key, year, proceeding_title, publisher FROM conf_dblp_proceeding_title WHERE proceeding_title LIKE '%Distinctive Words%';
    ```
-2. Distinctive words of the full title, which catches venues that DBLP files under an unexpected key (`conf/uss` for USENIX Security, `conf/mm` for ACM Multimedia, `conf/si3d` for I3D).
+2. Distinctive words of the core_title, which catches venues that DBLP files under an unexpected key (`conf/uss` for USENIX Security, `conf/mm` for ACM Multimedia, `conf/si3d` for I3D).
 3. The journal issue streams: `SELECT * FROM conf_dblp_venue WHERE dblp_key LIKE 'journals/%#%'`.
 4. `conf_dblp_lineage` for every series found so far, Wikidata (§1) and the conference website.
 
@@ -173,19 +173,19 @@ Accept every series you find (§2); reject the near misses you examined. Only if
 
 **Step 4. Sweeps. Each must end at 0 rows.**
 
-4a. Missed series. These are undecided series whose acronym, or whose non-workshop booktitle, equals a CORE acronym. Most rows are namesakes: write a `reject` for each. Real ones get an `accept`.
+4a. Missed series. These are undecided series whose acronym, or whose non-workshop book_title, equals a CORE acronym. Most rows are namesakes: write a `reject` for each. Real ones get an `accept`.
 
 ```sql
 WITH bt AS (
-  SELECT dblp_key, lower(trim(CASE WHEN instr(booktitle, ' (') > 0
-           THEN substr(booktitle, 1, instr(booktitle, ' (') - 1) ELSE booktitle END)) AS b
-  FROM conf_dblp_booktitle WHERE booktitle NOT LIKE '%@%'
+  SELECT dblp_key, lower(trim(CASE WHEN instr(book_title, ' (') > 0
+           THEN substr(book_title, 1, instr(book_title, ' (') - 1) ELSE book_title END)) AS b
+  FROM conf_dblp_book_title WHERE book_title NOT LIKE '%@%'
 ), hit AS (
   SELECT v.id AS core_id, k.dblp_key FROM conf_core_venue v JOIN conf_dblp_venue k ON lower(k.acronym) = lower(v.acronym)
   UNION
   SELECT v.id, bt.dblp_key FROM conf_core_venue v JOIN bt ON bt.b = lower(v.acronym)
 )
-SELECT h.core_id, v.rank, v.acronym, v.title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceedings_titles
+SELECT h.core_id, v.rank, v.acronym, v.core_title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceeding_titles
 FROM hit h JOIN conf_core_venue v ON v.id = h.core_id JOIN conf_dblp_venue k ON k.dblp_key = h.dblp_key
 JOIN conf_summary e ON e.dblp_key = h.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = h.dblp_key
@@ -193,15 +193,15 @@ WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = h.dblp_ke
 ORDER BY v.rank, v.acronym;
 ```
 
-Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides acronym matches, the matcher proposes track keys named after a matched key (`conf/icse-seip`), keys that share a main booktitle with one (`conf/imw` IMC, `conf/ssspr` S+SSPR, `conf/symsac` SYMSAC), keys whose proceedings titles contain the CORE full title (`conf/fpca`), and keys that `conf_dblp_lineage` links to a matched key (`conf/ftcs` for DSN, `conf/csmr` for SANER). Most are workshops and namesakes. Real ones need predecessor proof (§2). A row can name the wrong venue: `conf/agents` surfaces under EMAS, but it is AAMAS's predecessor. Decide by what the series is, not by the row's venue.
+Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides acronym matches, the matcher proposes track keys named after a matched key (`conf/icse-seip`), keys that share a main book_title with one (`conf/imw` IMC, `conf/ssspr` S+SSPR, `conf/symsac` SYMSAC), keys whose proceeding_titles contain the core_title (`conf/fpca`), and keys that `conf_dblp_lineage` links to a matched key (`conf/ftcs` for DSN, `conf/csmr` for SANER). Most are workshops and namesakes. Real ones need predecessor proof (§2). A row can name the wrong venue: `conf/agents` surfaces under EMAS, but it is AAMAS's predecessor. Decide by what the series is, not by the row's venue.
 
 4b. Linked series. These are series that DBLP links as predecessor or successor of an accepted series, with no decision for that venue. Most are real predecessors or mergers (FTCS → DSN, METRICS and ISESE → ESEM, CSMR → SANER, SoftVis → VISSOFT, PARLE → Euro-Par): accept them as in §2. Reject the rest with the reason (a workshop DBLP links to its parent, a minority partner of a merger).
 
 ```sql
 WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM conf_dblp_lineage
               UNION SELECT successor_key, predecessor_key FROM conf_dblp_lineage)
-SELECT d.core_id, v.rank, v.acronym, v.title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
-       e.proceedings_titles
+SELECT d.core_id, v.rank, v.acronym, v.core_title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
+       e.proceeding_titles
 FROM conf_candidate_ai d JOIN link l ON l.a = d.dblp_key
 JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_dblp_venue k ON k.dblp_key = l.b
 JOIN conf_summary e ON e.dblp_key = l.b
@@ -219,7 +219,7 @@ ORDER BY v.rank, v.acronym;
 Then accept the new series, or tag the newest accepted series with `JOURNAL:` or `ENDED:`.
 
 ```sql
-SELECT v.id, v.rank, v.acronym, v.title,
+SELECT v.id, v.rank, v.acronym, v.core_title,
        group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS series,
        max(k.last_year) AS newest
 FROM conf_core_venue v
@@ -231,14 +231,14 @@ HAVING newest < CAST(strftime('%Y', 'now') AS INTEGER) - 2
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END, newest;
 ```
 
-A venue can also stay active in DBLP while its main track left: its newest booktitles are only `Companion`, `Abstracts`, `Workshops`, `Posters` or `X@Y`. Check that with `conf_dblp_booktitle` year spans and `conf_dblp_title` paper counts. Find where the main track went, then accept its journal series or add the `JOURNAL:` tag.
+A venue can also stay active in DBLP while its main track left: its newest book_titles are only `Companion`, `Abstracts`, `Workshops`, `Posters` or `X@Y`. Check that with `conf_dblp_book_title` year spans and `conf_dblp_proceeding_title` paper counts. Find where the main track went, then accept its journal series or add the `JOURNAL:` tag.
 
 **Step 5. Venue history for A\* and A venues.** Renames with no shared words escape every query: LFP and FPCA→ICFP, SAIG and GCSE→GPCE, EWSA→ECSA, PSTV→FORTE, RANDOM→APPROX/RANDOM, InfoVis→IEEE VIS. For each A\* and A venue, look up its history on the conference site, its "previous editions" page or the proceedings front matter. Run the Step 3 searches on every former name you find, then accept or reject each series as in §2.
 
 **Step 6. Audit accepts the matcher never proposed.** These were found by hand, so they carry the highest false-positive risk. Re-check each against §2, especially the predecessor proof. Fix any wrong one.
 
 ```sql
-SELECT d.id, v.acronym, v.title, d.dblp_key, d.reason, e.booktitles, e.proceedings_titles
+SELECT d.id, v.acronym, v.core_title, d.dblp_key, d.reason, e.book_titles, e.proceeding_titles
 FROM conf_candidate_ai d JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate_rule c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
@@ -272,7 +272,7 @@ WHERE d.verdict = 'accept'
 | `conf/cloud`, `conf/bigdata` | ACM SoCC / IEEE BigData Congress | IEEE CLOUD → `conf/IEEEcloud`; IEEE BigData → `conf/bigdataconf` |
 | `conf/chase`, `conf/ismm`, `conf/idc`, `conf/icis` | Connected Health; Mathematical Morphology; Intelligent Distributed Computing; AIS Information Systems | `conf/icse-chase`, `conf/iwmm`, `conf/acmidc`, `conf/ACISicis` |
 | `conf/gi`, `conf/ec`, `conf/aamas` | German GI Jahrestagung; 1994 e-commerce workshop; ALAMAS workshop volumes | `conf/graphicsinterface`, `conf/sigecom`, `conf/atal` + `conf/ifaamas` |
-| duplicate CORE acronyms | FSE, GI, ICCSA, ICEC, ISC each name two CORE venues | decide by full title |
+| duplicate CORE acronyms | FSE, GI, ICCSA, ICEC, ISC each name two CORE venues | decide by core_title |
 | CORE acronyms written differently in DBLP | ACMMM, USENIX-Security, I3DG, HOTCHIPS (HCS), IJCRS (was RSCTC) | `conf/mm`, `conf/uss`, `conf/si3d`, `conf/hotchips`, `conf/rsctc` |
 
 ## 6. Hard rules
