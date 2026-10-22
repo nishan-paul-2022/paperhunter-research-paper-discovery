@@ -112,7 +112,7 @@ FROM conf_dblp_venue v;
 
 DROP VIEW IF EXISTS conf_review;
 CREATE VIEW conf_review AS
-SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.core_title, v.core_acronym, v.rank,
+SELECT 'UNREVIEWED' AS issue, c.dblp_key, e.dblp_acronym, c.core_id, v.core_title, v.core_acronym, v.rank,
        c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.volumes, e.publishers, e.lineage, e.book_titles, e.proceeding_titles
 FROM conf_candidate_rule c
@@ -120,12 +120,12 @@ JOIN conf_core v ON v.id = c.core_id
 JOIN conf_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
-SELECT 'UNCOVERED', NULL, v.id, v.core_title, v.core_acronym, v.rank,
+SELECT 'UNCOVERED', NULL, NULL, v.id, v.core_title, v.core_acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_core v
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
-SELECT 'INVALID', d.dblp_key, d.core_id, NULL, NULL, NULL,
+SELECT 'INVALID', d.dblp_key, NULL, d.core_id, NULL, NULL, NULL,
        NULL, 'conf_candidate_ai ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_candidate_ai d
