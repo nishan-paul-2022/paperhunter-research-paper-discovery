@@ -60,10 +60,10 @@ def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
     for key, proceeding_title in conn.execute("SELECT dblp_key, proceeding_title FROM conf_dblp_proceeding_title"):
         proceeding_titles[key].append(proceeding_title)
     evidence = {}
-    for key, acronym in conn.execute("SELECT dblp_key, acronym FROM conf_dblp_venue"):
+    for key, dblp_acronym in conn.execute("SELECT dblp_key, dblp_acronym FROM conf_dblp_venue"):
         bts = book_titles.get(key, [])
         total = sum(n for _, n in bts) or 1
-        acronyms = key_forms(acronym)
+        acronyms = key_forms(dblp_acronym)
         primary = set(acronyms)
         for b, n in bts:
             acronyms.add(norm(re.sub(r"\(.*?\)|@.*$", "", b)))
@@ -151,8 +151,8 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     for key, proceeding_title in conn.execute("SELECT dblp_key, proceeding_title FROM conf_dblp_proceeding_title"):
         proceeding_title_blobs[key] += fold(proceeding_title) + "\n"
     pairs = []
-    for core_id, core_title, acronym in conn.execute("SELECT id, core_title, acronym FROM conf_core"):
-        forms = acronym_forms(acronym, core_title)
+    for core_id, core_title, core_acronym in conn.execute("SELECT id, core_title, core_acronym FROM conf_core"):
+        forms = acronym_forms(core_acronym, core_title)
         found: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
         for a in forms:
             for key in by_acronym.get(a, ()):

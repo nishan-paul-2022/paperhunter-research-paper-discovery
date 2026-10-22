@@ -7,18 +7,18 @@ DB_PATH = Path(__file__).resolve().parent.parent / "archive" / "paperhunter.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conf_core (
-    id         INTEGER PRIMARY KEY,
-    core_title TEXT NOT NULL UNIQUE,
-    acronym    TEXT NOT NULL,
-    rank       TEXT NOT NULL CHECK (rank IN ('A*', 'A', 'B', 'C'))
+    id           INTEGER PRIMARY KEY,
+    core_title   TEXT NOT NULL UNIQUE,
+    core_acronym TEXT NOT NULL,
+    rank         TEXT NOT NULL CHECK (rank IN ('A*', 'A', 'B', 'C'))
 );
 
 CREATE TABLE IF NOT EXISTS conf_dblp_venue (
-    dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
-    acronym    TEXT NOT NULL,
-    papers     INTEGER NOT NULL,
-    first_year INTEGER,
-    last_year  INTEGER
+    dblp_key     TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
+    dblp_acronym TEXT NOT NULL,
+    papers       INTEGER NOT NULL,
+    first_year   INTEGER,
+    last_year    INTEGER
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS conf_dblp_book_title (
@@ -89,7 +89,7 @@ BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 
 DROP VIEW IF EXISTS conf_summary;
 CREATE VIEW conf_summary AS
-SELECT v.dblp_key, v.acronym, v.papers, v.first_year, v.last_year,
+SELECT v.dblp_key, v.dblp_acronym, v.papers, v.first_year, v.last_year,
        CASE WHEN v.dblp_key LIKE 'conf/%'
             THEN (SELECT count(*) FROM conf_dblp_proceeding_title WHERE dblp_key = v.dblp_key) END AS volumes,
        (SELECT group_concat(p.publisher || ' (' || p.n || ')', ' | ')
@@ -112,7 +112,7 @@ FROM conf_dblp_venue v;
 
 DROP VIEW IF EXISTS conf_review;
 CREATE VIEW conf_review AS
-SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.core_title, v.acronym, v.rank,
+SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.core_title, v.core_acronym, v.rank,
        c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.volumes, e.publishers, e.lineage, e.book_titles, e.proceeding_titles
 FROM conf_candidate_rule c
@@ -120,7 +120,7 @@ JOIN conf_core v ON v.id = c.core_id
 JOIN conf_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
-SELECT 'UNCOVERED', NULL, v.id, v.core_title, v.acronym, v.rank,
+SELECT 'UNCOVERED', NULL, v.id, v.core_title, v.core_acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_core v
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
@@ -134,7 +134,7 @@ WHERE NOT EXISTS (SELECT 1 FROM conf_core v WHERE v.id = d.core_id)
 
 DROP VIEW IF EXISTS conf_list;
 CREATE VIEW conf_list AS
-SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.core_title, v.rank AS ranking
+SELECT d.dblp_key, upper(k.dblp_acronym) AS dblp_acronym, v.core_title, v.rank AS ranking
 FROM conf_candidate_ai d
 JOIN conf_core v ON v.id = d.core_id
 JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key

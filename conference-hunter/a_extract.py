@@ -61,8 +61,8 @@ def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
         sys.exit(f"Duplicate core_title values: {duplicates}")
     with conn:
         conn.executemany(
-            "INSERT INTO conf_core (core_title, acronym, rank) VALUES (?, ?, ?) "
-            "ON CONFLICT (core_title) DO UPDATE SET acronym = excluded.acronym, rank = excluded.rank",
+            "INSERT INTO conf_core (core_title, core_acronym, rank) VALUES (?, ?, ?) "
+            "ON CONFLICT (core_title) DO UPDATE SET core_acronym = excluded.core_acronym, rank = excluded.rank",
             rows,
         )
         conn.execute("CREATE TEMP TABLE core_titles (core_title TEXT PRIMARY KEY)")
@@ -164,8 +164,8 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
     venues, bts, pts = scan_xml(xml_path)
     with conn:
         conn.executemany(
-            "INSERT INTO conf_dblp_venue (dblp_key, acronym, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?) "
-            "ON CONFLICT (dblp_key) DO UPDATE SET acronym = excluded.acronym, papers = excluded.papers, "
+            "INSERT INTO conf_dblp_venue (dblp_key, dblp_acronym, papers, first_year, last_year) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT (dblp_key) DO UPDATE SET dblp_acronym = excluded.dblp_acronym, papers = excluded.papers, "
             "first_year = excluded.first_year, last_year = excluded.last_year",
             venues,
         )

@@ -24,14 +24,14 @@ A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 
 | object | what it holds |
 |---|---|
-| `conf_core(id, core_title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The core_title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
-| `conf_dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | one row per series. `acronym` is the key name or the issue label; `papers` and years cover its papers |
+| `conf_core(id, core_title, core_acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The core_title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
+| `conf_dblp_venue(dblp_key, dblp_acronym, papers, first_year, last_year)` | one row per series. `dblp_acronym` is the key name or the issue label; `papers` and years cover its papers |
 | `conf_dblp_book_title(dblp_key, book_title, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
 | `conf_dblp_proceeding_title(dblp_key, proceeding_key, year, proceeding_title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full proceeding_title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
 | `conf_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between series (from `sparql.dblp.org`): renames, mergers, new keys (`conf/ftcs` → `conf/dsn`, `conf/wcre` and `conf/csmr` → `conf/saner`, `conf/atal` → `conf/ifaamas`). Authoritative where present, but DBLP records links for only a few hundred series: a missing link proves nothing |
 | `conf_candidate_rule(dblp_key, core_id, method, detail)` | proposals from `b_match.py` (Step 4a lists examples). `method` lists every rule that proposed the pair, and `detail` says what each one matched: `acronym` (series name, book_title, journal name or edition acronym equals the CORE acronym or a former acronym from the core_title: `acronym "icse"`), `related` (a track key or a key sharing a main book_title with a strong match: `track of conf/icse`, `shares book_title "IMC" with conf/imc`), `lineage` (linked in `conf_dblp_lineage` to a strong match: `predecessor of conf/dsn`), `title` (its proceeding_titles contain the core_title). `lineage` pairs are mostly real predecessors and successors; pairs from `related` or `title` alone are mostly workshops and namesakes. The method is a hint only: it never makes an accept or a reject on its own |
 | `conf_candidate_ai(id, core_id, dblp_key, verdict, reason, decided_at)` | **your output** |
-| `conf_summary` | one summary row per series: acronym, years, number of proceedings volumes (empty for `journals/` series, which have none), top 3 publishers with volume counts, its `conf_dblp_lineage` links (`predecessor of conf/dsn`), top 5 book_titles with year spans, the 3 newest proceeding_titles with paper counts. `conf_review` shows all of these on every `UNREVIEWED` row |
+| `conf_summary` | one summary row per series: dblp_acronym, years, number of proceedings volumes (empty for `journals/` series, which have none), top 3 publishers with volume counts, its `conf_dblp_lineage` links (`predecessor of conf/dsn`), top 5 book_titles with year spans, the 3 newest proceeding_titles with paper counts. `conf_review` shows all of these on every `UNREVIEWED` row |
 | `conf_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` CORE venues, `INVALID` decisions |
 | `conf_list` | final output; it stays empty while `conf_review` has any row |
 
@@ -57,7 +57,7 @@ Then check these sources:
 
 **Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.
 
-If `conf_dblp_venue` has no `acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py`, then `conference-hunter/a_extract.py`, then `conference-hunter/b_match.py`.
+If `conf_dblp_venue` has no `dblp_acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py`, then `conference-hunter/a_extract.py`, then `conference-hunter/b_match.py`.
 
 ---
 
@@ -161,7 +161,7 @@ On a first run every candidate and every CORE venue is open. On a rerun after a 
 1. The acronym, every former acronym and every former name from the core_title, in series names, book_titles and proceeding_titles:
 
    ```sql
-   SELECT dblp_key, acronym, papers, first_year, last_year FROM conf_dblp_venue WHERE acronym LIKE '%abc%';
+   SELECT dblp_key, dblp_acronym, papers, first_year, last_year FROM conf_dblp_venue WHERE dblp_acronym LIKE '%abc%';
    SELECT dblp_key, book_title, papers, first_year, last_year FROM conf_dblp_book_title WHERE book_title LIKE '%ABC%';
    SELECT dblp_key, year, proceeding_title, publisher FROM conf_dblp_proceeding_title WHERE proceeding_title LIKE '%Distinctive Words%';
    ```
@@ -181,16 +181,16 @@ WITH bt AS (
            THEN substr(book_title, 1, instr(book_title, ' (') - 1) ELSE book_title END)) AS b
   FROM conf_dblp_book_title WHERE book_title NOT LIKE '%@%'
 ), hit AS (
-  SELECT v.id AS core_id, k.dblp_key FROM conf_core v JOIN conf_dblp_venue k ON lower(k.acronym) = lower(v.acronym)
+  SELECT v.id AS core_id, k.dblp_key FROM conf_core v JOIN conf_dblp_venue k ON lower(k.dblp_acronym) = lower(v.core_acronym)
   UNION
-  SELECT v.id, bt.dblp_key FROM conf_core v JOIN bt ON bt.b = lower(v.acronym)
+  SELECT v.id, bt.dblp_key FROM conf_core v JOIN bt ON bt.b = lower(v.core_acronym)
 )
-SELECT h.core_id, v.rank, v.acronym, v.core_title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceeding_titles
+SELECT h.core_id, v.rank, v.core_acronym, v.core_title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceeding_titles
 FROM hit h JOIN conf_core v ON v.id = h.core_id JOIN conf_dblp_venue k ON k.dblp_key = h.dblp_key
 JOIN conf_summary e ON e.dblp_key = h.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = h.dblp_key
                   AND (d.core_id = h.core_id OR d.verdict = 'accept'))
-ORDER BY v.rank, v.acronym;
+ORDER BY v.rank, v.core_acronym;
 ```
 
 Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides acronym matches, the matcher proposes track keys named after a matched key (`conf/icse-seip`), keys that share a main book_title with one (`conf/imw` IMC, `conf/ssspr` S+SSPR, `conf/symsac` SYMSAC), keys whose proceeding_titles contain the core_title (`conf/fpca`), and keys that `conf_dblp_lineage` links to a matched key (`conf/ftcs` for DSN, `conf/csmr` for SANER). Most are workshops and namesakes. Real ones need predecessor proof (§2). A row can name the wrong venue: `conf/agents` surfaces under EMAS, but it is AAMAS's predecessor. Decide by what the series is, not by the row's venue.
@@ -200,14 +200,14 @@ Renamed and split-off series reach Step 2 as ordinary `UNREVIEWED` rows: besides
 ```sql
 WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM conf_dblp_lineage
               UNION SELECT successor_key, predecessor_key FROM conf_dblp_lineage)
-SELECT d.core_id, v.rank, v.acronym, v.core_title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
+SELECT d.core_id, v.rank, v.core_acronym, v.core_title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
        e.proceeding_titles
 FROM conf_candidate_ai d JOIN link l ON l.a = d.dblp_key
 JOIN conf_core v ON v.id = d.core_id JOIN conf_dblp_venue k ON k.dblp_key = l.b
 JOIN conf_summary e ON e.dblp_key = l.b
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate_ai x WHERE x.dblp_key = l.b AND (x.core_id = d.core_id OR x.verdict = 'accept'))
-ORDER BY v.rank, v.acronym;
+ORDER BY v.rank, v.core_acronym;
 ```
 
 4c. Stale venues. These are venues whose newest accepted series ends more than two years ago and carries no tag yet. For each one, find where the venue went:
@@ -219,7 +219,7 @@ ORDER BY v.rank, v.acronym;
 Then accept the new series, or tag the newest accepted series with `JOURNAL:` or `ENDED:`.
 
 ```sql
-SELECT v.id, v.rank, v.acronym, v.core_title,
+SELECT v.id, v.rank, v.core_acronym, v.core_title,
        group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS series,
        max(k.last_year) AS newest
 FROM conf_core v
@@ -238,7 +238,7 @@ A venue can also stay active in DBLP while its main track left: its newest book_
 **Step 6. Audit accepts the matcher never proposed.** These were found by hand, so they carry the highest false-positive risk. Re-check each against §2, especially the predecessor proof. Fix any wrong one.
 
 ```sql
-SELECT d.id, v.acronym, v.core_title, d.dblp_key, d.reason, e.book_titles, e.proceeding_titles
+SELECT d.id, v.core_acronym, v.core_title, d.dblp_key, d.reason, e.book_titles, e.proceeding_titles
 FROM conf_candidate_ai d JOIN conf_core v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate_rule c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
