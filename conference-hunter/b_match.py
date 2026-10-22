@@ -11,20 +11,7 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 MIN_BOOKTITLE_SHARE = 0.15
 MIN_SHARED_BOOKTITLE_PAPERS = 20
 MIN_FULL_TITLE_LEN = 20
-STOPWORDS = set(
-    "a an the of on in for and to at with from by its their international "
-    "conference conf symposium workshop workshops congress meeting annual "
-    "joint ieee acm ifip usenix siam proceedings th st nd rd was previously "
-    "changed".split()
-)
-SPELLING = {
-    "modelling": "modeling",
-    "optimisation": "optimization",
-    "visualisation": "visualization",
-    "organisation": "organization",
-    "behaviour": "behavior",
-    "analyse": "analyze",
-}
+METHODS = ("acronym", "related", "lineage", "title")
 ORG_PREFIX = re.compile(r"^(IEEE|ACM|IFIP)[ _-]+", re.I)
 KEY_ORG_PREFIX = re.compile(r"^(ieee|acm|ifip|acis)(?=[a-z]{2})")
 FORMER_ACRONYM = re.compile(r"\b[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b")
@@ -41,17 +28,6 @@ def fold(s: str) -> str:
 
 def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", fold(s))
-
-
-def tokens(s: str) -> set[str]:
-    out = set()
-    for t in re.findall(r"[a-z0-9]+", fold(s)):
-        t = SPELLING.get(t, t)
-        if len(t) > 3 and t.endswith("s") and not t.endswith("ss"):
-            t = t[:-1]
-        if t not in STOPWORDS and not t.isdigit():
-            out.add(t)
-    return out
 
 
 def strip_parens(s: str) -> str:
@@ -81,7 +57,7 @@ def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
     for key, booktitle, n in conn.execute("SELECT dblp_key, booktitle, papers FROM conf_dblp_booktitle"):
         booktitles[key].append((booktitle, n))
     proceedings: dict[str, list[str]] = defaultdict(list)
-    for key, title in conn.execute("SELECT dblp_key, title FROM conf_dblp_title ORDER BY dblp_key, year DESC"):
+    for key, title in conn.execute("SELECT dblp_key, title FROM conf_dblp_title"):
         proceedings[key].append(title)
     evidence = {}
     for key, acronym in conn.execute("SELECT dblp_key, acronym FROM conf_dblp_venue"):
@@ -95,16 +71,9 @@ def load_evidence(conn: sqlite3.Connection) -> dict[str, dict]:
                 primary.add(norm(strip_parens(b)))
             if key.startswith("journals/") and n / total >= MIN_BOOKTITLE_SHARE:
                 acronyms |= {norm(t) for t in CAPS_TOKEN.findall(b)} - ORGS
-        pts = proceedings.get(key, [])
-        for p in pts:
+        for p in proceedings.get(key, []):
             acronyms |= edition_acronyms(p)
-        texts = pts + [b for b, _ in bts]
-        evidence[key] = {
-            "acronyms": acronyms - {""},
-            "primary": primary - {""},
-            "texts": texts,
-            "text_tokens": [tokens(t) for t in texts],
-        }
+        evidence[key] = {"acronyms": acronyms - {""}, "primary": primary - {""}}
     return evidence
 
 
@@ -119,13 +88,16 @@ def main_booktitles(conn: sqlite3.Connection) -> dict[str, set[str]]:
 
 
 def related_keys(keys: set[str], all_keys: list[str], booktitles: dict[str, set[str]],
-                 by_booktitle: dict[str, set[str]]) -> set[str]:
-    related = set()
+                 by_booktitle: dict[str, set[str]]) -> dict[str, set[str]]:
+    related: dict[str, set[str]] = defaultdict(set)
     for key in keys:
         if key.startswith("conf/"):
-            related |= {k for k in all_keys if k.startswith(key + "-")}
+            for k in all_keys:
+                if k.startswith(key + "-"):
+                    related[k].add(f"track of {key}")
         for b in booktitles.get(key, ()):
-            related |= by_booktitle[b]
+            for k in by_booktitle[b] - {key}:
+                related[k].add(f'shares booktitle "{b}" with {key}')
     return related
 
 
@@ -144,17 +116,19 @@ def lineage_graph(conn: sqlite3.Connection) -> dict[str, dict[str, set[str]]]:
     return graph
 
 
-def lineage_keys(keys: set[str], graph: dict[str, dict[str, set[str]]]) -> set[str]:
-    reached = set()
-    for edges in graph.values():
-        seen, queue = set(keys), list(keys)
-        while queue:
-            for other in edges.get(queue.pop(), ()):
-                if other not in seen:
-                    seen.add(other)
-                    queue.append(other)
-        reached |= seen
-    return reached - keys
+def lineage_keys(keys: set[str], graph: dict[str, dict[str, set[str]]]) -> dict[str, set[str]]:
+    reached: dict[str, set[str]] = defaultdict(set)
+    for source in keys:
+        for relation, edges in graph.items():
+            seen, queue = {source}, [source]
+            while queue:
+                for other in edges.get(queue.pop(), ()):
+                    if other not in seen:
+                        seen.add(other)
+                        queue.append(other)
+            for k in seen - {source}:
+                reached[k].add(f"{relation} of {source}")
+    return reached
 
 
 def propose(conn: sqlite3.Connection) -> list[tuple]:
@@ -178,18 +152,22 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
         title_blobs[key] += fold(title) + "\n"
     pairs = []
     for core_id, title, acronym in conn.execute("SELECT id, title, acronym FROM conf_core_venue"):
-        ct = tokens(strip_parens(title)) or tokens(title)
         forms = acronym_forms(acronym, title)
-        keys = set().union(*(by_acronym.get(a, set()) for a in forms))
+        found: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+        for a in forms:
+            for key in by_acronym.get(a, ()):
+                found[key]["acronym"].add(f'acronym "{a}"')
         primary = set().union(*(by_primary.get(a, set()) for a in forms))
-        keys |= related_keys(primary, all_keys, booktitles, by_booktitle)
-        keys |= lineage_keys(primary, lineage)
-        keys |= full_title_keys(title, title_blobs)
-        for key in keys:
-            e = evidence[key]
-            scores = [len(ct & t) / len(ct) if ct else 0.0 for t in e["text_tokens"]] or [0.0]
-            best = max(range(len(scores)), key=scores.__getitem__)
-            pairs.append((key, core_id, round(scores[best], 2), e["texts"][best] if e["texts"] else ""))
+        for key, why in related_keys(primary, all_keys, booktitles, by_booktitle).items():
+            found[key]["related"] |= why
+        for key, why in lineage_keys(primary, lineage).items():
+            found[key]["lineage"] |= why
+        for key in full_title_keys(title, title_blobs):
+            found[key]["title"].add("proceedings titles contain the CORE title")
+        for key, hits in found.items():
+            methods = [m for m in METHODS if m in hits]
+            detail = "; ".join(d for m in methods for d in sorted(hits[m]))
+            pairs.append((key, core_id, ",".join(methods), detail))
     return pairs
 
 

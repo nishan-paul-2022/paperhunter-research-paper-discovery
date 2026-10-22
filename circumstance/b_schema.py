@@ -50,8 +50,9 @@ CREATE INDEX IF NOT EXISTS conf_dblp_lineage_successor ON conf_dblp_lineage (suc
 CREATE TABLE IF NOT EXISTS conf_candidate (
     dblp_key          TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
     core_id           INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
-    score             REAL NOT NULL,
-    proceedings_title TEXT NOT NULL,
+    method            TEXT NOT NULL CHECK (method <> '' AND trim(replace(replace(replace(replace(
+                          method, 'acronym', ''), 'related', ''), 'lineage', ''), 'title', ''), ',') = ''),
+    detail            TEXT NOT NULL,
     PRIMARY KEY (dblp_key, core_id)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS conf_candidate_core ON conf_candidate (core_id);
@@ -102,7 +103,7 @@ FROM conf_dblp_venue v;
 DROP VIEW IF EXISTS conf_review;
 CREATE VIEW conf_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.title AS core_title, v.acronym, v.rank,
-       c.score, c.proceedings_title AS detail,
+       c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.booktitles, e.proceedings_titles
 FROM conf_candidate c
 JOIN conf_core_venue v ON v.id = c.core_id
@@ -332,7 +333,6 @@ CREATE TABLE IF NOT EXISTS paper_details_s2 (
     CHECK ((found = 1) = (s2_id IS NOT NULL))
 );
 
-DROP VIEW IF EXISTS paper_description;
 DROP VIEW IF EXISTS paper_summary;
 CREATE VIEW paper_summary AS
 SELECT p.id AS paper_id, p.title,
@@ -446,131 +446,14 @@ ORDER BY CASE d.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evalua
          d.p DESC, p.dblp_key;
 """
 
-REBUILT_EVIDENCE = {"conf_dblp_booktitle": "first_year", "conf_dblp_title": "proc_key"}
-ADDED_COLUMNS = {"journal_scopus_venue": ["coverage"], "journal_dblp_name": ["first_year", "last_year"]}
-
-
-def migrate_journals(conn: sqlite3.Connection) -> None:
-    tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
-    done = []
-    if "journal_scopus" in tables and "journal_scopus_venue" not in tables:
-        for (view,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
-            conn.execute(f"DROP VIEW {view}")
-        conn.execute("ALTER TABLE journal_scopus RENAME TO journal_scopus_venue")
-        conn.commit()
-        done.append("journal_scopus renamed to journal_scopus_venue")
-        tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
-    with conn:
-        for table, cols in ADDED_COLUMNS.items():
-            if table not in tables:
-                continue
-            have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
-            for col in cols:
-                if col not in have:
-                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {'TEXT' if col == 'coverage' else 'INTEGER'}")
-                    done.append(f"{table}.{col}")
-        if "journal_dblp_issn" in tables and "papers" in tables["journal_dblp_issn"]:
-            for (view,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
-                conn.execute(f"DROP VIEW {view}")
-            conn.execute("DROP TABLE journal_dblp_issn")
-            if "journal_dblp_venue_issn" in tables:
-                conn.execute("DROP INDEX IF EXISTS journal_dblp_venue_issn_issn")
-                conn.execute("ALTER TABLE journal_dblp_venue_issn RENAME TO journal_dblp_issn")
-                done.append("journal_dblp_venue_issn renamed to journal_dblp_issn (link ISSNs removed)")
-            else:
-                done.append("journal_dblp_issn (rebuilt for DBLP ISSNs)")
-        candidate = tables.get("journal_candidate", "")
-        if candidate and ("'lineage'" not in candidate or "'issn'" in candidate):
-            conn.execute("DROP VIEW IF EXISTS journal_review")
-            conn.execute("DROP VIEW IF EXISTS journal_list")
-            conn.execute("DROP TABLE journal_candidate")
-            done.append("journal_candidate (rebuilt)")
-    if done:
-        refill = any("renamed" not in d for d in done)
-        print(f"migrated: {', '.join(done)}"
-              + ("; run journal-hunter/a_extract.py and b_match.py to refill them" if refill else ""))
-
-
-OLD_PAPER_TABLES = ("paper_term", "paper_reference", "paper_review_claim", "paper_accepted", "paper_rejected")
-OLD_PAPER_COLUMNS = {"paper_dblp": "kind", "paper_detail": "built_at"}
-
-
-def migrate_papers(conn: sqlite3.Connection) -> None:
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    old = [t for t in OLD_PAPER_TABLES if t in tables]
-    old += [t for t, col in OLD_PAPER_COLUMNS.items()
-            if t in tables and col in {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}]
-    if not old:
-        return
-    drop = [t for t in (*OLD_PAPER_TABLES, "paper_source", "paper_detail", "paper_dblp") if t in tables]
-    filled = [t for t in drop if conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()]
-    if filled:
-        sys.exit(f"old paper tables hold data ({', '.join(filled)}): empty or drop them, then rerun")
-    with conn:
-        for view in ("paper_inventory", "paper_card", "paper_review", "paper_list"):
-            conn.execute(f"DROP VIEW IF EXISTS {view}")
-        for t in drop:
-            conn.execute(f"DROP TABLE {t}")
-    print(f"migrated: dropped the old empty paper tables ({', '.join(drop)})")
-
-
-def migrate_paper_details(conn: sqlite3.Connection) -> None:
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    old = [t for t in ("paper_source", "paper_detail") if t in tables]
-    if not old:
-        return
-    filled = [t for t in old if conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()]
-    if filled:
-        sys.exit(f"old paper tables hold data ({', '.join(filled)}): move it into paper_details_openalex and "
-                 "paper_details_s2, or empty them, then rerun")
-    with conn:
-        for t in old:
-            conn.execute(f"DROP TABLE {t}")
-    print(f"migrated: dropped the old empty paper tables ({', '.join(old)})")
-
-
-def migrate(conn: sqlite3.Connection) -> None:
-    migrate_papers(conn)
-    migrate_paper_details(conn)
-    migrate_journals(conn)
-    tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
-    stale = [t for t, col in REBUILT_EVIDENCE.items()
-             if t in tables and col not in {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}]
-    venue_stale = "conf_dblp_venue" in tables and "journals/" not in tables["conf_dblp_venue"]
-    if not stale and not venue_stale:
-        return
-    conn.execute("PRAGMA foreign_keys = OFF")
-    conn.execute("BEGIN")
-    for (view,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'").fetchall():
-        conn.execute(f"DROP VIEW {view}")
-    for t in stale:
-        conn.execute(f"DROP TABLE {t}")
-    if venue_stale:
-        conn.execute("""CREATE TABLE conf_venue_tmp (
-            dblp_key   TEXT PRIMARY KEY CHECK (dblp_key LIKE 'conf/%' OR dblp_key LIKE 'journals/%'),
-            acronym    TEXT NOT NULL,
-            papers     INTEGER NOT NULL,
-            first_year INTEGER,
-            last_year  INTEGER
-        ) WITHOUT ROWID""")
-        conn.execute("INSERT INTO conf_venue_tmp SELECT dblp_key, substr(dblp_key, instr(dblp_key, '/') + 1), "
-                     "papers, first_year, last_year FROM conf_dblp_venue")
-        conn.execute("DROP TABLE conf_dblp_venue")
-        conn.execute("ALTER TABLE conf_venue_tmp RENAME TO conf_dblp_venue")
-    conn.commit()
-    conn.execute("PRAGMA foreign_keys = ON")
-    print(f"migrated: rebuilt {', '.join(stale + ['conf_dblp_venue'] * venue_stale)}; "
-          "run conference-hunter/a_extract.py to refill the DBLP evidence")
-
 
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DB_PATH
     conn = sqlite3.connect(path)
-    migrate(conn)
     conn.executescript(SCHEMA)
     broken = conn.execute("PRAGMA foreign_key_check").fetchall()
     if broken:
-        sys.exit(f"foreign key violations after migration: {broken[:10]}")
+        sys.exit(f"foreign key violations: {broken[:10]}")
     counts = dict(conn.execute(
         "SELECT type, count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' GROUP BY type"))
     conn.close()
