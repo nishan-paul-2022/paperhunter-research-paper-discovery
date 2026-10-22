@@ -111,9 +111,9 @@ def add_lineage(conn: sqlite3.Connection, evidence: dict, add) -> None:
 
 
 def propose(conn: sqlite3.Connection) -> list[tuple]:
-    scopus = conn.execute("SELECT id, title, issn_1, issn_2 FROM journal_scopus_venue").fetchall()
+    scopus = conn.execute("SELECT id, scopus_title, issn_1, issn_2 FROM journal_scopus_venue").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in scopus for i in (i1, i2) if i}
-    scopus_tokens = [(sid, title, title_variants(title)) for sid, title, _, _ in scopus]
+    scopus_tokens = [(sid, scopus_title, title_variants(scopus_title)) for sid, scopus_title, _, _ in scopus]
     evidence: dict[tuple[str, int], dict[str, tuple[float, str]]] = defaultdict(dict)
 
     def add(key: str, sid: int, method: str, score: float, detail: str) -> None:
@@ -130,17 +130,17 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
 
     sampled: dict[str, list[tuple]] = defaultdict(list)
     missing: dict[str, int] = defaultdict(int)
-    for key, year, status, i1, i2, title in conn.execute(
-            "SELECT dblp_key, year, status, issn_1, issn_2, title FROM journal_dblp_crossref ORDER BY dblp_key, year"):
+    for key, year, status, i1, i2, crossref_title in conn.execute(
+            "SELECT dblp_key, year, status, issn_1, issn_2, crossref_title FROM journal_dblp_crossref ORDER BY dblp_key, year"):
         if status == 200:
-            sampled[key].append((year, i1, i2, title))
+            sampled[key].append((year, i1, i2, crossref_title))
         elif status == 404:
             missing[key] += 1
     for key, rows in sampled.items():
         hits: dict[int, list[tuple]] = defaultdict(list)
-        for year, i1, i2, title in rows:
+        for year, i1, i2, crossref_title in rows:
             for sid in {by_issn[i] for i in (i1, i2) if i in by_issn}:
-                hits[sid].append((year, i1 if i1 in by_issn else i2, title))
+                hits[sid].append((year, i1 if i1 in by_issn else i2, crossref_title))
         for sid, h in hits.items():
             years = [y for y, _, _ in h]
             absent = f", {missing[key]} not in Crossref" if missing[key] else ""
@@ -162,18 +162,18 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     for key, name, n, last in rows:
         if n / (total[key] or 1) >= MIN_NAME_SHARE or (last or 0) >= newest[key] - RECENT_NAME_YEARS:
             names[key].add(name)
-    for key, title in conn.execute("SELECT DISTINCT dblp_key, title FROM journal_dblp_crossref "
-                                   "WHERE status = 200 AND title IS NOT NULL"):
-        names[key].add(title)
+    for key, crossref_title in conn.execute("SELECT DISTINCT dblp_key, crossref_title FROM journal_dblp_crossref "
+                                            "WHERE status = 200 AND crossref_title IS NOT NULL"):
+        names[key].add(crossref_title)
     for key, key_names in names.items():
         for name in sorted(key_names):
             d_toks = tokens(name)
             if not d_toks:
                 continue
-            for sid, title, variants in scopus_tokens:
+            for sid, scopus_title, variants in scopus_tokens:
                 score = round(max(name_score(d_toks, v) for v in variants), 2)
                 if score >= MIN_NAME_SCORE:
-                    add(key, sid, "name", score, f"name '{name}' ~ '{title}'")
+                    add(key, sid, "name", score, f"name '{name}' ~ '{scopus_title}'")
 
     pairs = []
     for (key, sid), found in evidence.items():

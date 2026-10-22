@@ -81,10 +81,10 @@ def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
                          r.get("Coverage", "").strip() or None))
     with conn:
         conn.executemany(
-            "INSERT INTO journal_scopus_venue (id, title, issn_1, issn_2, publisher, quartile, coverage) "
+            "INSERT INTO journal_scopus_venue (id, scopus_title, issn_1, issn_2, scopus_publisher, quartile, coverage) "
             "VALUES (?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT (id) DO UPDATE SET title = excluded.title, issn_1 = excluded.issn_1, "
-            "issn_2 = excluded.issn_2, publisher = excluded.publisher, quartile = excluded.quartile, "
+            "ON CONFLICT (id) DO UPDATE SET scopus_title = excluded.scopus_title, issn_1 = excluded.issn_1, "
+            "issn_2 = excluded.issn_2, scopus_publisher = excluded.scopus_publisher, quartile = excluded.quartile, "
             "coverage = excluded.coverage",
             rows,
         )
@@ -310,7 +310,7 @@ def crossref_batch(dois: list[str], mailto: str | None) -> dict[str, tuple] | No
 
 
 def save_crossref(conn: sqlite3.Connection, doi: str, row: tuple) -> None:
-    conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, title = ?, publisher = ? "
+    conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, crossref_title = ?, crossref_publisher = ? "
                  "WHERE doi = ?", (*row, doi))
 
 
