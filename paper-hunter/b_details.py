@@ -151,8 +151,6 @@ class OpenAlex(Source):
         plain = os.environ.get("OPENALEX_API_KEY", "").strip()
         self.keys = ([plain] if plain else []) + [v for _, v in numbered]
         self.key_no = 0
-        mail = os.environ.get("OPENALEX_MAILTO")
-        self.mailto = f"&mailto={urllib.parse.quote(mail)}" if mail else ""
         self.throttle = Throttle(0.25 if self.keys else 1.1)
         self.keyed = bool(self.keys)
         self.meta = {}
@@ -178,7 +176,7 @@ class OpenAlex(Source):
 
     def _works(self, filt, n):
         url = (f"{OPENALEX}/works?filter={urllib.parse.quote(filt, safe=':|')}&per-page={n}"
-               f"&select={OA_SELECT}{self.mailto}")
+               f"&select={OA_SELECT}")
         return (self._get(url) or {}).get("results") or []
 
     def lookup_dois(self, dois):
@@ -191,7 +189,7 @@ class OpenAlex(Source):
             out[d] = w
         for d in dois:
             if d not in plain:
-                w = self._get(f"{OPENALEX}/works/doi:{urllib.parse.quote(d)}?select={OA_SELECT}{self.mailto}")
+                w = self._get(f"{OPENALEX}/works/doi:{urllib.parse.quote(d)}?select={OA_SELECT}")
                 if w:
                     out[d] = w
         return out
