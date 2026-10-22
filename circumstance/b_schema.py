@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS paper_dblp (
 );
 CREATE INDEX IF NOT EXISTS paper_dblp_venue ON paper_dblp (venue_key);
 
-CREATE TABLE IF NOT EXISTS paper_details_openalex (
+CREATE TABLE IF NOT EXISTS paper_openalex (
     paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
     via          TEXT NOT NULL CHECK (via IN ('doi', 'title')),
     found        INTEGER NOT NULL CHECK (found IN (0, 1)),
@@ -336,7 +336,7 @@ CREATE TABLE IF NOT EXISTS paper_details_openalex (
     CHECK ((found = 1) = (openalex_id IS NOT NULL))
 );
 
-CREATE TABLE IF NOT EXISTS paper_details_s2 (
+CREATE TABLE IF NOT EXISTS paper_s2 (
     paper_id   INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
     via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
     found      INTEGER NOT NULL CHECK (found IN (0, 1)),
@@ -359,10 +359,10 @@ SELECT p.id AS paper_id, p.title,
        CASE WHEN length(o.abstract) >= 120 THEN o.abstract END AS abstract_openalex,
        s.tldr, o.keywords, o.topics, s.fields, o.work_type, o.is_paratext
 FROM paper_dblp p
-LEFT JOIN paper_details_openalex o ON o.paper_id = p.id
-LEFT JOIN paper_details_s2 s ON s.paper_id = p.id;
+LEFT JOIN paper_openalex o ON o.paper_id = p.id
+LEFT JOIN paper_s2 s ON s.paper_id = p.id;
 
-CREATE TABLE IF NOT EXISTS paper_decision (
+CREATE TABLE IF NOT EXISTS paper_candidate_ai (
     paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
     verdict      TEXT NOT NULL CHECK (verdict IN ('accept', 'reject')),
     role         TEXT CHECK (role IN ('baseline', 'benchmark', 'evaluation', 'survey')),
@@ -394,22 +394,22 @@ CREATE VIEW paper_review AS
 SELECT 'UNFETCHED' AS issue, p.id AS paper_id, p.dblp_key,
        'run paper-hunter/b_details.py' AS detail
 FROM paper_dblp p
-WHERE NOT EXISTS (SELECT 1 FROM paper_details_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
-   OR (NOT EXISTS (SELECT 1 FROM paper_details_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
+WHERE NOT EXISTS (SELECT 1 FROM paper_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
+   OR (NOT EXISTS (SELECT 1 FROM paper_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
        AND NOT EXISTS (SELECT 1 FROM paper_summary d WHERE d.paper_id = p.id
                          AND (d.abstract_s2 IS NOT NULL OR d.abstract_openalex IS NOT NULL)))
 UNION ALL
 SELECT 'UNDECIDED', p.id, p.dblp_key, NULL
 FROM paper_dblp p
-WHERE NOT EXISTS (SELECT 1 FROM paper_decision d WHERE d.paper_id = p.id)
-  AND EXISTS (SELECT 1 FROM paper_details_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
-  AND (EXISTS (SELECT 1 FROM paper_details_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
+WHERE NOT EXISTS (SELECT 1 FROM paper_candidate_ai d WHERE d.paper_id = p.id)
+  AND EXISTS (SELECT 1 FROM paper_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
+  AND (EXISTS (SELECT 1 FROM paper_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
        OR EXISTS (SELECT 1 FROM paper_summary d WHERE d.paper_id = p.id
                     AND (d.abstract_s2 IS NOT NULL OR d.abstract_openalex IS NOT NULL)))
 UNION ALL
 SELECT 'INVALID', d.paper_id, p.dblp_key,
        'quote no longer in the stored ' || d.quote_src || ': delete the decision and review the paper again'
-FROM paper_decision d
+FROM paper_candidate_ai d
 JOIN paper_dblp p ON p.id = d.paper_id
 JOIN paper_summary x ON x.paper_id = d.paper_id
 WHERE d.verdict = 'accept'
@@ -419,13 +419,13 @@ WHERE d.verdict = 'accept'
                                    OR instr(lower(x.abstract_openalex), lower(trim(d.quote))) > 0
                  ELSE instr(lower(x.tldr), lower(trim(d.quote))) > 0 END, 0) = 0;
 
-DROP TRIGGER IF EXISTS paper_decision_fetched;
-CREATE TRIGGER paper_decision_fetched BEFORE INSERT ON paper_decision
+DROP TRIGGER IF EXISTS paper_candidate_ai_fetched;
+CREATE TRIGGER paper_candidate_ai_fetched BEFORE INSERT ON paper_candidate_ai
 WHEN NOT EXISTS (SELECT 1 FROM paper_review r WHERE r.paper_id = NEW.paper_id AND r.issue = 'UNDECIDED')
 BEGIN SELECT RAISE(ABORT, 'paper is not UNDECIDED in paper_review (unknown, not fetched yet, or already decided)'); END;
 
-DROP TRIGGER IF EXISTS paper_decision_quote_ins;
-CREATE TRIGGER paper_decision_quote_ins BEFORE INSERT ON paper_decision
+DROP TRIGGER IF EXISTS paper_candidate_ai_quote_ins;
+CREATE TRIGGER paper_candidate_ai_quote_ins BEFORE INSERT ON paper_candidate_ai
 WHEN NEW.verdict = 'accept' AND NOT EXISTS (
     SELECT 1 FROM paper_summary d
     WHERE d.paper_id = NEW.paper_id
@@ -437,8 +437,8 @@ WHEN NEW.verdict = 'accept' AND NOT EXISTS (
 )
 BEGIN SELECT RAISE(ABORT, 'quote not found verbatim in the stored quote_src text'); END;
 
-DROP TRIGGER IF EXISTS paper_decision_quote_upd;
-CREATE TRIGGER paper_decision_quote_upd BEFORE UPDATE ON paper_decision
+DROP TRIGGER IF EXISTS paper_candidate_ai_quote_upd;
+CREATE TRIGGER paper_candidate_ai_quote_upd BEFORE UPDATE ON paper_candidate_ai
 WHEN NEW.verdict = 'accept' AND NOT EXISTS (
     SELECT 1 FROM paper_summary d
     WHERE d.paper_id = NEW.paper_id
@@ -456,10 +456,10 @@ SELECT p.dblp_key, d.role, d.p, p.year, p.title, p.authors, p.venue, p.venue_key
        coalesce((SELECT c.ranking FROM conf_list c WHERE c.dblp_key = p.venue_key),
                 (SELECT j.quartile FROM journal_list j WHERE j.dblp_key = p.venue_key)) AS rank,
        p.doi, coalesce(s.arxiv_id, o.arxiv_id) AS arxiv_id, d.quote, d.reason
-FROM paper_decision d
+FROM paper_candidate_ai d
 JOIN paper_dblp p ON p.id = d.paper_id
-LEFT JOIN paper_details_openalex o ON o.paper_id = d.paper_id
-LEFT JOIN paper_details_s2 s ON s.paper_id = d.paper_id
+LEFT JOIN paper_openalex o ON o.paper_id = d.paper_id
+LEFT JOIN paper_s2 s ON s.paper_id = d.paper_id
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM paper_review WHERE issue <> 'UNFETCHED')
 ORDER BY CASE d.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evaluation' THEN 2 ELSE 3 END,
          d.p DESC, p.dblp_key;

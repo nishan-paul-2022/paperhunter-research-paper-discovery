@@ -141,7 +141,7 @@ class Source:
 
 
 class OpenAlex(Source):
-    name, table, doi_batch = "openalex", "paper_details_openalex", OA_BATCH
+    name, table, doi_batch = "openalex", "paper_openalex", OA_BATCH
     cols = ("openalex_id", "doi", "title", "year", "abstract", "keywords", "topics", "work_type",
             "is_paratext", "is_retracted", "language", "arxiv_id")
 
@@ -227,7 +227,7 @@ class OpenAlex(Source):
 
 
 class SemanticScholar(Source):
-    name, table, doi_batch = "s2", "paper_details_s2", S2_BATCH
+    name, table, doi_batch = "s2", "paper_s2", S2_BATCH
     cols = ("s2_id", "doi", "title", "year", "abstract", "tldr", "fields", "arxiv_id")
 
     def __init__(self):
@@ -412,11 +412,11 @@ def take_lock():
 def status(conn):
     total = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
     print(f"\npaper_dblp: {total:,} papers\n")
-    print(f"{'table':23} {'via':6} {'found':>10} {'missing':>10}")
-    for table in ("paper_details_openalex", "paper_details_s2"):
+    print(f"{'table':14} {'via':6} {'found':>10} {'missing':>10}")
+    for table in ("paper_openalex", "paper_s2"):
         for via, found, missing in conn.execute(
                 f"SELECT via, sum(found), sum(1 - found) FROM {table} GROUP BY via ORDER BY via"):
-            print(f"{table:23} {via:6} {found:>10,} {missing:>10,}")
+            print(f"{table:14} {via:6} {found:>10,} {missing:>10,}")
     checks = (("abstract", "d.abstract_s2 IS NOT NULL OR d.abstract_openalex IS NOT NULL"),
               ("  from s2", "d.abstract_s2 IS NOT NULL"), ("  from openalex", "d.abstract_openalex IS NOT NULL"),
               ("tldr", "d.tldr IS NOT NULL"), ("keywords", "d.keywords IS NOT NULL"),
@@ -425,8 +425,8 @@ def status(conn):
               ("is_paratext", "d.is_paratext = 1"), ("is_retracted", "o.is_retracted = 1"))
     n, *counts = conn.execute(
         "SELECT count(*), " + ", ".join(f"coalesce(sum({cond}), 0)" for _, cond in checks)
-        + " FROM paper_summary d LEFT JOIN paper_details_openalex o ON o.paper_id = d.paper_id"
-          " LEFT JOIN paper_details_s2 s ON s.paper_id = d.paper_id WHERE o.found = 1 OR s.found = 1").fetchone()
+        + " FROM paper_summary d LEFT JOIN paper_openalex o ON o.paper_id = d.paper_id"
+          " LEFT JOIN paper_s2 s ON s.paper_id = d.paper_id WHERE o.found = 1 OR s.found = 1").fetchone()
     print(f"\npaper_summary: {n:,} papers found by either API")
     if n:
         for (label, _), k in zip(checks, counts):

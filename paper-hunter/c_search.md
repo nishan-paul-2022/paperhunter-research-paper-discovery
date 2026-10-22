@@ -1,6 +1,6 @@
 # Paper-Hunter Review Guide
 
-This is the **master prompt** for AI reviewers and for the orchestrator that runs them. Every fetched paper is read once and decided in the table `paper_decision`: **accepted** with a role (`baseline`, `benchmark`, `evaluation`, `survey`), or **rejected** with a reject class. The review works on whatever `paper-hunter/b_details.py` has fetched so far; papers fetched later are reviewed on the next run. The view `paper_list` holds the accepted papers once every fetched paper is decided.
+This is the **master prompt** for AI reviewers and for the orchestrator that runs them. Every fetched paper is read once and decided in the table `paper_candidate_ai`: **accepted** with a role (`baseline`, `benchmark`, `evaluation`, `survey`), or **rejected** with a reject class. The review works on whatever `paper-hunter/b_details.py` has fetched so far; papers fetched later are reviewed on the next run. The view `paper_list` holds the accepted papers once every fetched paper is decided.
 
 ---
 
@@ -70,14 +70,14 @@ Each paper shows `title`, `abstract_s2`, `abstract_openalex`, `tldr`, `keywords`
 
 ## 8. The data
 
-Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`; the database is `archive/paperhunter.db`. Change only `paper_decision`. Never alter the schema or any other table.
+Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`; the database is `archive/paperhunter.db`. Change only `paper_candidate_ai`. Never alter the schema or any other table.
 
 | object | what it holds |
 |---|---|
 | `paper_dblp(id, dblp_key, venue_key, year, title, authors, venue, doi)` | every 2023–2026 paper of the venues in `conf_list` and `journal_list`, from `paper-hunter/a_extract.py` |
-| `paper_details_openalex`, `paper_details_s2` | what OpenAlex and Semantic Scholar returned for each paper, one row per paper asked (`found = 0`: not found), from `paper-hunter/b_details.py`. Never read them |
+| `paper_openalex`, `paper_s2` | what OpenAlex and Semantic Scholar returned for each paper, one row per paper asked (`found = 0`: not found), from `paper-hunter/b_details.py`. Never read them |
 | `paper_summary(paper_id, title, abstract_s2, abstract_openalex, tldr, keywords, topics, fields, work_type, is_paratext)` | view: one row per paper, the evidence you judge. `keywords`, `topics`, `fields` are `; `-separated. A paper neither API found has only empty fields; judge it from its title |
-| `paper_decision(paper_id, verdict, role, p, agent, offense, black_box, long_horizon, quote, quote_src, reject_class, reason, reviewer, decided_at)` | **your output**, one row per paper |
+| `paper_candidate_ai(paper_id, verdict, role, p, agent, offense, black_box, long_horizon, quote, quote_src, reject_class, reason, reviewer, decided_at)` | **your output**, one row per paper |
 | `paper_review` | to-do list: `UNFETCHED` (details not fetched yet: skip them; they become `UNDECIDED` after a later `b_details.py` run), `UNDECIDED` (fetched, no decision), `INVALID` (an accept whose quote is no longer in the stored text) |
 | `paper_list` | final output: the accepted papers. It stays empty while `paper_review` has any `UNDECIDED` or `INVALID` row; `UNFETCHED` papers do not block it |
 
@@ -125,7 +125,7 @@ If an insert is refused, your record is wrong: fix exactly what the error names,
 >    for rec in json.load(open("/tmp/<NAME>.json")):
 >        try:
 >            with conn:
->                conn.execute(f"INSERT INTO paper_decision ({', '.join(COLS)}) VALUES ({', '.join('?' * len(COLS))})",
+>                conn.execute(f"INSERT INTO paper_candidate_ai ({', '.join(COLS)}) VALUES ({', '.join('?' * len(COLS))})",
 >                             [{**rec, "reviewer": "<NAME>"}.get(c) for c in COLS])
 >            print(rec.get("paper_id"), "ok")
 >        except sqlite3.Error as e:
@@ -146,7 +146,7 @@ The orchestrator never reviews papers: it never reads `UNDECIDED` papers and nev
 ```sql
 SELECT CURRENT_TIMESTAMP;
 SELECT issue, count(*) FROM paper_review GROUP BY issue;
-SELECT verdict, count(*) FROM paper_decision GROUP BY verdict;
+SELECT verdict, count(*) FROM paper_candidate_ai GROUP BY verdict;
 ```
 
 Note the timestamp: it marks the start of this run (Step 4).
@@ -155,29 +155,29 @@ Note the timestamp: it marks the start of this run (Step 4).
 - No `UNDECIDED` and no `INVALID` row: nothing to review. Report (§14) and stop; if `UNFETCHED` rows remain, tell the humans to run `paper-hunter/b_details.py` again.
 - `UNFETCHED` rows never stop the review: work on the fetched papers.
 
-**Step 1. `INVALID`.** For each row, delete the decision (`DELETE FROM paper_decision WHERE paper_id = ?`); the paper comes back as `UNDECIDED`.
+**Step 1. `INVALID`.** For each row, delete the decision (`DELETE FROM paper_candidate_ai WHERE paper_id = ?`); the paper comes back as `UNDECIDED`.
 
 **Step 2. Review.** Spawn `W` parallel sub-agents as workers (§9), worker `K` = 0 … `W`−1, each with its own name, even for a small set (`W = 1` is fine for fewer than 200 papers). Give each one the §9 text with `<NAME>`, `<W>` and `<K>` filled in. When a worker finishes or dies, start it again with the same `K` until no `UNDECIDED` row is left.
 
 **Step 3. Read the result.**
 
 ```sql
-SELECT role, count(*) FROM paper_decision WHERE verdict = 'accept' GROUP BY role;
-SELECT reject_class, count(*) FROM paper_decision WHERE verdict = 'reject' GROUP BY reject_class ORDER BY 2 DESC;
+SELECT role, count(*) FROM paper_candidate_ai WHERE verdict = 'accept' GROUP BY role;
+SELECT reject_class, count(*) FROM paper_candidate_ai WHERE verdict = 'reject' GROUP BY reject_class ORDER BY 2 DESC;
 ```
 
-**Step 4a. Shortcut audit.** Each query must return 0 rows. Every decision a query returns was not reviewed as §9 requires: delete it (`DELETE FROM paper_decision WHERE paper_id = ?`; for the third query, all of that worker's decisions in this run) and go back to Step 2.
+**Step 4a. Shortcut audit.** Each query must return 0 rows. Every decision a query returns was not reviewed as §9 requires: delete it (`DELETE FROM paper_candidate_ai WHERE paper_id = ?`; for the third query, all of that worker's decisions in this run) and go back to Step 2.
 
 ```sql
 -- copy-paste reasons
-SELECT substr(reason, 1, 20) AS start, count(*), group_concat(paper_id) FROM paper_decision
+SELECT substr(reason, 1, 20) AS start, count(*), group_concat(paper_id) FROM paper_candidate_ai
 WHERE decided_at >= '<Step 0 timestamp>' GROUP BY 1 HAVING count(*) > 3;
 -- reasons that repeat the title instead of the content
-SELECT d.paper_id, d.reason FROM paper_decision d JOIN paper_dblp p ON p.id = d.paper_id
+SELECT d.paper_id, d.reason FROM paper_candidate_ai d JOIN paper_dblp p ON p.id = d.paper_id
 WHERE d.decided_at >= '<Step 0 timestamp>' AND length(p.title) >= 30
   AND instr(lower(d.reason), lower(substr(p.title, 1, 30))) > 0;
 -- bulk inserts: more than one batch stored in the same second
-SELECT reviewer, decided_at, count(*) FROM paper_decision
+SELECT reviewer, decided_at, count(*) FROM paper_candidate_ai
 WHERE decided_at >= '<Step 0 timestamp>' AND reviewer <> 'orchestrator' GROUP BY 1, 2 HAVING count(*) > 8;
 ```
 
@@ -186,12 +186,12 @@ WHERE decided_at >= '<Step 0 timestamp>' AND reviewer <> 'orchestrator' GROUP BY
 ```sql
 SELECT d.paper_id, d.verdict, d.role, d.p, d.agent, d.offense, d.black_box, d.long_horizon, d.reject_class, d.quote, d.reason,
        x.title, x.abstract_s2, x.abstract_openalex, x.tldr, x.keywords, x.topics
-FROM paper_decision d JOIN paper_summary x ON x.paper_id = d.paper_id
+FROM paper_candidate_ai d JOIN paper_summary x ON x.paper_id = d.paper_id
 WHERE (d.verdict = 'accept' OR d.p >= 0.3) AND d.decided_at >= '<Step 0 timestamp>' AND d.reviewer <> 'orchestrator'
 ORDER BY d.verdict, d.role, d.p;
 ```
 
-Mark each decision you confirm with `UPDATE paper_decision SET reviewer = 'orchestrator' WHERE paper_id = ?`. To correct one, delete it and insert the right record with `reviewer` = `orchestrator` (the worker's step 3). Check that every accepted paper is truly agentic and offensive and that its role is its headline contribution. Accepted papers with the same title (a workshop and a main-track version, a conference paper and its journal extension) are separate publications: keep both if both are in scope.
+Mark each decision you confirm with `UPDATE paper_candidate_ai SET reviewer = 'orchestrator' WHERE paper_id = ?`. To correct one, delete it and insert the right record with `reviewer` = `orchestrator` (the worker's step 3). Check that every accepted paper is truly agentic and offensive and that its role is its headline contribution. Accepted papers with the same title (a workshop and a main-track version, a conference paper and its journal extension) are separate publications: keep both if both are in scope.
 
 **Step 5. Final gate.** All must hold; otherwise go back to Step 0.
 - `SELECT count(*) FROM paper_review WHERE issue <> 'UNFETCHED';` returns 0.
@@ -201,7 +201,7 @@ Mark each decision you confirm with `UPDATE paper_decision SET reviewer = 'orche
 
 ## 11. Review record
 
-Keys are the columns of `paper_decision`; leave out the ones that do not apply.
+Keys are the columns of `paper_candidate_ai`; leave out the ones that do not apply.
 
 Accept:
 ```json
