@@ -14,7 +14,6 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-import zlib
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -34,8 +33,6 @@ S2_FIELDS = ",".join((
 TITLE_MATCH = 0.93
 YEAR_SLACK = 2
 MAX_FAILED_BATCHES = 3
-MIN_ABSTRACT = 120
-BUILD_BATCH = 2000
 
 _TAG = re.compile(r"</?(?:[\w-]+:)?([\w-]+)[^>]*>")
 _BLOCK = {"p", "title", "sec", "br", "div", "li", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6"}
@@ -126,6 +123,8 @@ def bare_doi(d):
 
 class Source:
     name = ""
+    table = ""
+    cols = ()
     doi_batch = 1
 
     def lookup_dois(self, dois):
@@ -134,12 +133,17 @@ class Source:
     def lookup_title(self, paper):
         raise NotImplementedError
 
+    def row(self, rec):
+        raise NotImplementedError
+
     def note(self):
         return ""
 
 
 class OpenAlex(Source):
-    name, doi_batch = "openalex", OA_BATCH
+    name, table, doi_batch = "openalex", "paper_details_openalex", OA_BATCH
+    cols = ("openalex_id", "doi", "title", "year", "abstract", "keywords", "topics", "work_type",
+            "is_paratext", "is_retracted", "language", "arxiv_id")
 
     def __init__(self):
         numbered = sorted((int(m.group(1)), v.strip()) for k, v in os.environ.items()
@@ -199,9 +203,32 @@ class OpenAlex(Source):
                 return w
         return None
 
+    def row(self, w):
+        arxiv = None
+        for loc in w.get("locations") or []:
+            m = _ARXIV_URL.search((loc or {}).get("landing_page_url") or "")
+            if m:
+                arxiv = m.group(1)
+                break
+        return (
+            _short_id(w.get("id")),
+            bare_doi(w.get("doi")) or None,
+            w.get("title"),
+            w.get("publication_year"),
+            clean_text(openalex_abstract(w.get("abstract_inverted_index"))) or None,
+            _names(w.get("keywords")),
+            _names(w.get("topics")),
+            w.get("type"),
+            _flag(w.get("is_paratext")),
+            _flag(w.get("is_retracted")),
+            w.get("language"),
+            arxiv,
+        )
+
 
 class SemanticScholar(Source):
-    name, doi_batch = "s2", S2_BATCH
+    name, table, doi_batch = "s2", "paper_details_s2", S2_BATCH
+    cols = ("s2_id", "doi", "title", "year", "abstract", "tldr", "fields", "arxiv_id")
 
     def __init__(self):
         key = os.environ.get("S2_API_KEY")
@@ -228,13 +255,20 @@ class SemanticScholar(Source):
                 return r
         return None
 
-
-def pack(rec):
-    return zlib.compress(json.dumps(rec, separators=(",", ":"), ensure_ascii=False).encode(), 6)
-
-
-def unpack(blob):
-    return json.loads(zlib.decompress(blob)) if blob else None
+    def row(self, r):
+        ids = r.get("externalIds") or {}
+        fields = [f.get("category") if isinstance(f, dict) else f
+                  for f in (r.get("fieldsOfStudy") or []) + (r.get("s2FieldsOfStudy") or [])]
+        return (
+            r.get("paperId"),
+            bare_doi(ids.get("DOI")) or None,
+            r.get("title"),
+            r.get("year"),
+            clean_text(r.get("abstract")) or None,
+            clean_text((r.get("tldr") or {}).get("text")) or None,
+            "; ".join(dict.fromkeys(f for f in fields if isinstance(f, str) and f)) or None,
+            ids.get("ArXiv"),
+        )
 
 
 def clean_text(s):
@@ -264,74 +298,14 @@ def _names(items):
     return "; ".join(dict.fromkeys(it["display_name"] for it in ranked)) or None
 
 
-DETAIL_COLS = ("paper_id", "abstract", "abstract_src", "tldr", "keywords", "topics", "fields", "work_type",
-               "is_paratext", "is_retracted", "language", "arxiv_id", "openalex_id", "s2_id")
-
-
-def derive(paper_id, oa, s2):
-    oa, s2 = oa or {}, s2 or {}
-    abstract, abstract_src = None, None
-    for src, text in (("s2", clean_text(s2.get("abstract"))),
-                      ("openalex", clean_text(openalex_abstract(oa.get("abstract_inverted_index"))))):
-        if len(text) >= MIN_ABSTRACT:
-            abstract, abstract_src = text, src
-            break
-    arxiv = (s2.get("externalIds") or {}).get("ArXiv")
-    for loc in oa.get("locations") or []:
-        m = _ARXIV_URL.search((loc or {}).get("landing_page_url") or "")
-        if m and not arxiv:
-            arxiv = m.group(1)
-    fields = [f.get("category") if isinstance(f, dict) else f
-              for f in (s2.get("fieldsOfStudy") or []) + (s2.get("s2FieldsOfStudy") or [])]
-    return (
-        paper_id,
-        abstract,
-        abstract_src,
-        clean_text((s2.get("tldr") or {}).get("text")) or None,
-        _names(oa.get("keywords")),
-        _names(oa.get("topics")),
-        "; ".join(dict.fromkeys(f for f in fields if isinstance(f, str) and f)) or None,
-        oa.get("type"),
-        _flag(oa.get("is_paratext")),
-        _flag(oa.get("is_retracted")),
-        oa.get("language"),
-        arxiv,
-        _short_id(oa.get("id")),
-        s2.get("paperId"),
-    )
-
-
-def build(conn, paper_ids):
-    ids = sorted(set(paper_ids))
-    for i in range(0, len(ids), 500):
-        chunk = ids[i:i + 500]
-        marks = ",".join("?" * len(chunk))
-        raw = {}
-        for pid, src, blob in conn.execute(
-                f"SELECT paper_id, src, raw FROM paper_source WHERE found = 1 AND paper_id IN ({marks})", chunk):
-            raw.setdefault(pid, {})[src] = unpack(blob)
-        conn.execute(f"DELETE FROM paper_detail WHERE paper_id IN ({marks})", chunk)
-        conn.executemany(f"INSERT INTO paper_detail ({','.join(DETAIL_COLS)}) "
-                         f"VALUES ({','.join('?' * len(DETAIL_COLS))})",
-                         [derive(pid, recs.get("openalex"), recs.get("s2")) for pid, recs in raw.items()])
-
-
-def build_all(conn):
-    ids = [r[0] for r in conn.execute("SELECT DISTINCT paper_id FROM paper_source WHERE found = 1")]
-    for i in range(0, len(ids), BUILD_BATCH):
-        with conn:
-            build(conn, ids[i:i + BUILD_BATCH])
-        print(f"\r  built {min(i + BUILD_BATCH, len(ids)):,}/{len(ids):,}", end="", flush=True)
-    print()
-
-
-def store(conn, src, via, results):
+def store(conn, source, via, results):
+    cols = ("paper_id", "via", "found", *source.cols)
+    missing = (None,) * len(source.cols)
     with conn:
         conn.executemany(
-            "INSERT OR REPLACE INTO paper_source (paper_id, src, via, found, raw) VALUES (?,?,?,?,?)",
-            [(pid, src, via, int(rec is not None), pack(rec) if rec is not None else None)
+            f"INSERT OR REPLACE INTO {source.table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+            [(pid, via, int(rec is not None), *(source.row(rec) if rec is not None else missing))
              for pid, rec in results])
-        build(conn, [pid for pid, rec in results if rec is not None])
 
 
 class Worker(threading.Thread):
@@ -349,7 +323,7 @@ class Worker(threading.Thread):
 
     def state(self, conn):
         return {pid: (via, found) for pid, via, found in conn.execute(
-            "SELECT paper_id, via, found FROM paper_source WHERE src = ?", (self.source.name,))}
+            f"SELECT paper_id, via, found FROM {self.source.table}")}
 
     def attempt(self, call, *args):
         try:
@@ -391,7 +365,7 @@ class Worker(threading.Thread):
             found = self.attempt(self.source.lookup_dois, batch)
             if found is FAILED:
                 continue
-            store(conn, self.source.name, "doi", [(pid, found.get(d)) for d in batch for pid in by_doi[d]])
+            store(conn, self.source, "doi", [(pid, found.get(d)) for d in batch for pid in by_doi[d]])
             self.stats["doi_asked"] += len(batch)
             self.stats["doi_found"] += sum(d in found for d in batch)
             if (i // step) % 20 == 0 or i + step >= len(dois):
@@ -405,7 +379,7 @@ class Worker(threading.Thread):
         done = self.state(conn)
         todo = [p for p in self.targets if (not p["doi"] and p["id"] not in done) or done.get(p["id"]) == ("doi", 0)]
         if self.gaps_only:
-            have = {r[0] for r in conn.execute("SELECT paper_id FROM paper_detail WHERE abstract IS NOT NULL")}
+            have = {r[0] for r in conn.execute("SELECT paper_id FROM paper_description WHERE abstract IS NOT NULL")}
             todo = [p for p in todo if p["id"] not in have]
         self.log(f"title phase: {len(todo):,} papers" + (" (still without an abstract)" if self.gaps_only else ""))
         pending = []
@@ -417,12 +391,12 @@ class Worker(threading.Thread):
             self.stats["title_asked"] += 1
             self.stats["title_found"] += rec is not None
             if len(pending) >= 50 or n == len(todo):
-                store(conn, self.source.name, "title", pending)
+                store(conn, self.source, "title", pending)
                 pending = []
             if n % 500 == 0 or n == len(todo):
                 self.log(f"title {n:,}/{len(todo):,}  found {self.stats['title_found']:,}" + self.source.note())
         if pending:
-            store(conn, self.source.name, "title", pending)
+            store(conn, self.source, "title", pending)
 
 
 def take_lock():
@@ -437,19 +411,22 @@ def take_lock():
 def status(conn):
     total = conn.execute("SELECT count(*) FROM paper_dblp").fetchone()[0]
     print(f"\npaper_dblp: {total:,} papers\n")
-    print(f"{'source':9} {'via':6} {'found':>10} {'missing':>10}")
-    for src, via, found, missing in conn.execute(
-            "SELECT src, via, sum(found), sum(1 - found) FROM paper_source GROUP BY src, via ORDER BY src, via"):
-        print(f"{src:9} {via:6} {found:>10,} {missing:>10,}")
-    n = conn.execute("SELECT count(*) FROM paper_detail").fetchone()[0]
-    print(f"\npaper_detail: {n:,} papers")
+    print(f"{'table':23} {'via':6} {'found':>10} {'missing':>10}")
+    for table in ("paper_details_openalex", "paper_details_s2"):
+        for via, found, missing in conn.execute(
+                f"SELECT via, sum(found), sum(1 - found) FROM {table} GROUP BY via ORDER BY via"):
+            print(f"{table:23} {via:6} {found:>10,} {missing:>10,}")
+    checks = (("abstract", "abstract IS NOT NULL"), ("  from s2", "abstract_src = 's2'"),
+              ("  from openalex", "abstract_src = 'openalex'"), ("tldr", "tldr IS NOT NULL"),
+              ("keywords", "keywords IS NOT NULL"), ("topics", "topics IS NOT NULL"),
+              ("fields", "fields IS NOT NULL"), ("arxiv_id", "arxiv_id IS NOT NULL"),
+              ("is_paratext", "is_paratext = 1"), ("is_retracted", "is_retracted = 1"))
+    n, *counts = conn.execute(
+        "SELECT count(*), " + ", ".join(f"coalesce(sum({cond}), 0)" for _, cond in checks)
+        + " FROM paper_description WHERE openalex_id IS NOT NULL OR s2_id IS NOT NULL").fetchone()
+    print(f"\npaper_description: {n:,} papers found by either API")
     if n:
-        for label, cond in (("abstract", "abstract IS NOT NULL"), ("  from s2", "abstract_src = 's2'"),
-                            ("  from openalex", "abstract_src = 'openalex'"), ("tldr", "tldr IS NOT NULL"),
-                            ("keywords", "keywords IS NOT NULL"), ("topics", "topics IS NOT NULL"),
-                            ("fields", "fields IS NOT NULL"), ("arxiv_id", "arxiv_id IS NOT NULL"),
-                            ("is_paratext", "is_paratext = 1"), ("is_retracted", "is_retracted = 1")):
-            k = conn.execute(f"SELECT count(*) FROM paper_detail WHERE {cond}").fetchone()[0]
+        for (label, _), k in zip(checks, counts):
             print(f"  {label:16} {k:>10,}  {100 * k / n:5.1f}%")
     print("\npaper_review:")
     for issue, k in conn.execute("SELECT issue, count(*) FROM paper_review GROUP BY issue ORDER BY issue"):
@@ -482,8 +459,6 @@ def main():
     print(f"\nFetched in {time.time() - t0:,.0f} s")
     for w in workers:
         print(f"  {w.name:8} {json.dumps(w.stats)}" + (f"  ERROR: {w.error}" if w.error else ""))
-    print("\nRebuilding paper_detail from paper_source...")
-    build_all(conn)
     status(conn)
     conn.close()
     lock.close()

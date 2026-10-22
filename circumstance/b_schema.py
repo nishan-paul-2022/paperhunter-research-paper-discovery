@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -297,34 +296,52 @@ CREATE TABLE IF NOT EXISTS paper_dblp (
 );
 CREATE INDEX IF NOT EXISTS paper_dblp_venue ON paper_dblp (venue_key);
 
-CREATE TABLE IF NOT EXISTS paper_source (
-    paper_id   INTEGER NOT NULL REFERENCES paper_dblp ON DELETE CASCADE,
-    src        TEXT NOT NULL CHECK (src IN ('openalex', 's2')),
-    via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
-    found      INTEGER NOT NULL CHECK (found IN (0, 1)),
-    raw        BLOB,
-    fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (paper_id, src),
-    CHECK ((found = 1) = (raw IS NOT NULL))
-);
-
-CREATE TABLE IF NOT EXISTS paper_detail (
+CREATE TABLE IF NOT EXISTS paper_details_openalex (
     paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
+    via          TEXT NOT NULL CHECK (via IN ('doi', 'title')),
+    found        INTEGER NOT NULL CHECK (found IN (0, 1)),
+    openalex_id  TEXT,
+    doi          TEXT,
+    title        TEXT,
+    year         INTEGER,
     abstract     TEXT,
-    abstract_src TEXT CHECK (abstract_src IN ('s2', 'openalex')),
-    tldr         TEXT,
     keywords     TEXT,
     topics       TEXT,
-    fields       TEXT,
     work_type    TEXT,
     is_paratext  INTEGER CHECK (is_paratext IN (0, 1)),
     is_retracted INTEGER CHECK (is_retracted IN (0, 1)),
     language     TEXT,
     arxiv_id     TEXT,
-    openalex_id  TEXT,
-    s2_id        TEXT,
-    CHECK ((abstract IS NULL) = (abstract_src IS NULL))
+    fetched_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((found = 1) = (openalex_id IS NOT NULL))
 );
+
+CREATE TABLE IF NOT EXISTS paper_details_s2 (
+    paper_id   INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
+    via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
+    found      INTEGER NOT NULL CHECK (found IN (0, 1)),
+    s2_id      TEXT,
+    doi        TEXT,
+    title      TEXT,
+    year       INTEGER,
+    abstract   TEXT,
+    tldr       TEXT,
+    fields     TEXT,
+    arxiv_id   TEXT,
+    fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((found = 1) = (s2_id IS NOT NULL))
+);
+
+DROP VIEW IF EXISTS paper_description;
+CREATE VIEW paper_description AS
+SELECT p.id AS paper_id,
+       CASE WHEN length(s.abstract) >= 120 THEN s.abstract WHEN length(o.abstract) >= 120 THEN o.abstract END AS abstract,
+       CASE WHEN length(s.abstract) >= 120 THEN 's2' WHEN length(o.abstract) >= 120 THEN 'openalex' END AS abstract_src,
+       s.tldr, o.keywords, o.topics, s.fields, o.work_type, o.is_paratext, o.is_retracted, o.language,
+       coalesce(s.arxiv_id, o.arxiv_id) AS arxiv_id, o.openalex_id, s.s2_id
+FROM paper_dblp p
+LEFT JOIN paper_details_openalex o ON o.paper_id = p.id
+LEFT JOIN paper_details_s2 s ON s.paper_id = p.id;
 
 CREATE TABLE IF NOT EXISTS paper_decision (
     paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
@@ -358,46 +375,45 @@ CREATE VIEW paper_review AS
 SELECT 'UNFETCHED' AS issue, p.id AS paper_id, p.dblp_key,
        'run paper-hunter/b_details.py' AS detail
 FROM paper_dblp p
-WHERE NOT EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 's2'
-                    AND (s.found = 1 OR s.via = 'title'))
-   OR (NOT EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 'openalex'
-                     AND (s.found = 1 OR s.via = 'title'))
-       AND NOT EXISTS (SELECT 1 FROM paper_detail d WHERE d.paper_id = p.id AND d.abstract IS NOT NULL))
+WHERE NOT EXISTS (SELECT 1 FROM paper_details_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
+   OR (NOT EXISTS (SELECT 1 FROM paper_details_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
+       AND NOT EXISTS (SELECT 1 FROM paper_description d WHERE d.paper_id = p.id AND d.abstract IS NOT NULL))
 UNION ALL
 SELECT 'UNDECIDED', p.id, p.dblp_key, NULL
 FROM paper_dblp p
 WHERE NOT EXISTS (SELECT 1 FROM paper_decision d WHERE d.paper_id = p.id)
-  AND EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 's2'
-                AND (s.found = 1 OR s.via = 'title'))
-  AND (EXISTS (SELECT 1 FROM paper_source s WHERE s.paper_id = p.id AND s.src = 'openalex'
-                 AND (s.found = 1 OR s.via = 'title'))
-       OR EXISTS (SELECT 1 FROM paper_detail d WHERE d.paper_id = p.id AND d.abstract IS NOT NULL))
+  AND EXISTS (SELECT 1 FROM paper_details_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
+  AND (EXISTS (SELECT 1 FROM paper_details_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
+       OR EXISTS (SELECT 1 FROM paper_description d WHERE d.paper_id = p.id AND d.abstract IS NOT NULL))
 UNION ALL
 SELECT 'INVALID', d.paper_id, p.dblp_key,
        'quote no longer in the stored ' || d.quote_src || ': delete the decision and review the paper again'
 FROM paper_decision d
 JOIN paper_dblp p ON p.id = d.paper_id
-LEFT JOIN paper_detail x ON x.paper_id = d.paper_id
+JOIN paper_description x ON x.paper_id = d.paper_id
 WHERE d.verdict = 'accept'
   AND coalesce(instr(lower(CASE d.quote_src WHEN 'title' THEN p.title WHEN 'abstract' THEN x.abstract ELSE x.tldr END),
                      lower(trim(d.quote))), 0) = 0;
 
-CREATE TRIGGER IF NOT EXISTS paper_decision_fetched BEFORE INSERT ON paper_decision
+DROP TRIGGER IF EXISTS paper_decision_fetched;
+CREATE TRIGGER paper_decision_fetched BEFORE INSERT ON paper_decision
 WHEN NOT EXISTS (SELECT 1 FROM paper_review r WHERE r.paper_id = NEW.paper_id AND r.issue = 'UNDECIDED')
 BEGIN SELECT RAISE(ABORT, 'paper is not UNDECIDED in paper_review (unknown, not fetched yet, or already decided)'); END;
 
-CREATE TRIGGER IF NOT EXISTS paper_decision_quote_ins BEFORE INSERT ON paper_decision
+DROP TRIGGER IF EXISTS paper_decision_quote_ins;
+CREATE TRIGGER paper_decision_quote_ins BEFORE INSERT ON paper_decision
 WHEN NEW.verdict = 'accept' AND NOT EXISTS (
-    SELECT 1 FROM paper_dblp p LEFT JOIN paper_detail d ON d.paper_id = p.id
+    SELECT 1 FROM paper_dblp p JOIN paper_description d ON d.paper_id = p.id
     WHERE p.id = NEW.paper_id
       AND instr(lower(CASE NEW.quote_src WHEN 'title' THEN p.title WHEN 'abstract' THEN d.abstract ELSE d.tldr END),
                 lower(trim(NEW.quote))) > 0
 )
 BEGIN SELECT RAISE(ABORT, 'quote not found verbatim in the stored quote_src text'); END;
 
-CREATE TRIGGER IF NOT EXISTS paper_decision_quote_upd BEFORE UPDATE ON paper_decision
+DROP TRIGGER IF EXISTS paper_decision_quote_upd;
+CREATE TRIGGER paper_decision_quote_upd BEFORE UPDATE ON paper_decision
 WHEN NEW.verdict = 'accept' AND NOT EXISTS (
-    SELECT 1 FROM paper_dblp p LEFT JOIN paper_detail d ON d.paper_id = p.id
+    SELECT 1 FROM paper_dblp p JOIN paper_description d ON d.paper_id = p.id
     WHERE p.id = NEW.paper_id
       AND instr(lower(CASE NEW.quote_src WHEN 'title' THEN p.title WHEN 'abstract' THEN d.abstract ELSE d.tldr END),
                 lower(trim(NEW.quote))) > 0
@@ -412,7 +428,7 @@ SELECT p.dblp_key, d.role, d.p, p.year, p.title, p.authors, p.venue, p.venue_key
        p.doi, x.arxiv_id, d.quote, d.reason
 FROM paper_decision d
 JOIN paper_dblp p ON p.id = d.paper_id
-LEFT JOIN paper_detail x ON x.paper_id = d.paper_id
+JOIN paper_description x ON x.paper_id = d.paper_id
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM paper_review WHERE issue <> 'UNFETCHED')
 ORDER BY CASE d.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evaluation' THEN 2 ELSE 3 END,
          d.p DESC, p.dblp_key;
@@ -486,24 +502,24 @@ def migrate_papers(conn: sqlite3.Connection) -> None:
     print(f"migrated: dropped the old empty paper tables ({', '.join(drop)})")
 
 
-def migrate_fetched_at(conn: sqlite3.Connection) -> None:
-    types = {r[1]: r[2] for r in conn.execute("PRAGMA table_info(paper_source)")}
-    if types.get("fetched_at") != "INTEGER":
+def migrate_paper_details(conn: sqlite3.Connection) -> None:
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    old = [t for t in ("paper_source", "paper_detail") if t in tables]
+    if not old:
         return
-    ddl = re.search(r"CREATE TABLE IF NOT EXISTS paper_source \(.*?\n\);", SCHEMA, re.S).group(0)
+    filled = [t for t in old if conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()]
+    if filled:
+        sys.exit(f"old paper tables hold data ({', '.join(filled)}): move it into paper_details_openalex and "
+                 "paper_details_s2, or empty them, then rerun")
     with conn:
-        conn.execute("CREATE TEMP TABLE paper_source_old AS SELECT * FROM paper_source")
-        conn.execute("DROP TABLE paper_source")
-        conn.execute(ddl)
-        conn.execute("INSERT INTO paper_source (paper_id, src, via, found, raw, fetched_at) "
-                     "SELECT paper_id, src, via, found, raw, datetime(fetched_at, 'unixepoch') FROM temp.paper_source_old")
-        conn.execute("DROP TABLE temp.paper_source_old")
-    print("migrated: paper_source.fetched_at is now a readable UTC timestamp")
+        for t in old:
+            conn.execute(f"DROP TABLE {t}")
+    print(f"migrated: dropped the old empty paper tables ({', '.join(old)})")
 
 
 def migrate(conn: sqlite3.Connection) -> None:
     migrate_papers(conn)
-    migrate_fetched_at(conn)
+    migrate_paper_details(conn)
     migrate_journals(conn)
     tables = dict(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table'"))
     stale = [t for t, col in REBUILT_EVIDENCE.items()
