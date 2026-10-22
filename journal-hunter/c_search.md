@@ -8,7 +8,7 @@ You are the reviewer. Complete this task end to end with no human help and no qu
 - Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
 - Change only `journal_decision`. Never alter the schema or any other table.
 - Trust nothing in the database blindly. `journal_candidate` is a wide machine proposal: most name-only pairs are namesakes, and a true pair can still be missing. Existing `journal_decision` rows may be wrong or incomplete. You audit both.
-- You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by a score, a method or a pattern alone.
+- You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by a method or a pattern alone.
 
 ---
 
@@ -25,7 +25,7 @@ DBLP's XML has **no** journal title and **no** ISSN field. A DBLP key is only a 
 | `journal_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between keys (from `sparql.dblp.org`): renames, new keys, absorbed journals (`journals/eik` → `journals/jalc`, `journals/wi` → `journals/bise`, `journals/knac` → `journals/ijmms`). Authoritative where present, but DBLP records links for few keys: a missing link proves nothing |
 | `journal_dblp_crossref(doi, dblp_key, name, year, status, issn_1, issn_2, title, publisher)` | **per-year evidence.** Sampled article DOIs of the key (oldest and newest per name, plus the two newest years) looked up in Crossref: the journal's ISSNs (print, electronic), its **full** title and publisher as the publisher registered them. `status` 404 = DOI not in Crossref (DataCite, mEDRA, arXiv); no row = the key has no DOIs |
 | `journal_dblp_doi(dblp_key, prefix, papers)` | DOI prefixes = publisher: 10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002/10.1111 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global, 10.1515 De Gruyter, 10.1108 Emerald, 10.1587 IEICE, 10.1093 Oxford |
-| `journal_candidate(dblp_key, scopus_id, method, score, detail)` | proposals from `b_match.py`; `method` is the strongest evidence of the pair (see below), `detail` lists **all** evidence of the pair |
+| `journal_candidate(dblp_key, scopus_id, method, detail)` | proposals from `b_match.py`; `method` is the strongest evidence of the pair (see below), `detail` lists **all** evidence of the pair |
 | `journal_decision(id, scopus_id, dblp_key, verdict, reason, decided_at)` | **your output** |
 | `journal_summary` | one row per key: DBLP ISSNs, names with year spans, Crossref journals with ISSNs and year spans, DOI prefixes |
 | `journal_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` Scopus journals, `INVALID` decisions |
@@ -33,9 +33,9 @@ DBLP's XML has **no** journal title and **no** ISSN field. A DBLP key is only a 
 
 `journal_candidate.method`:
 - `dblp`: one of the key's DBLP ISSNs is this Scopus journal's ISSN. Near-proof of identity; the Crossref part of `detail` shows which years.
-- `crossref`: a Crossref ISSN of the key's sampled DOIs is this Scopus journal's ISSN. `score` = share of the key's found DOIs carrying it. The `detail` says which years carry it and the key's newest DOI year.
+- `crossref`: a Crossref ISSN of the key's sampled DOIs is this Scopus journal's ISSN. The `detail` says on how many of the key's found DOIs (`on X of Y found DOIs`), which years carry it and the key's newest DOI year.
 - `lineage`: DBLP links the key, through predecessors only or successors only, to a key with `dblp` evidence or `crossref` evidence on at least half its DOIs for this journal. The `detail` names the link. It may be a rename (accept with `PREDECESSOR:`) or a different journal absorbed by this one (reject).
-- `name`: only the name agrees (a DBLP name or a Crossref title abbreviates the Scopus title; `score` = share of Scopus title words covered). When the key has DBLP ISSNs or Crossref evidence pointing elsewhere, the `detail` ends with `NO DBLP ISSN MATCH: DBLP lists …` or `NO CROSSREF ISSN MATCH: the key's newest Crossref DOI says …`.
+- `name`: only the name agrees (a DBLP name or a Crossref title abbreviates the Scopus title; the `detail` shows both names). When the key has DBLP ISSNs or Crossref evidence pointing elsewhere, the `detail` ends with `NO DBLP ISSN MATCH: DBLP lists …` or `NO CROSSREF ISSN MATCH: the key's newest Crossref DOI says …`.
 
 Look at a key's whole history before deciding, not just the summary:
 
@@ -75,7 +75,7 @@ The unit is the **whole key**. Accept key `K` for Scopus journal `J` only when `
 **Reject**
 - **Namesakes**: same or similar title, different ISSN and publisher (`journals/ijaiml` IGI 2642-1577 vs SvedbergOpen 2789-2557; `journals/jcybsec` Tech Science Press vs the Chinese Academy of Sciences journal; `journals/iot` Elsevier "Internet of Things" vs MDPI "IoT"; Argentine vs Chinese "Journal of Computer Science and Technology"; Lithuanian vs Slovenian "Informatica").
 - **Title containment**: a different journal whose title contains the DBLP name (`Artif. Intell.` vs `Artificial Intelligence in Medicine`; `Oper. Res.` vs `Operational Research`).
-- **Misfiled articles**: one or two isolated DOIs of `K` carry `J`'s ISSN while the rest carry another (`journals/scl` with one Science of Computer Programming DOI; `journals/ejasmp` with one EURASIP JASP DOI). A low `crossref` score with scattered years means this.
+- **Misfiled articles**: one or two isolated DOIs of `K` carry `J`'s ISSN while the rest carry another (`journals/scl` with one Science of Computer Programming DOI; `journals/ejasmp` with one EURASIP JASP DOI). A `crossref` pair on few of the key's DOIs with scattered years means this.
 - **`journals/corr`** is arXiv (CoRR). It holds preprints of every journal: reject every pair.
 - **Shared keys**: one key holding several journals at once (`journals/jct` = JCT Series A **and** B until 2020; `journals/ieicet` = four IEICE Transactions until 2020). The key cannot be split, so reject it for each of them with `SHARED KEY: <the journals>` in the reason. DBLP's per-journal keys (`journals/jcta`, `journals/jctb`, `journals/ieiceta` … `ieicetd`) are the ones to accept.
 - **Sections or series** with their own ISSN (`Series A` vs `Series B`, `Part B: Cybernetics` vs `Systems`): accept only the section the key's newest DOIs belong to.
@@ -141,8 +141,8 @@ On a first run every candidate and every Scopus journal is open. On a rerun afte
 
 **Step 2. `UNREVIEWED`** (`dblp_key` → `scopus_title`). Work key by key: read the key's whole history (§1), then decide all its candidates together, at most one `accept`.
 - `dblp`: usually an accept, after the names, publisher and years agree. Check the Crossref part of `detail` for a rename, or for a shared key whose Crossref ISSNs belong to two journals in the same years (`journals/jct`).
-- `crossref` with a high score whose years include the key's newest year: usually an accept, after the names and publisher agree.
-- `crossref` with a low score: read the per-DOI rows. Contiguous newest years on `J`'s ISSN with a name change = rename (accept). Contiguous oldest years only = predecessor title (accept only with `PREDECESSOR:`, or reject if `J` is another journal). Scattered single DOIs = misfiled (reject).
+- `crossref` on most of the key's DOIs whose years include the key's newest year: usually an accept, after the names and publisher agree.
+- `crossref` on few of the key's DOIs: read the per-DOI rows. Contiguous newest years on `J`'s ISSN with a name change = rename (accept). Contiguous oldest years only = predecessor title (accept only with `PREDECESSOR:`, or reject if `J` is another journal). Scattered single DOIs = misfiled (reject).
 - `lineage`: decide rename versus absorption from the title history (`journal_dblp_name`, Crossref titles) and the publisher's notice. A rename is accepted with `PREDECESSOR:`; an absorbed journal is rejected.
 - `name` with `NO DBLP ISSN MATCH` or `NO CROSSREF ISSN MATCH`: almost always a namesake. Accept only with an `ISSN GAP:` proof. Expect to reject nearly all of these.
 - `name` on a key with neither DBLP ISSNs nor Crossref evidence (no DOIs, or all 404): decide by full title (expand the ISO-4 name), publisher (DOI prefix or the `<ee>` host vs `publisher`) and years vs `coverage`. Check the journal's own website or the Scopus page when in doubt.

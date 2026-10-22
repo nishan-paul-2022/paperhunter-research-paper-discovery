@@ -196,7 +196,6 @@ CREATE TABLE IF NOT EXISTS journal_candidate (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     scopus_id   INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('dblp', 'crossref', 'lineage', 'name')),
-    score    REAL NOT NULL,
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, scopus_id)
 ) WITHOUT ROWID;
@@ -254,7 +253,7 @@ FROM journal_dblp_venue j;
 DROP VIEW IF EXISTS journal_review;
 CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
-       s.publisher, s.quartile, s.coverage, c.method, c.score, c.detail,
+       s.publisher, s.quartile, s.coverage, c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.doi_prefixes
 FROM journal_candidate c
 JOIN journal_scopus_venue s ON s.id = c.scopus_id
@@ -262,12 +261,12 @@ JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile, s.coverage,
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_scopus_venue s
 WHERE NOT EXISTS (SELECT 1 FROM journal_decision d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
+       NULL, 'journal_decision ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_decision d
 WHERE NOT EXISTS (SELECT 1 FROM journal_scopus_venue s WHERE s.id = d.scopus_id)

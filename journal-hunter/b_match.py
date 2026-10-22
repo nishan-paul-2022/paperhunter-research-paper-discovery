@@ -166,7 +166,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
                                    "WHERE status = 200 AND title IS NOT NULL"):
         names[key].add(title)
     for key, key_names in names.items():
-        for name in key_names:
+        for name in sorted(key_names):
             d_toks = tokens(name)
             if not d_toks:
                 continue
@@ -183,7 +183,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
             detail += f"; NO DBLP ISSN MATCH: DBLP lists {' '.join(dblp_issns[key])}"
         if "crossref" not in found and key in newest_issns:
             detail += f"; NO CROSSREF ISSN MATCH: the key's newest Crossref DOI says {newest_issns[key]}"
-        pairs.append((key, sid, method, found[method][0], detail))
+        pairs.append((key, sid, method, detail))
     return pairs
 
 
@@ -202,7 +202,7 @@ def main() -> None:
     pairs = propose(conn)
     with conn:
         conn.execute("DELETE FROM journal_candidate")
-        conn.executemany("INSERT INTO journal_candidate VALUES (?, ?, ?, ?, ?)", pairs)
+        conn.executemany("INSERT INTO journal_candidate VALUES (?, ?, ?, ?)", pairs)
     issues = dict(conn.execute("SELECT issue, count(*) FROM journal_review GROUP BY issue").fetchall())
     decisions = conn.execute("SELECT count(*) FROM journal_decision").fetchone()[0]
     final = conn.execute("SELECT count(*) FROM journal_list").fetchone()[0]
