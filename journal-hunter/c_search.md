@@ -18,12 +18,12 @@ DBLP's XML has **no** journal title and **no** ISSN field. A DBLP key is only a 
 
 | object | what it holds |
 |---|---|
-| `journal_scopus_venue(id, scopus_title, issn_1, issn_2, scopus_publisher, quartile, coverage)` | Scopus 2025 CS journals with Q1–Q4 (`id` = Scopus Sourceid). `coverage` is the Scopus year span, e.g. `2010-2026`. Empty ISSN = `''` |
+| `journal_scopus(id, scopus_title, issn_1, issn_2, scopus_publisher, quartile, coverage)` | Scopus 2025 CS journals with Q1–Q4 (`id` = Scopus Sourceid). `coverage` is the Scopus year span, e.g. `2010-2026`. Empty ISSN = `''` |
 | `journal_dblp_venue(dblp_key, papers, first_year, last_year)` | one row per DBLP journal key |
 | `journal_dblp_name(dblp_key, name, papers, first_year, last_year)` | every `<journal>` name the key's articles use (ISO-4 style abbreviations), with year span. A name change inside a key is a rename |
 | `journal_dblp_issn(dblp_key, issn)` | **the strongest evidence**: the ISSNs DBLP itself records for the key's journal (from `sparql.dblp.org`), including former titles' ISSNs. Covers almost every key, including keys without DOIs |
 | `journal_dblp_lineage(predecessor_key, successor_key)` | DBLP's own predecessor → successor links between keys (from `sparql.dblp.org`): renames, new keys, absorbed journals (`journals/eik` → `journals/jalc`, `journals/wi` → `journals/bise`, `journals/knac` → `journals/ijmms`). Authoritative where present, but DBLP records links for few keys: a missing link proves nothing |
-| `journal_dblp_crossref(doi, dblp_key, name, year, status, issn_1, issn_2, crossref_title, crossref_publisher)` | **per-year evidence.** Sampled article DOIs of the key (oldest and newest per name, plus the two newest years) looked up in Crossref: the journal's ISSNs (print, electronic), its **full** title and publisher as the publisher registered them. `status` 404 = DOI not in Crossref (DataCite, mEDRA, arXiv); no row = the key has no DOIs |
+| `journal_crossref(doi, dblp_key, name, year, status, issn_1, issn_2, crossref_title, crossref_publisher)` | **per-year evidence.** Sampled article DOIs of the key (oldest and newest per name, plus the two newest years) looked up in Crossref: the journal's ISSNs (print, electronic), its **full** title and publisher as the publisher registered them. `status` 404 = DOI not in Crossref (DataCite, mEDRA, arXiv); no row = the key has no DOIs |
 | `journal_dblp_doi(dblp_key, prefix, papers)` | DOI prefixes = publisher: 10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002/10.1111 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global, 10.1515 De Gruyter, 10.1108 Emerald, 10.1587 IEICE, 10.1093 Oxford |
 | `journal_candidate_rule(dblp_key, scopus_id, method, detail)` | proposals from `b_match.py`; `method` is the strongest evidence of the pair (see below), `detail` lists **all** evidence of the pair |
 | `journal_candidate_ai(id, scopus_id, dblp_key, verdict, reason, decided_at)` | **your output** |
@@ -43,7 +43,7 @@ Look at a key's whole history before deciding, not just the summary:
 SELECT issn FROM journal_dblp_issn WHERE dblp_key = 'journals/x';
 SELECT * FROM journal_dblp_lineage WHERE 'journals/x' IN (predecessor_key, successor_key);
 SELECT name, papers, first_year, last_year FROM journal_dblp_name WHERE dblp_key = 'journals/x' ORDER BY first_year;
-SELECT year, name, status, issn_1, issn_2, crossref_title, crossref_publisher, doi FROM journal_dblp_crossref WHERE dblp_key = 'journals/x' ORDER BY year;
+SELECT year, name, status, issn_1, issn_2, crossref_title, crossref_publisher, doi FROM journal_crossref WHERE dblp_key = 'journals/x' ORDER BY year;
 SELECT * FROM journal_dblp_doi WHERE dblp_key = 'journals/x' ORDER BY papers DESC;
 SELECT * FROM journal_dblp_venue WHERE dblp_key = 'journals/x';
 ```
@@ -57,7 +57,7 @@ Web sources, authoritative when the data above leaves doubt:
 
 **Do not use the dblp.org web pages** or their mirrors (they sit behind a bot wall). All DBLP evidence comes from the tables above and the dump `archive/dblp.xml` (`grep 'key="journals/x/'` for a key's articles); titles, ISSNs and renames come from Crossref, Scopus and the publishers.
 
-If `journal_dblp_crossref`, `journal_dblp_issn` or `journal_dblp_lineage` does not exist, `journal_dblp_issn` or `journal_dblp_lineage` is empty, or `SELECT count(*) FROM journal_dblp_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `journal-hunter/b_match.py`.
+If `journal_crossref`, `journal_dblp_issn` or `journal_dblp_lineage` does not exist, `journal_dblp_issn` or `journal_dblp_lineage` is empty, or `SELECT count(*) FROM journal_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `journal-hunter/b_match.py`.
 
 ---
 
@@ -104,7 +104,7 @@ INSERT INTO journal_candidate_ai (scopus_id, dblp_key, verdict, reason) VALUES
 | `reject` | the key | the key is not this journal. Record every pair you examined and turned down |
 | `absent` | `NULL` | this Scopus journal has no DBLP key of its own |
 
-- Take `scopus_id` from `journal_review.scopus_id` or `journal_scopus_venue.id` (the stable Scopus Sourceid).
+- Take `scopus_id` from `journal_review.scopus_id` or `journal_scopus.id` (the stable Scopus Sourceid).
 - `reason` is one line of concrete evidence: the ISSN and its source (DBLP / Crossref), the years, the publisher, and for renames the proof. "Same name" alone is not a reason.
 - **Reason tags**, required where they apply (the sweeps in §4 read them):
   - `ISSN GAP: <DBLP or Crossref ISSN> = <Scopus ISSN> (<proof>)` on an accept whose DBLP or Crossref ISSNs are not this Scopus journal's (Steps 4b and 4f).
@@ -132,7 +132,7 @@ INSERT INTO journal_candidate_ai (scopus_id, dblp_key, verdict, reason) VALUES
 ```sql
 SELECT issue, count(*) FROM journal_review GROUP BY issue;
 SELECT verdict, count(*) FROM journal_candidate_ai GROUP BY verdict;
-SELECT coalesce(status, 0), count(*) FROM journal_dblp_crossref GROUP BY 1;
+SELECT coalesce(status, 0), count(*) FROM journal_crossref GROUP BY 1;
 ```
 
 On a first run every candidate and every Scopus journal is open. On a rerun after a new DBLP dump, Scopus edition or matcher change, only the new pairs are open, but the sweeps and audits in Steps 4–6 always run in full.
@@ -152,7 +152,7 @@ On a first run every candidate and every Scopus journal is open. On a rerun afte
 
    ```sql
    SELECT dblp_key FROM journal_dblp_issn WHERE issn = ?;
-   SELECT dblp_key, year, crossref_title, issn_1, issn_2 FROM journal_dblp_crossref WHERE ? IN (issn_1, issn_2);
+   SELECT dblp_key, year, crossref_title, issn_1, issn_2 FROM journal_crossref WHERE ? IN (issn_1, issn_2);
    ```
 
    For every key found, also read its links: `SELECT * FROM journal_dblp_lineage WHERE 'journals/x' IN (predecessor_key, successor_key);`
@@ -160,7 +160,7 @@ On a first run every candidate and every Scopus journal is open. On a rerun afte
 
    ```sql
    SELECT dblp_key, name, papers, first_year, last_year FROM journal_dblp_name WHERE name LIKE '%Geosci%';
-   SELECT DISTINCT dblp_key, crossref_title, issn_1, issn_2 FROM journal_dblp_crossref WHERE crossref_title LIKE '%Geoscience%';
+   SELECT DISTINCT dblp_key, crossref_title, issn_1, issn_2 FROM journal_crossref WHERE crossref_title LIKE '%Geoscience%';
    ```
 3. The reverse probe: its 5 most recent DOIs from Crossref recent works (§1), searched in the dump. Batch this for all `UNCOVERED` journals in one `grep -F -f` pass. A hit names the key directly.
 4. Former titles from the Scopus/SJR page or the publisher, then repeat 1–2 for each.
@@ -172,16 +172,16 @@ Accept every key you find (§2); reject the near misses you examined. Only if no
 4a. Absent journals that the evidence contradicts. Fix the decision: accept the key, or prove the hit is a misfiled DOI and reject that pair.
 
 ```sql
-WITH si AS (SELECT id, issn_1 AS issn FROM journal_scopus_venue WHERE issn_1 <> ''
-            UNION SELECT id, issn_2 FROM journal_scopus_venue WHERE issn_2 <> '')
+WITH si AS (SELECT id, issn_1 AS issn FROM journal_scopus WHERE issn_1 <> ''
+            UNION SELECT id, issn_2 FROM journal_scopus WHERE issn_2 <> '')
 SELECT d.id, s.scopus_title, x.dblp_key, 'crossref ' || x.year AS hit
-FROM journal_candidate_ai d JOIN journal_scopus_venue s ON s.id = d.scopus_id JOIN si ON si.id = s.id
-JOIN journal_dblp_crossref x ON x.status = 200 AND si.issn IN (x.issn_1, x.issn_2)
+FROM journal_candidate_ai d JOIN journal_scopus s ON s.id = d.scopus_id JOIN si ON si.id = s.id
+JOIN journal_crossref x ON x.status = 200 AND si.issn IN (x.issn_1, x.issn_2)
 WHERE d.verdict = 'absent'
   AND NOT EXISTS (SELECT 1 FROM journal_candidate_ai r WHERE r.scopus_id = s.id AND r.dblp_key = x.dblp_key)
 UNION
 SELECT d.id, s.scopus_title, v.dblp_key, 'dblp issn'
-FROM journal_candidate_ai d JOIN journal_scopus_venue s ON s.id = d.scopus_id JOIN si ON si.id = s.id
+FROM journal_candidate_ai d JOIN journal_scopus s ON s.id = d.scopus_id JOIN si ON si.id = s.id
 JOIN journal_dblp_issn v ON v.issn = si.issn
 WHERE d.verdict = 'absent'
   AND NOT EXISTS (SELECT 1 FROM journal_candidate_ai r WHERE r.scopus_id = s.id AND r.dblp_key = v.dblp_key);
@@ -190,12 +190,12 @@ WHERE d.verdict = 'absent'
 4b. Accepts whose newest Crossref DOI does not carry the journal's ISSN. Each must be a proven `ISSN GAP:` or `PREDECESSOR:`; otherwise the accept is wrong.
 
 ```sql
-WITH si AS (SELECT id, issn_1 AS issn FROM journal_scopus_venue WHERE issn_1 <> ''
-            UNION SELECT id, issn_2 FROM journal_scopus_venue WHERE issn_2 <> ''),
-newest AS (SELECT x.* FROM journal_dblp_crossref x WHERE x.status = 200 AND x.year =
-           (SELECT max(year) FROM journal_dblp_crossref y WHERE y.dblp_key = x.dblp_key AND y.status = 200))
+WITH si AS (SELECT id, issn_1 AS issn FROM journal_scopus WHERE issn_1 <> ''
+            UNION SELECT id, issn_2 FROM journal_scopus WHERE issn_2 <> ''),
+newest AS (SELECT x.* FROM journal_crossref x WHERE x.status = 200 AND x.year =
+           (SELECT max(year) FROM journal_crossref y WHERE y.dblp_key = x.dblp_key AND y.status = 200))
 SELECT DISTINCT d.id, d.dblp_key, s.scopus_title, n.year, n.crossref_title, n.issn_1, n.issn_2, d.reason
-FROM journal_candidate_ai d JOIN journal_scopus_venue s ON s.id = d.scopus_id JOIN newest n ON n.dblp_key = d.dblp_key
+FROM journal_candidate_ai d JOIN journal_scopus s ON s.id = d.scopus_id JOIN newest n ON n.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%ISSN GAP:%' AND d.reason NOT LIKE '%PREDECESSOR:%'
   AND NOT EXISTS (SELECT 1 FROM newest m JOIN si ON si.id = s.id
                   WHERE m.dblp_key = d.dblp_key AND si.issn IN (m.issn_1, m.issn_2));
@@ -206,7 +206,7 @@ WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%ISSN GAP:%' AND d.reason NOT 
 ```sql
 SELECT s.id, s.scopus_title, s.coverage, group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS keys,
        max(k.last_year) AS newest
-FROM journal_scopus_venue s
+FROM journal_scopus s
 JOIN journal_candidate_ai d ON d.scopus_id = s.id AND d.verdict = 'accept'
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 GROUP BY s.id
@@ -220,7 +220,7 @@ HAVING newest < CAST(strftime('%Y', 'now') AS INTEGER) - 2
 
 ```sql
 SELECT d.id, s.id AS scopus_id, s.scopus_title, s.issn_1, s.issn_2, s.scopus_publisher, s.coverage
-FROM journal_candidate_ai d JOIN journal_scopus_venue s ON s.id = d.scopus_id
+FROM journal_candidate_ai d JOIN journal_scopus s ON s.id = d.scopus_id
 WHERE d.verdict = 'absent' AND d.reason NOT LIKE '%NEW TITLE:%'
   AND CAST(substr(s.coverage, 1, 4) AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER) - 3;
 ```
@@ -229,7 +229,7 @@ WHERE d.verdict = 'absent' AND d.reason NOT LIKE '%NEW TITLE:%'
 
 ```sql
 SELECT d.id, d.dblp_key, k.first_year, k.last_year, s.scopus_title, d.reason
-FROM journal_candidate_ai d JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key JOIN journal_scopus_venue s ON s.id = d.scopus_id
+FROM journal_candidate_ai d JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key JOIN journal_scopus s ON s.id = d.scopus_id
 WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%PREDECESSOR:%'
   AND EXISTS (SELECT 1 FROM journal_candidate_ai n JOIN journal_dblp_venue m ON m.dblp_key = n.dblp_key
               WHERE n.scopus_id = d.scopus_id AND n.verdict = 'accept' AND m.last_year > k.last_year);
@@ -238,11 +238,11 @@ WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%PREDECESSOR:%'
 4f. Accepts that DBLP's ISSNs contradict: the key has DBLP ISSNs, and none of them is the accepted journal's. Each must be a proven `ISSN GAP:` or `PREDECESSOR:`; otherwise the accept is wrong (a namesake: `journals/jitm` is the US *Journal of Information Technology Management*, 1042-1319, not the Tehran journal 2008-5893).
 
 ```sql
-WITH si AS (SELECT id, issn_1 AS issn FROM journal_scopus_venue WHERE issn_1 <> ''
-            UNION SELECT id, issn_2 FROM journal_scopus_venue WHERE issn_2 <> '')
+WITH si AS (SELECT id, issn_1 AS issn FROM journal_scopus WHERE issn_1 <> ''
+            UNION SELECT id, issn_2 FROM journal_scopus WHERE issn_2 <> '')
 SELECT d.id, d.dblp_key, s.scopus_title, s.issn_1, s.issn_2,
        (SELECT group_concat(issn, ' ') FROM journal_dblp_issn v WHERE v.dblp_key = d.dblp_key) AS dblp_issns, d.reason
-FROM journal_candidate_ai d JOIN journal_scopus_venue s ON s.id = d.scopus_id
+FROM journal_candidate_ai d JOIN journal_scopus s ON s.id = d.scopus_id
 WHERE d.verdict = 'accept' AND d.reason NOT LIKE '%ISSN GAP:%' AND d.reason NOT LIKE '%PREDECESSOR:%'
   AND EXISTS (SELECT 1 FROM journal_dblp_issn v WHERE v.dblp_key = d.dblp_key)
   AND NOT EXISTS (SELECT 1 FROM journal_dblp_issn v JOIN si ON si.id = s.id
@@ -256,7 +256,7 @@ WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM journal_dblp_
               UNION SELECT successor_key, predecessor_key FROM journal_dblp_lineage)
 SELECT d.scopus_id, s.scopus_title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year, e.dblp_names
 FROM journal_candidate_ai d JOIN link l ON l.a = d.dblp_key
-JOIN journal_scopus_venue s ON s.id = d.scopus_id JOIN journal_dblp_venue k ON k.dblp_key = l.b
+JOIN journal_scopus s ON s.id = d.scopus_id JOIN journal_dblp_venue k ON k.dblp_key = l.b
 JOIN journal_summary e ON e.dblp_key = l.b
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM journal_candidate_ai x WHERE x.dblp_key = l.b AND (x.scopus_id = d.scopus_id OR x.verdict = 'accept'));
@@ -267,7 +267,7 @@ WHERE d.verdict = 'accept'
 ```sql
 SELECT d.id, d.dblp_key, s.scopus_title, s.scopus_publisher, s.coverage, d.reason, e.dblp_names, e.crossref_titles,
        e.crossref_publishers, e.doi_prefixes
-FROM journal_candidate_ai d JOIN journal_scopus_venue s ON s.id = d.scopus_id JOIN journal_summary e ON e.dblp_key = d.dblp_key
+FROM journal_candidate_ai d JOIN journal_scopus s ON s.id = d.scopus_id JOIN journal_summary e ON e.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM journal_candidate_rule c WHERE c.dblp_key = d.dblp_key AND c.scopus_id = d.scopus_id
                   AND c.method IN ('dblp', 'crossref'));

@@ -151,7 +151,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     for key, proceeding_title in conn.execute("SELECT dblp_key, proceeding_title FROM conf_dblp_proceeding_title"):
         proceeding_title_blobs[key] += fold(proceeding_title) + "\n"
     pairs = []
-    for core_id, core_title, acronym in conn.execute("SELECT id, core_title, acronym FROM conf_core_venue"):
+    for core_id, core_title, acronym in conn.execute("SELECT id, core_title, acronym FROM conf_core"):
         forms = acronym_forms(acronym, core_title)
         found: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
         for a in forms:

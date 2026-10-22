@@ -111,7 +111,7 @@ def add_lineage(conn: sqlite3.Connection, evidence: dict, add) -> None:
 
 
 def propose(conn: sqlite3.Connection) -> list[tuple]:
-    scopus = conn.execute("SELECT id, scopus_title, issn_1, issn_2 FROM journal_scopus_venue").fetchall()
+    scopus = conn.execute("SELECT id, scopus_title, issn_1, issn_2 FROM journal_scopus").fetchall()
     by_issn = {i: sid for sid, _, i1, i2 in scopus for i in (i1, i2) if i}
     scopus_tokens = [(sid, scopus_title, title_variants(scopus_title)) for sid, scopus_title, _, _ in scopus]
     evidence: dict[tuple[str, int], dict[str, tuple[float, str]]] = defaultdict(dict)
@@ -131,7 +131,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     sampled: dict[str, list[tuple]] = defaultdict(list)
     missing: dict[str, int] = defaultdict(int)
     for key, year, status, i1, i2, crossref_title in conn.execute(
-            "SELECT dblp_key, year, status, issn_1, issn_2, crossref_title FROM journal_dblp_crossref ORDER BY dblp_key, year"):
+            "SELECT dblp_key, year, status, issn_1, issn_2, crossref_title FROM journal_crossref ORDER BY dblp_key, year"):
         if status == 200:
             sampled[key].append((year, i1, i2, crossref_title))
         elif status == 404:
@@ -162,7 +162,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
     for key, name, n, last in rows:
         if n / (total[key] or 1) >= MIN_NAME_SHARE or (last or 0) >= newest[key] - RECENT_NAME_YEARS:
             names[key].add(name)
-    for key, crossref_title in conn.execute("SELECT DISTINCT dblp_key, crossref_title FROM journal_dblp_crossref "
+    for key, crossref_title in conn.execute("SELECT DISTINCT dblp_key, crossref_title FROM journal_crossref "
                                             "WHERE status = 200 AND crossref_title IS NOT NULL"):
         names[key].add(crossref_title)
     for key, key_names in names.items():

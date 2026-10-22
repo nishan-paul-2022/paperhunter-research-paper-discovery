@@ -46,7 +46,7 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
 
 def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – CORE rankings → conf_core_venue")
+    print("  Phase 1 – CORE rankings → conf_core")
     print("━" * 70)
     rows, dropped = [], 0
     with open(core_path, encoding="utf-8", newline="") as f:
@@ -61,14 +61,14 @@ def load_core(conn: sqlite3.Connection, core_path: Path) -> None:
         sys.exit(f"Duplicate core_title values: {duplicates}")
     with conn:
         conn.executemany(
-            "INSERT INTO conf_core_venue (core_title, acronym, rank) VALUES (?, ?, ?) "
+            "INSERT INTO conf_core (core_title, acronym, rank) VALUES (?, ?, ?) "
             "ON CONFLICT (core_title) DO UPDATE SET acronym = excluded.acronym, rank = excluded.rank",
             rows,
         )
         conn.execute("CREATE TEMP TABLE core_titles (core_title TEXT PRIMARY KEY)")
         conn.executemany("INSERT INTO core_titles VALUES (?)", [(t,) for t, _, _ in rows])
         removed = conn.execute(
-            "DELETE FROM conf_core_venue WHERE core_title NOT IN (SELECT core_title FROM core_titles)"
+            "DELETE FROM conf_core WHERE core_title NOT IN (SELECT core_title FROM core_titles)"
         ).rowcount
         conn.execute("DROP TABLE core_titles")
     print(f"  ✓  {len(rows)} CORE venues  |  {dropped} rows outside A*–C skipped  |  {removed} removed\n")

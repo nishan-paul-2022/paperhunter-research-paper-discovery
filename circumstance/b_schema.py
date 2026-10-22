@@ -6,7 +6,7 @@ from pathlib import Path
 DB_PATH = Path(__file__).resolve().parent.parent / "archive" / "paperhunter.db"
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS conf_core_venue (
+CREATE TABLE IF NOT EXISTS conf_core (
     id         INTEGER PRIMARY KEY,
     core_title TEXT NOT NULL UNIQUE,
     acronym    TEXT NOT NULL,
@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS conf_dblp_lineage_successor ON conf_dblp_lineage (suc
 
 CREATE TABLE IF NOT EXISTS conf_candidate_rule (
     dblp_key          TEXT NOT NULL REFERENCES conf_dblp_venue ON DELETE CASCADE,
-    core_id           INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
+    core_id           INTEGER NOT NULL REFERENCES conf_core ON DELETE CASCADE,
     method            TEXT NOT NULL CHECK (method <> '' AND trim(replace(replace(replace(replace(
                           method, 'acronym', ''), 'related', ''), 'lineage', ''), 'title', ''), ',') = ''),
     detail            TEXT NOT NULL,
@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS conf_candidate_rule_core ON conf_candidate_rule (core
 
 CREATE TABLE IF NOT EXISTS conf_candidate_ai (
     id         INTEGER PRIMARY KEY,
-    core_id    INTEGER NOT NULL REFERENCES conf_core_venue ON DELETE CASCADE,
+    core_id    INTEGER NOT NULL REFERENCES conf_core ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES conf_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
@@ -116,33 +116,33 @@ SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.core_title, v.acronym, v.
        c.method, c.detail,
        e.papers, e.first_year, e.last_year, e.volumes, e.publishers, e.lineage, e.book_titles, e.proceeding_titles
 FROM conf_candidate_rule c
-JOIN conf_core_venue v ON v.id = c.core_id
+JOIN conf_core v ON v.id = c.core_id
 JOIN conf_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, v.id, v.core_title, v.acronym, v.rank,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM conf_core_venue v
+FROM conf_core v
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.core_id, NULL, NULL, NULL,
        NULL, 'conf_candidate_ai ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_candidate_ai d
-WHERE NOT EXISTS (SELECT 1 FROM conf_core_venue v WHERE v.id = d.core_id)
+WHERE NOT EXISTS (SELECT 1 FROM conf_core v WHERE v.id = d.core_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM conf_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
 DROP VIEW IF EXISTS conf_list;
 CREATE VIEW conf_list AS
 SELECT d.dblp_key, upper(k.acronym) AS dblp_acronym, v.core_title, v.rank AS ranking
 FROM conf_candidate_ai d
-JOIN conf_core_venue v ON v.id = d.core_id
+JOIN conf_core v ON v.id = d.core_id
 JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM conf_review)
 ORDER BY CASE v.rank WHEN 'A*' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
          lower(v.core_title), d.dblp_key;
 
-CREATE TABLE IF NOT EXISTS journal_scopus_venue (
+CREATE TABLE IF NOT EXISTS journal_scopus (
     id               INTEGER PRIMARY KEY,
     scopus_title     TEXT NOT NULL,
     issn_1           TEXT,
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_name (
     PRIMARY KEY (dblp_key, name)
 ) WITHOUT ROWID;
 
-CREATE TABLE IF NOT EXISTS journal_dblp_crossref (
+CREATE TABLE IF NOT EXISTS journal_crossref (
     doi                TEXT PRIMARY KEY,
     dblp_key           TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
     name               TEXT NOT NULL,
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_crossref (
     crossref_title     TEXT,
     crossref_publisher TEXT
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS journal_dblp_crossref_key ON journal_dblp_crossref (dblp_key);
+CREATE INDEX IF NOT EXISTS journal_crossref_key ON journal_crossref (dblp_key);
 
 CREATE TABLE IF NOT EXISTS journal_dblp_issn (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS journal_dblp_doi (
 
 CREATE TABLE IF NOT EXISTS journal_candidate_rule (
     dblp_key TEXT NOT NULL REFERENCES journal_dblp_venue ON DELETE CASCADE,
-    scopus_id   INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
+    scopus_id   INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
     method   TEXT NOT NULL CHECK (method IN ('dblp', 'crossref', 'lineage', 'name')),
     detail   TEXT NOT NULL,
     PRIMARY KEY (dblp_key, scopus_id)
@@ -213,7 +213,7 @@ CREATE INDEX IF NOT EXISTS journal_candidate_rule_scopus ON journal_candidate_ru
 
 CREATE TABLE IF NOT EXISTS journal_candidate_ai (
     id         INTEGER PRIMARY KEY,
-    scopus_id     INTEGER NOT NULL REFERENCES journal_scopus_venue ON DELETE CASCADE,
+    scopus_id     INTEGER NOT NULL REFERENCES journal_scopus ON DELETE CASCADE,
     dblp_key   TEXT REFERENCES journal_dblp_venue ON DELETE CASCADE,
     verdict    TEXT NOT NULL CHECK (verdict IN ('accept', 'reject', 'absent')),
     reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
@@ -253,11 +253,11 @@ SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
        (SELECT group_concat(x.crossref_title || ' [' || x.issns || '] (' || x.dois || ' DOIs, ' || x.lo || '-' || x.hi || ')', ' | ')
           FROM (SELECT coalesce(crossref_title, '?') AS crossref_title, trim(coalesce(issn_1, '') || ' ' || coalesce(issn_2, '')) AS issns,
                        count(*) AS dois, min(year) AS lo, max(year) AS hi
-                FROM journal_dblp_crossref WHERE dblp_key = j.dblp_key AND status = 200
+                FROM journal_crossref WHERE dblp_key = j.dblp_key AND status = 200
                 GROUP BY 1, 2 ORDER BY hi DESC, dois DESC LIMIT 4) x) AS crossref_titles,
        (SELECT group_concat(c.crossref_publisher || ' (' || c.dois || ' DOIs, ' || c.lo || '-' || c.hi || ')', ' | ')
           FROM (SELECT crossref_publisher, count(*) AS dois, min(year) AS lo, max(year) AS hi
-                FROM journal_dblp_crossref WHERE dblp_key = j.dblp_key AND status = 200 AND coalesce(crossref_publisher, '') <> ''
+                FROM journal_crossref WHERE dblp_key = j.dblp_key AND status = 200 AND coalesce(crossref_publisher, '') <> ''
                 GROUP BY crossref_publisher ORDER BY hi DESC, dois DESC LIMIT 3) c) AS crossref_publishers,
        (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
           FROM (SELECT prefix, papers FROM journal_dblp_doi WHERE dblp_key = j.dblp_key
@@ -276,20 +276,20 @@ SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.scopus_title, s.issn_1,
        e.papers, e.first_year, e.last_year, e.dblp_issns, e.dblp_names, e.crossref_titles, e.crossref_publishers,
        e.doi_prefixes, e.lineage
 FROM journal_candidate_rule c
-JOIN journal_scopus_venue s ON s.id = c.scopus_id
+JOIN journal_scopus s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.scopus_title, s.issn_1, s.issn_2, s.scopus_publisher, s.quartile, s.coverage,
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-FROM journal_scopus_venue s
+FROM journal_scopus s
 WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
        NULL, 'journal_candidate_ai ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_candidate_ai d
-WHERE NOT EXISTS (SELECT 1 FROM journal_scopus_venue s WHERE s.id = d.scopus_id)
+WHERE NOT EXISTS (SELECT 1 FROM journal_scopus s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
 
 DROP VIEW IF EXISTS journal_list;
@@ -299,7 +299,7 @@ SELECT d.dblp_key,
          ORDER BY last_year DESC, papers DESC, name LIMIT 1) AS dblp_name,
        s.scopus_title, s.issn_1, s.issn_2, s.quartile
 FROM journal_candidate_ai d
-JOIN journal_scopus_venue s ON s.id = d.scopus_id
+JOIN journal_scopus s ON s.id = d.scopus_id
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
 ORDER BY s.quartile, lower(s.scopus_title), d.dblp_key;

@@ -66,7 +66,7 @@ def format_issn(raw: str) -> str:
 
 def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
     print("━" * 70)
-    print("  Phase 1 – Scopus rankings → journal_scopus_venue")
+    print("  Phase 1 – Scopus rankings → journal_scopus")
     print("━" * 70)
     rows, dropped = [], 0
     with open(scopus_path, encoding="utf-8", newline="") as f:
@@ -81,7 +81,7 @@ def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
                          r.get("Coverage", "").strip() or None))
     with conn:
         conn.executemany(
-            "INSERT INTO journal_scopus_venue (id, scopus_title, issn_1, issn_2, scopus_publisher, quartile, coverage) "
+            "INSERT INTO journal_scopus (id, scopus_title, issn_1, issn_2, scopus_publisher, quartile, coverage) "
             "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (id) DO UPDATE SET scopus_title = excluded.scopus_title, issn_1 = excluded.issn_1, "
             "issn_2 = excluded.issn_2, scopus_publisher = excluded.scopus_publisher, quartile = excluded.quartile, "
@@ -90,7 +90,7 @@ def load_scopus(conn: sqlite3.Connection, scopus_path: Path) -> None:
         )
         conn.execute("CREATE TEMP TABLE scopus_ids (id INTEGER PRIMARY KEY)")
         conn.executemany("INSERT INTO scopus_ids VALUES (?)", [(r[0],) for r in rows])
-        removed = conn.execute("DELETE FROM journal_scopus_venue WHERE id NOT IN (SELECT id FROM scopus_ids)").rowcount
+        removed = conn.execute("DELETE FROM journal_scopus WHERE id NOT IN (SELECT id FROM scopus_ids)").rowcount
         conn.execute("DROP TABLE scopus_ids")
     print(f"  ✓  {len(rows)} Scopus journals  |  {dropped} rows without Q1–Q4 skipped  |  {removed} removed\n")
 
@@ -194,8 +194,8 @@ def load_dblp(conn: sqlite3.Connection, xml_path: Path) -> None:
         conn.executemany("INSERT INTO journal_dblp_doi VALUES (?, ?, ?)", prefix_rows)
         conn.execute("CREATE TEMP TABLE sampled (doi TEXT PRIMARY KEY, dblp_key TEXT, name TEXT, year INTEGER)")
         conn.executemany("INSERT INTO sampled VALUES (?, ?, ?, ?)", samples)
-        conn.execute("DELETE FROM journal_dblp_crossref WHERE doi NOT IN (SELECT doi FROM sampled)")
-        conn.execute("INSERT INTO journal_dblp_crossref (doi, dblp_key, name, year) SELECT doi, dblp_key, name, year "
+        conn.execute("DELETE FROM journal_crossref WHERE doi NOT IN (SELECT doi FROM sampled)")
+        conn.execute("INSERT INTO journal_crossref (doi, dblp_key, name, year) SELECT doi, dblp_key, name, year "
                      "FROM sampled WHERE true ON CONFLICT (doi) DO UPDATE SET dblp_key = excluded.dblp_key, "
                      "name = excluded.name, year = excluded.year")
         conn.execute("DROP TABLE sampled")
@@ -310,20 +310,20 @@ def crossref_batch(dois: list[str], mailto: str | None) -> dict[str, tuple] | No
 
 
 def save_crossref(conn: sqlite3.Connection, doi: str, row: tuple) -> None:
-    conn.execute("UPDATE journal_dblp_crossref SET status = ?, issn_1 = ?, issn_2 = ?, crossref_title = ?, crossref_publisher = ? "
+    conn.execute("UPDATE journal_crossref SET status = ?, issn_1 = ?, issn_2 = ?, crossref_title = ?, crossref_publisher = ? "
                  "WHERE doi = ?", (*row, doi))
 
 
 def load_crossref(conn: sqlite3.Connection) -> None:
     print("━" * 70)
-    print("  Phase 5 – Crossref ISSN and title per sampled DOI → journal_dblp_crossref")
+    print("  Phase 5 – Crossref ISSN and title per sampled DOI → journal_crossref")
     print("━" * 70)
     mailto = os.environ.get("CONTACT_MAILTO", "").strip() or None
     workers = CROSSREF_POLITE_WORKERS if mailto else CROSSREF_PUBLIC_WORKERS
     print(f"  Crossref pool: {'polite (' + mailto + ')' if mailto else 'public (set CONTACT_MAILTO in .env)'}"
           f"  |  {workers} parallel requests\n")
     for attempt in range(1, CROSSREF_PASSES + 1):
-        pending = [r[0] for r in conn.execute("SELECT doi FROM journal_dblp_crossref WHERE status IS NULL")]
+        pending = [r[0] for r in conn.execute("SELECT doi FROM journal_crossref WHERE status IS NULL")]
         if not pending:
             break
         if attempt > 1:
@@ -361,8 +361,8 @@ def load_crossref(conn: sqlite3.Connection) -> None:
                     print(f"    {done:,}/{len(single):,} single lookups", end="\r", flush=True)
         conn.commit()
         print()
-    stats = dict(conn.execute("SELECT coalesce(status, 0), count(*) FROM journal_dblp_crossref GROUP BY 1"))
-    keys = conn.execute("SELECT count(DISTINCT dblp_key) FROM journal_dblp_crossref WHERE status = 200").fetchone()[0]
+    stats = dict(conn.execute("SELECT coalesce(status, 0), count(*) FROM journal_crossref GROUP BY 1"))
+    keys = conn.execute("SELECT count(DISTINCT dblp_key) FROM journal_crossref WHERE status = 200").fetchone()[0]
     print(f"\n  ✓  {stats.get(200, 0):,} found  |  {stats.get(404, 0):,} not in Crossref  |  "
           f"{stats.get(0, 0):,} still pending  |  {keys:,} keys with Crossref evidence\n")
     if stats.get(0):

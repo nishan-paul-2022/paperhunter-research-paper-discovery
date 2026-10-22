@@ -24,7 +24,7 @@ A **DBLP series** is one row of `conf_dblp_venue`. There are three kinds:
 
 | object | what it holds |
 |---|---|
-| `conf_core_venue(id, core_title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The core_title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
+| `conf_core(id, core_title, acronym, rank)` | CORE 2026 venues, rank A*/A/B/C. The core_title often names former names and mergers in brackets: "(was WICSA)", "(merger of DALT, AOSE and PROMAS)". These are authoritative predecessor hints. |
 | `conf_dblp_venue(dblp_key, acronym, papers, first_year, last_year)` | one row per series. `acronym` is the key name or the issue label; `papers` and years cover its papers |
 | `conf_dblp_book_title(dblp_key, book_title, papers, first_year, last_year)` | how the series' papers name their venue (the journal name for journal series), with counts and year span. `X@Y` is a workshop X held at Y; `Y (Findings)`, `Y Companion`, `Y Workshops` are sub-volumes |
 | `conf_dblp_proceeding_title(dblp_key, proceeding_key, year, proceeding_title, publisher, papers)` | every proceedings volume of a `conf/` key: its own DBLP key (`conf/cvpr/2024w`), full proceeding_title, publisher, and how many papers it holds. The strongest evidence. `year` is the volume's publication year (it can trail the event by a year; 0 means missing) |
@@ -111,11 +111,11 @@ The unit is the **whole series**. Accept series `S` for venue `V` only when `S` 
 
 ```sql
 INSERT INTO conf_candidate_ai (core_id, dblp_key, verdict, reason) VALUES
- ((SELECT id FROM conf_core_venue WHERE core_title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
+ ((SELECT id FROM conf_core WHERE core_title = 'Selected Areas in Cryptography'), 'conf/sacrypt', 'accept',
   'Proceedings 1994-2025 "Selected Areas in Cryptography", Springer'),
- ((SELECT id FROM conf_core_venue WHERE core_title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
+ ((SELECT id FROM conf_core WHERE core_title = 'Selected Areas in Cryptography'), 'conf/sac', 'reject',
   'ACM/SIGAPP Symposium on Applied Computing, namesake'),
- ((SELECT id FROM conf_core_venue WHERE core_title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
+ ((SELECT id FROM conf_core WHERE core_title = 'Simulation and Synthesis in Medical Imaging'), NULL, 'absent',
   'No series of its own; papers inside conf/miccai (SASHIMI@MICCAI); Wikidata: no DBLP series');
 ```
 
@@ -181,12 +181,12 @@ WITH bt AS (
            THEN substr(book_title, 1, instr(book_title, ' (') - 1) ELSE book_title END)) AS b
   FROM conf_dblp_book_title WHERE book_title NOT LIKE '%@%'
 ), hit AS (
-  SELECT v.id AS core_id, k.dblp_key FROM conf_core_venue v JOIN conf_dblp_venue k ON lower(k.acronym) = lower(v.acronym)
+  SELECT v.id AS core_id, k.dblp_key FROM conf_core v JOIN conf_dblp_venue k ON lower(k.acronym) = lower(v.acronym)
   UNION
-  SELECT v.id, bt.dblp_key FROM conf_core_venue v JOIN bt ON bt.b = lower(v.acronym)
+  SELECT v.id, bt.dblp_key FROM conf_core v JOIN bt ON bt.b = lower(v.acronym)
 )
 SELECT h.core_id, v.rank, v.acronym, v.core_title, h.dblp_key, k.papers, k.first_year, k.last_year, e.proceeding_titles
-FROM hit h JOIN conf_core_venue v ON v.id = h.core_id JOIN conf_dblp_venue k ON k.dblp_key = h.dblp_key
+FROM hit h JOIN conf_core v ON v.id = h.core_id JOIN conf_dblp_venue k ON k.dblp_key = h.dblp_key
 JOIN conf_summary e ON e.dblp_key = h.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = h.dblp_key
                   AND (d.core_id = h.core_id OR d.verdict = 'accept'))
@@ -203,7 +203,7 @@ WITH link AS (SELECT predecessor_key AS a, successor_key AS b FROM conf_dblp_lin
 SELECT d.core_id, v.rank, v.acronym, v.core_title, d.dblp_key AS accepted, l.b AS linked, k.papers, k.first_year, k.last_year,
        e.proceeding_titles
 FROM conf_candidate_ai d JOIN link l ON l.a = d.dblp_key
-JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_dblp_venue k ON k.dblp_key = l.b
+JOIN conf_core v ON v.id = d.core_id JOIN conf_dblp_venue k ON k.dblp_key = l.b
 JOIN conf_summary e ON e.dblp_key = l.b
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate_ai x WHERE x.dblp_key = l.b AND (x.core_id = d.core_id OR x.verdict = 'accept'))
@@ -222,7 +222,7 @@ Then accept the new series, or tag the newest accepted series with `JOURNAL:` or
 SELECT v.id, v.rank, v.acronym, v.core_title,
        group_concat(d.dblp_key || ' ' || k.first_year || '-' || k.last_year, ', ') AS series,
        max(k.last_year) AS newest
-FROM conf_core_venue v
+FROM conf_core v
 JOIN conf_candidate_ai d ON d.core_id = v.id AND d.verdict = 'accept'
 JOIN conf_dblp_venue k ON k.dblp_key = d.dblp_key
 GROUP BY v.id
@@ -239,7 +239,7 @@ A venue can also stay active in DBLP while its main track left: its newest book_
 
 ```sql
 SELECT d.id, v.acronym, v.core_title, d.dblp_key, d.reason, e.book_titles, e.proceeding_titles
-FROM conf_candidate_ai d JOIN conf_core_venue v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
+FROM conf_candidate_ai d JOIN conf_core v ON v.id = d.core_id JOIN conf_summary e ON e.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept'
   AND NOT EXISTS (SELECT 1 FROM conf_candidate_rule c WHERE c.dblp_key = d.dblp_key AND c.core_id = d.core_id);
 ```
