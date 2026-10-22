@@ -90,7 +90,17 @@ BEGIN SELECT RAISE(ABORT, 'CORE venue cannot be both accepted and absent'); END;
 DROP VIEW IF EXISTS conf_summary;
 CREATE VIEW conf_summary AS
 SELECT v.dblp_key, v.acronym, v.papers, v.first_year, v.last_year,
-       (SELECT count(*) FROM conf_dblp_proceeding_title WHERE dblp_key = v.dblp_key) AS volumes,
+       CASE WHEN v.dblp_key LIKE 'conf/%'
+            THEN (SELECT count(*) FROM conf_dblp_proceeding_title WHERE dblp_key = v.dblp_key) END AS volumes,
+       (SELECT group_concat(p.publisher || ' (' || p.n || ')', ' | ')
+          FROM (SELECT publisher, count(*) AS n FROM conf_dblp_proceeding_title
+                WHERE dblp_key = v.dblp_key AND coalesce(publisher, '') <> ''
+                GROUP BY publisher ORDER BY n DESC, publisher LIMIT 3) p) AS publishers,
+       (SELECT group_concat(l.link, ' | ')
+          FROM (SELECT 'successor of ' || predecessor_key AS link FROM conf_dblp_lineage WHERE successor_key = v.dblp_key
+                UNION ALL
+                SELECT 'predecessor of ' || successor_key FROM conf_dblp_lineage WHERE predecessor_key = v.dblp_key
+                ORDER BY 1) l) AS lineage,
        (SELECT group_concat(b.book_title || ' (' || b.papers || ', ' || coalesce(b.first_year, '?') || '-'
                             || coalesce(b.last_year, '?') || ')', ' | ')
           FROM (SELECT book_title, papers, first_year, last_year FROM conf_dblp_book_title WHERE dblp_key = v.dblp_key
@@ -104,20 +114,20 @@ DROP VIEW IF EXISTS conf_review;
 CREATE VIEW conf_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.core_id, v.core_title, v.acronym, v.rank,
        c.method, c.detail,
-       e.papers, e.first_year, e.last_year, e.book_titles, e.proceeding_titles
+       e.papers, e.first_year, e.last_year, e.volumes, e.publishers, e.lineage, e.book_titles, e.proceeding_titles
 FROM conf_candidate_rule c
 JOIN conf_core_venue v ON v.id = c.core_id
 JOIN conf_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.core_id = c.core_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, v.id, v.core_title, v.acronym, v.rank,
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_core_venue v
 WHERE NOT EXISTS (SELECT 1 FROM conf_candidate_ai d WHERE d.core_id = v.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.core_id, NULL, NULL, NULL,
        NULL, 'conf_candidate_ai ' || d.id || ' refers to a missing DBLP key or CORE venue: delete it',
-       NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM conf_candidate_ai d
 WHERE NOT EXISTS (SELECT 1 FROM conf_core_venue v WHERE v.id = d.core_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM conf_dblp_venue k WHERE k.dblp_key = d.dblp_key));
@@ -247,27 +257,32 @@ SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
                 GROUP BY 1, 2 ORDER BY hi DESC, dois DESC LIMIT 4) x) AS crossref,
        (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
           FROM (SELECT prefix, papers FROM journal_dblp_doi WHERE dblp_key = j.dblp_key
-                ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes
+                ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes,
+       (SELECT group_concat(l.link, ' | ')
+          FROM (SELECT 'successor of ' || predecessor_key AS link FROM journal_dblp_lineage WHERE successor_key = j.dblp_key
+                UNION ALL
+                SELECT 'predecessor of ' || successor_key FROM journal_dblp_lineage WHERE predecessor_key = j.dblp_key
+                ORDER BY 1) l) AS lineage
 FROM journal_dblp_venue j;
 
 DROP VIEW IF EXISTS journal_review;
 CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, s.coverage, c.method, c.detail,
-       e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.doi_prefixes
+       e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.doi_prefixes, e.lineage
 FROM journal_candidate_rule c
 JOIN journal_scopus_venue s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile, s.coverage,
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_scopus_venue s
 WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
        NULL, 'journal_candidate_ai ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_candidate_ai d
 WHERE NOT EXISTS (SELECT 1 FROM journal_scopus_venue s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
