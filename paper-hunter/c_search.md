@@ -54,9 +54,9 @@ Accept requires `agent=y` and `offense=y`. A `baseline` additionally needs `blac
 
 ## 6. Evidence
 
-Each paper shows `title`, `abstract`, `tldr`, `keywords`, `topics`, `fields`, `work_type`, `is_paratext`. Read the abstract when there is one; it decides almost every paper. The TLDR, keywords and topics are machine-generated hints, useful when the abstract is missing, never a reason to override a clear abstract.
+Each paper shows `title`, `abstract_s2`, `abstract_openalex`, `tldr`, `keywords`, `topics`, `fields`, `work_type`, `is_paratext`. The two abstracts are the same paper's abstract from Semantic Scholar and from OpenAlex; often they are the same text, sometimes one is missing, longer or differently cleaned. Read both when there are two; the abstract decides almost every paper. The TLDR, keywords and topics are machine-generated hints, useful when the abstract is missing, never a reason to override a clear abstract.
 
-- **Accept** needs a verbatim quote of 4–45 words from the `title`, `abstract` or `tldr` (`quote_src`) that supports the verdict. Copy it exactly, character for character (dashes, quotes, accents); the database refuses a quote that is not in the stored text.
+- **Accept** needs a verbatim quote of 4–45 words from the `title`, an abstract or `tldr` (`quote_src`: `title`, `abstract` for either abstract, or `tldr`) that supports the verdict. Copy it exactly, character for character (dashes, quotes, accents); the database refuses a quote that is not in the stored text.
 - **Reject** needs no quote.
 - **Every reason** says what this paper actually does, taken from its abstract, TLDR or keywords ("mmWave radar point-cloud model detecting post-fall immobility; not security"). Never just repeat the title, and never write a generic "not security". Near-domain rejects (§5 `llm_no_offense`, `defensive_only`, `generic_llm_security`, …) name the exact missing element (no LLM, advisory only, one-shot, defensive).
 - **No abstract:** decide from title, TLDR and keywords. If the paper still looks in scope, accept with an honest `p` and quote the title or TLDR; if it is clearly out of scope, reject.
@@ -76,7 +76,7 @@ Work from the repository root `/home/nishan/Documents/paperhunter-research-paper
 |---|---|
 | `paper_dblp(id, dblp_key, venue_key, year, title, authors, venue, doi)` | every 2023–2026 paper of the venues in `conf_list` and `journal_list`, from `paper-hunter/a_extract.py` |
 | `paper_details_openalex`, `paper_details_s2` | what OpenAlex and Semantic Scholar returned for each paper, one row per paper asked (`found = 0`: not found), from `paper-hunter/b_details.py`. Never read them |
-| `paper_description(paper_id, abstract, abstract_src, tldr, keywords, topics, fields, work_type, is_paratext, is_retracted, language, arxiv_id, openalex_id, s2_id)` | view: one merged row per paper, the evidence you judge. `keywords`, `topics`, `fields` are `; `-separated. A paper neither API found has only empty fields; judge it from its title |
+| `paper_summary(paper_id, title, abstract_s2, abstract_openalex, tldr, keywords, topics, fields, work_type, is_paratext)` | view: one row per paper, the evidence you judge. `keywords`, `topics`, `fields` are `; `-separated. A paper neither API found has only empty fields; judge it from its title |
 | `paper_decision(paper_id, verdict, role, p, agent, offense, black_box, long_horizon, quote, quote_src, reject_class, reason, reviewer, decided_at)` | **your output**, one row per paper |
 | `paper_review` | to-do list: `UNFETCHED` (details not fetched yet: skip them; they become `UNDECIDED` after a later `b_details.py` run), `UNDECIDED` (fetched, no decision), `INVALID` (an accept whose quote is no longer in the stored text) |
 | `paper_list` | final output: the accepted papers. It stays empty while `paper_review` has any `UNDECIDED` or `INVALID` row; `UNFETCHED` papers do not block it |
@@ -95,26 +95,25 @@ If an insert is refused, your record is wrong: fix exactly what the error names,
 > You are a PAPER-HUNTER reviewer. Read sections 1–8 and 11–12 of `paper-hunter/c_search.md`. Your name: `<NAME>`. Your share: papers with `paper_id % <W> = <K>`. Work from the repository root.
 >
 > **Hard rules.** Breaking any of them voids your decisions; they are detected in §10 Step 4 and deleted.
-> - Read papers only with the step 1 command, unchanged: 20 at a time, your share only. Never dump, list or query undecided papers any other way.
+> - Read papers only with the step 1 command, unchanged: 8 at a time, your share only. Never dump, list or query undecided papers any other way.
 > - Never filter, sort, triage or pre-classify papers with keywords, regexes or scripts. Every paper is read in full: title, abstract, TLDR, keywords, topics.
 > - Write every record yourself after reading that paper. Never generate records in a loop, from a template, a default or an `else` branch.
 > - Store each batch before you read the next one.
 >
 > Loop until step 1 prints `[]`:
-> 1. Read your next 20 papers:
+> 1. Read your next 8 papers:
 >    ```bash
 >    python3 - <<'EOF'
 >    import json, sqlite3
 >    conn = sqlite3.connect("archive/paperhunter.db", timeout=300)
 >    conn.row_factory = sqlite3.Row
 >    rows = conn.execute("""
->        SELECT p.id AS paper_id, p.title, d.abstract, d.tldr, d.keywords, d.topics, d.fields, d.work_type, d.is_paratext
->        FROM paper_review r JOIN paper_dblp p ON p.id = r.paper_id JOIN paper_description d ON d.paper_id = p.id
->        WHERE r.issue = 'UNDECIDED' AND r.paper_id % <W> = <K> LIMIT 20""").fetchall()
+>        SELECT d.* FROM paper_review r JOIN paper_summary d ON d.paper_id = r.paper_id
+>        WHERE r.issue = 'UNDECIDED' AND r.paper_id % <W> = <K> LIMIT 8""").fetchall()
 >    print(json.dumps([dict(r) for r in rows], indent=1, ensure_ascii=False))
 >    EOF
 >    ```
-> 2. Judge every paper individually (§1–7) from its full printed text. Write one JSON array of the 20 records (§11) to `/tmp/<NAME>.json`.
+> 2. Judge every paper individually (§1–7) from its full printed text. Write one JSON array of the 8 records (§11) to `/tmp/<NAME>.json`.
 > 3. Store them; each record is inserted on its own and reported `ok` or `REFUSED` with the reason:
 >    ```bash
 >    python3 - <<'EOF'
@@ -179,15 +178,15 @@ WHERE d.decided_at >= '<Step 0 timestamp>' AND length(p.title) >= 30
   AND instr(lower(d.reason), lower(substr(p.title, 1, 30))) > 0;
 -- bulk inserts: more than one batch stored in the same second
 SELECT reviewer, decided_at, count(*) FROM paper_decision
-WHERE decided_at >= '<Step 0 timestamp>' AND reviewer <> 'orchestrator' GROUP BY 1, 2 HAVING count(*) > 20;
+WHERE decided_at >= '<Step 0 timestamp>' AND reviewer <> 'orchestrator' GROUP BY 1, 2 HAVING count(*) > 8;
 ```
 
 **Step 4b. Second look.** Re-read every accept and every reject with `p >= 0.3` decided in this run against §2–5 and §12, printing **all** of this evidence for each row:
 
 ```sql
 SELECT d.paper_id, d.verdict, d.role, d.p, d.agent, d.offense, d.black_box, d.long_horizon, d.reject_class, d.quote, d.reason,
-       p.title, x.abstract, x.tldr, x.keywords, x.topics
-FROM paper_decision d JOIN paper_dblp p ON p.id = d.paper_id JOIN paper_description x ON x.paper_id = d.paper_id
+       x.title, x.abstract_s2, x.abstract_openalex, x.tldr, x.keywords, x.topics
+FROM paper_decision d JOIN paper_summary x ON x.paper_id = d.paper_id
 WHERE (d.verdict = 'accept' OR d.p >= 0.3) AND d.decided_at >= '<Step 0 timestamp>' AND d.reviewer <> 'orchestrator'
 ORDER BY d.verdict, d.role, d.p;
 ```

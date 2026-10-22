@@ -379,7 +379,8 @@ class Worker(threading.Thread):
         done = self.state(conn)
         todo = [p for p in self.targets if (not p["doi"] and p["id"] not in done) or done.get(p["id"]) == ("doi", 0)]
         if self.gaps_only:
-            have = {r[0] for r in conn.execute("SELECT paper_id FROM paper_description WHERE abstract IS NOT NULL")}
+            have = {r[0] for r in conn.execute("SELECT paper_id FROM paper_summary "
+                                               "WHERE abstract_s2 IS NOT NULL OR abstract_openalex IS NOT NULL")}
             todo = [p for p in todo if p["id"] not in have]
         self.log(f"title phase: {len(todo):,} papers" + (" (still without an abstract)" if self.gaps_only else ""))
         pending = []
@@ -416,15 +417,17 @@ def status(conn):
         for via, found, missing in conn.execute(
                 f"SELECT via, sum(found), sum(1 - found) FROM {table} GROUP BY via ORDER BY via"):
             print(f"{table:23} {via:6} {found:>10,} {missing:>10,}")
-    checks = (("abstract", "abstract IS NOT NULL"), ("  from s2", "abstract_src = 's2'"),
-              ("  from openalex", "abstract_src = 'openalex'"), ("tldr", "tldr IS NOT NULL"),
-              ("keywords", "keywords IS NOT NULL"), ("topics", "topics IS NOT NULL"),
-              ("fields", "fields IS NOT NULL"), ("arxiv_id", "arxiv_id IS NOT NULL"),
-              ("is_paratext", "is_paratext = 1"), ("is_retracted", "is_retracted = 1"))
+    checks = (("abstract", "d.abstract_s2 IS NOT NULL OR d.abstract_openalex IS NOT NULL"),
+              ("  from s2", "d.abstract_s2 IS NOT NULL"), ("  from openalex", "d.abstract_openalex IS NOT NULL"),
+              ("tldr", "d.tldr IS NOT NULL"), ("keywords", "d.keywords IS NOT NULL"),
+              ("topics", "d.topics IS NOT NULL"), ("fields", "d.fields IS NOT NULL"),
+              ("arxiv_id", "s.arxiv_id IS NOT NULL OR o.arxiv_id IS NOT NULL"),
+              ("is_paratext", "d.is_paratext = 1"), ("is_retracted", "o.is_retracted = 1"))
     n, *counts = conn.execute(
         "SELECT count(*), " + ", ".join(f"coalesce(sum({cond}), 0)" for _, cond in checks)
-        + " FROM paper_description WHERE openalex_id IS NOT NULL OR s2_id IS NOT NULL").fetchone()
-    print(f"\npaper_description: {n:,} papers found by either API")
+        + " FROM paper_summary d LEFT JOIN paper_details_openalex o ON o.paper_id = d.paper_id"
+          " LEFT JOIN paper_details_s2 s ON s.paper_id = d.paper_id WHERE o.found = 1 OR s.found = 1").fetchone()
+    print(f"\npaper_summary: {n:,} papers found by either API")
     if n:
         for (label, _), k in zip(checks, counts):
             print(f"  {label:16} {k:>10,}  {100 * k / n:5.1f}%")
