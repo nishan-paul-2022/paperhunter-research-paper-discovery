@@ -27,7 +27,7 @@ DBLP's XML has **no** journal title and **no** ISSN field. A DBLP key is only a 
 | `journal_dblp_doi(dblp_key, prefix, papers)` | DOI prefixes = publisher: 10.1145 ACM, 10.1109 IEEE, 10.1016 Elsevier, 10.1007 Springer, 10.1002/10.1111 Wiley, 10.1080 Taylor & Francis, 10.3390 MDPI, 10.1142 World Scientific, 10.3233 IOS Press, 10.1504 Inderscience, 10.4018 IGI Global, 10.1515 De Gruyter, 10.1108 Emerald, 10.1587 IEICE, 10.1093 Oxford |
 | `journal_candidate_rule(dblp_key, scopus_id, method, detail)` | proposals from `b_match.py`; `method` is the strongest evidence of the pair (see below), `detail` lists **all** evidence of the pair |
 | `journal_candidate_ai(id, scopus_id, dblp_key, verdict, reason, decided_at)` | **your output** |
-| `journal_summary` | one row per key: DBLP ISSNs, names with year spans, Crossref journals with ISSNs and year spans, DOI prefixes, its `journal_dblp_lineage` links (`predecessor of journals/jasis`). `journal_review` shows all of these on every `UNREVIEWED` row |
+| `journal_summary` | one row per key: DBLP ISSNs, names with year spans, Crossref journals with ISSNs and year spans, Crossref publisher names with DOI counts and year spans (compare with the Scopus `publisher`), DOI prefixes, its `journal_dblp_lineage` links (`predecessor of journals/jasis`). `journal_review` shows all of these on every `UNREVIEWED` row |
 | `journal_review` | to-do list: `UNREVIEWED` candidates, `UNCOVERED` Scopus journals, `INVALID` decisions |
 | `journal_list` | final output; it stays empty while `journal_review` has any row |
 

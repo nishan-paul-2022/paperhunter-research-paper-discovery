@@ -255,6 +255,10 @@ SELECT j.dblp_key, j.papers, j.first_year, j.last_year,
                        count(*) AS dois, min(year) AS lo, max(year) AS hi
                 FROM journal_dblp_crossref WHERE dblp_key = j.dblp_key AND status = 200
                 GROUP BY 1, 2 ORDER BY hi DESC, dois DESC LIMIT 4) x) AS crossref,
+       (SELECT group_concat(c.publisher || ' (' || c.dois || ' DOIs, ' || c.lo || '-' || c.hi || ')', ' | ')
+          FROM (SELECT publisher, count(*) AS dois, min(year) AS lo, max(year) AS hi
+                FROM journal_dblp_crossref WHERE dblp_key = j.dblp_key AND status = 200 AND coalesce(publisher, '') <> ''
+                GROUP BY publisher ORDER BY hi DESC, dois DESC LIMIT 3) c) AS publishers,
        (SELECT group_concat(p.prefix || ' (' || p.papers || ')', ' | ')
           FROM (SELECT prefix, papers FROM journal_dblp_doi WHERE dblp_key = j.dblp_key
                 ORDER BY papers DESC, prefix LIMIT 3) p) AS doi_prefixes,
@@ -269,20 +273,20 @@ DROP VIEW IF EXISTS journal_review;
 CREATE VIEW journal_review AS
 SELECT 'UNREVIEWED' AS issue, c.dblp_key, c.scopus_id, s.title AS scopus_title, s.issn_1, s.issn_2,
        s.publisher, s.quartile, s.coverage, c.method, c.detail,
-       e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.doi_prefixes, e.lineage
+       e.papers, e.first_year, e.last_year, e.dblp_issns, e.names, e.crossref, e.publishers, e.doi_prefixes, e.lineage
 FROM journal_candidate_rule c
 JOIN journal_scopus_venue s ON s.id = c.scopus_id
 JOIN journal_summary e ON e.dblp_key = c.dblp_key
 WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.dblp_key = c.dblp_key AND d.scopus_id = c.scopus_id)
 UNION ALL
 SELECT 'UNCOVERED', NULL, s.id, s.title, s.issn_1, s.issn_2, s.publisher, s.quartile, s.coverage,
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_scopus_venue s
 WHERE NOT EXISTS (SELECT 1 FROM journal_candidate_ai d WHERE d.scopus_id = s.id AND d.verdict IN ('accept', 'absent'))
 UNION ALL
 SELECT 'INVALID', d.dblp_key, d.scopus_id, NULL, NULL, NULL, NULL, NULL, NULL,
        NULL, 'journal_candidate_ai ' || d.id || ' refers to a missing DBLP key or Scopus journal: delete it',
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM journal_candidate_ai d
 WHERE NOT EXISTS (SELECT 1 FROM journal_scopus_venue s WHERE s.id = d.scopus_id)
    OR (d.dblp_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM journal_dblp_venue k WHERE k.dblp_key = d.dblp_key));
