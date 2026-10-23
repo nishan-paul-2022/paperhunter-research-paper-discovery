@@ -33,7 +33,7 @@ OPENALEX_SEARCH_CREDITS = 10
 
 S2 = "https://api.semanticscholar.org/graph/v1"
 S2_BATCH = 500
-S2_RPS = 0.9
+S2_RPS = 1.0
 S2_FIELDS = "paperId,externalIds,title,year,authors,venue,publicationTypes,s2FieldsOfStudy,abstract,tldr"
 
 TIMEOUT = 60
@@ -417,16 +417,12 @@ class SemanticScholar(Source):
     batch = S2_BATCH
 
     def __init__(self, session: requests.Session | None = None):
-        self.key = os.environ.get("S2_API_KEY", "").strip()
-        if not self.key:
-            sys.exit("No S2_API_KEY in .env")
         self.http = Http(RateLimiter(S2_RPS), session, attempts=8, first_delay=5.0, max_delay=120.0)
-        self.http.session.headers["x-api-key"] = self.key
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         r = self.http.request(method, url, **kwargs)
         if r.status_code in (401, 403):
-            raise SystemExit(f"Semantic Scholar rejected the API key (HTTP {r.status_code}): {r.text[:200]}")
+            raise SystemExit(f"Semantic Scholar refused the request (HTTP {r.status_code}): {r.text[:200]}")
         return r
 
     def abstract_of(self, work: dict) -> str:
@@ -569,7 +565,7 @@ def main() -> None:
     print("║         paperhunter  ·  Abstract Fetcher                             ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {DB_PATH}")
-    print(f"  Limits: OpenAlex {OPENALEX_RPS}/s (documented 30/s), Semantic Scholar {S2_RPS}/s (documented 1/s)")
+    print(f"  Limits: OpenAlex {OPENALEX_RPS}/s (documented 30/s), Semantic Scholar {S2_RPS}/s keyless (shared public pool)")
     load_env()
     oa, s2, elapsed = run(args.limit)
     report((oa, s2), elapsed)
