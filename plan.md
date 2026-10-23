@@ -4,7 +4,7 @@
 
 The `paper-hunter/` folder needs a major overhaul. **Nothing that exists today can be assumed correct or reusable.** This includes code, prompts, tables, views, and anything else related to Paper Hunter. All of the Python files, prompt files, tables, and views listed below must be created from scratch.
 
-The database (`archive/paperhunter.db`) already contains old Paper Hunter objects, some with the same names as the new ones (`paper_dblp`, `paper_review`, `paper_list`) and others that are now obsolete (`paper_openalex`, `paper_s2`, `paper_candidate_ai`, `paper_summary`). `a_extract.py` drops all of them before it creates the new schema. No other tables are touched.
+The database (`archive/paperhunter.db`) already contains old Paper Hunter objects: `paper_dblp`, `paper_review`, `paper_list`, `paper_openalex`, `paper_s2`, `paper_candidate_ai`, `paper_summary`. `a_extract.py` drops all of them before it creates the new schema. No other tables are touched.
 
 ## Research topic
 
@@ -16,27 +16,27 @@ Several steps evaluate papers against this topic:
 
 These apply to every step.
 
-1. **Resumable and idempotent.** Each step processes only the work that is still pending (for example, papers with no logged call, or rows where `*_review = 0`) and can be stopped and rerun at any point without duplicating rows, renumbering papers, or repeating paid calls.
+1. **Resumable and idempotent.** Each step processes only the work that is still pending (for example, papers with no logged call, or rows where `reviewed = 0`) and can be stopped and rerun at any point without duplicating rows, renumbering papers, or repeating paid calls.
 2. **Stable IDs.** `paper_id` is assigned once per `dblp_key` and never changes across reruns. All other tables depend on it.
-3. **Atomic writes.** A call log row, the abstract it produced, and the matching `paper_status` update are committed in the same transaction.
+3. **Atomic writes.** A call-log row, the abstract it produced, and the matching `paper_abstract_status` update are committed in the same transaction.
 4. **No secrets in the database.** API keys are removed from every URL before it is logged.
 5. **Provenance.** Every abstract and every AI decision records where it came from.
 
 ## Pipeline overview
 
-The steps run in this order. The order differs from the first draft: screening now happens **before** the AI web search, so the expensive AI steps only see papers that might be relevant (see "Changes from the first draft").
+The steps run in this order. Screening happens **before** the AI web search, so the expensive AI steps only see papers that might be relevant.
 
 | # | File | Type | Purpose |
 |---|---|---|---|
-| 1 | `a_extract.py` | Python | Extract papers from DBLP and initialize their status |
-| 2 | `b_abstract.py` | Python | Fetch abstracts via the OpenAlex and Semantic Scholar APIs |
-| 3 | `c_vector.py` | Python | Embed every paper (the abstract if one exists, otherwise the title and metadata) |
-| 4 | `d_match.py` | Python | Screen every paper against the research topic, aiming for zero false negatives |
-| 5 | `e_abstract.md` | AI prompt | Search the web for abstracts of screened-in papers the APIs missed |
-| 6 | `f_search.md` | AI prompt | Accept or reject screened-in papers that have abstracts, and classify the accepted ones |
-| 7 | `g_remaining.md` | AI prompt | Accept or reject screened-in papers that still have no abstract, and classify the accepted ones |
+| 1 | `a_extract.py` | Python | Extract papers from DBLP for the listed venues and a given year range |
+| 2 | `b_fetch.py` | Python | Fetch abstracts from the OpenAlex and Semantic Scholar APIs |
+| 3 | `c_embed.py` | Python | Embed every paper (the abstract if one exists, otherwise the title and metadata) |
+| 4 | `d_screen.py` | Python | Screen every paper against the research topic, aiming for zero false negatives |
+| 5 | `e_lookup.md` | AI prompt | Search the web for abstracts of screened-in papers the APIs missed |
+| 6 | `f_classify.md` | AI prompt | Accept or reject screened-in papers that have an abstract, and classify the accepted ones |
+| 7 | `g_infer.md` | AI prompt | Accept or reject screened-in papers that still have no abstract, using all other evidence, and classify the accepted ones |
 
-After `e_abstract.md` finds new abstracts, rerun `c_vector.py` and `d_match.py`. They are incremental, so they only re-embed and re-screen the papers that changed.
+After `e_lookup.md` finds new abstracts, rerun `c_embed.py` and `d_screen.py`. They are incremental, so they only re-embed and re-screen the papers that changed.
 
 ---
 
@@ -48,7 +48,7 @@ These already exist and are only read by the pipeline.
 | Object | Key used | Purpose |
 |---|---|---|
 | `conf_list` (view) | `dblp_key` (e.g. `conf/ccs`), plus `dblp_acronym`, `core_title`, `ranking` | Conference series whose papers should be extracted |
-| `journal_list` (view) | `dblp_key` (e.g. `journals/csur`), plus `dblp_name`, `scopus_title`, `quartile` | Journal streams whose papers should be extracted |
+| `journal_list` (view) | `dblp_key` (e.g. `journals/csur`), plus `dblp_name`, `scopus_title`, `quartile` | Journal series whose papers should be extracted |
 
 Both views return **no rows** while `conf_review` or `journal_review` has pending rows. `a_extract.py` stops with an error if either list is empty, so it never runs on a half-finished venue list.
 
@@ -59,7 +59,7 @@ Every paper extracted from DBLP. A DBLP record has fields that can repeat (`auth
 |---|---|
 | `paper_id` | `INTEGER PRIMARY KEY`, auto-incrementing from 1, assigned once and kept stable |
 | `dblp_key` | DBLP record key, e.g. `conf/ccs/LinL23`. `UNIQUE` (the natural key used for upserts) |
-| `venue_key` | Series key derived from `dblp_key`, e.g. `conf/ccs`. Joins to `conf_list` / `journal_list` |
+| `venue_key` | The venue key the paper matched, e.g. `conf/ccs`. Joins to `conf_list.dblp_key` / `journal_list.dblp_key` |
 | `record_type` | `article` or `inproceedings` |
 | `title` | Title, with XML markup removed |
 | `authors` | JSON array of author names, in order |
@@ -75,19 +75,19 @@ Every paper extracted from DBLP. A DBLP record has fields that can repeat (`auth
 
 **Written by:** `a_extract.py`
 
-## A.2 `paper_status`
-Abstract-retrieval status of each paper.
+## A.2 `paper_abstract_status`
+Whether each paper has an abstract yet, and how many lookups have been made for it.
 
 | Field | Default | Description |
 |---|---|---|
 | `paper_id` | — | Primary key, references `paper_dblp.paper_id` |
-| `failure_count` | `0` | Number of rows in `paper_failure` for this paper |
-| `success_count` | `0` | Number of rows in `paper_success` for this paper |
-| `status` | `0` | `0` = no abstract yet; `1` = abstract stored in `paper_abstract` |
+| `has_abstract` | `0` | `0` = no abstract yet; `1` = abstract stored in `paper_abstract` |
+| `hit_count` | `0` | Number of rows in `paper_abstract_hit` for this paper |
+| `miss_count` | `0` | Number of rows in `paper_abstract_miss` for this paper |
 
 The counts are updated in the same transaction as the log insert (Global rule 3), so they always equal the log tables.
 
-**Written by:** `a_extract.py` (inserts `paper_id` only); updated by `b_abstract.py`, `e_abstract.md`, `g_remaining.md`
+**Written by:** `a_extract.py` (inserts `paper_id` only); updated by `b_fetch.py`, `e_lookup.md`, `g_infer.md`
 
 ## A.3 `paper_abstract`
 At most one abstract per paper.
@@ -100,75 +100,93 @@ At most one abstract per paper.
 
 When more than one source returns an abstract, keep the first one stored. A later source never overwrites it.
 
-**Written by:** `b_abstract.py`, `e_abstract.md`, `g_remaining.md`
+**Written by:** `b_fetch.py`, `e_lookup.md`, `g_infer.md`
 
-## A.4 `paper_success` and `paper_failure`
-A log of every call made for a paper, whether to an API or a website. Both tables have the same structure.
+## A.4 `paper_abstract_hit` and `paper_abstract_miss`
+A log of every abstract lookup made for a paper, whether to an API or a website. `paper_abstract_hit` holds lookups that returned the abstract; `paper_abstract_miss` holds lookups that did not. Both tables have the same structure.
 
 | Field | Description |
 |---|---|
 | `paper_id` | References `paper_dblp.paper_id` |
-| `source` | Normalized source name: `openalex`, `s2`, or the website's domain (e.g. `dl.acm.org`). Used for the "never repeat a failed source" rule |
-| `lookup` | What was looked up: `doi`, `arxiv`, `title`, or `web` |
-| `api` | The full request URL or page, **with API keys removed** |
+| `source` | Normalized source name: `openalex`, `s2`, or the website's domain (e.g. `dl.acm.org`). Used for the "never repeat a missed source" rule |
+| `lookup_by` | What the lookup used: `doi`, `arxiv`, `title`, or `web` |
+| `request` | The full request URL or page, **with API keys removed** |
 | `response` | This paper's part of the raw response, stored as received (empty if there was none) |
 | `called_at` | Timestamp |
 
-**Outcomes.** Each call is logged as exactly one of these:
+**Outcomes.** Each lookup ends in exactly one of these:
 
 | Outcome | Meaning | Logged in |
 |---|---|---|
-| Success | The response contains a genuine abstract for **this** paper (see the match check in C.2) | `paper_success` |
-| Failure | The source answered properly but has no abstract for this paper (not found, abstract empty, or the title matched a different paper) | `paper_failure` |
-| Transient error | HTTP 429, 5xx, timeout, or network error | **Not logged.** The call is retried with backoff. Otherwise one outage would mark the source as failed forever |
+| Hit | The response contains a genuine abstract for **this** paper (see the match check in C.2) | `paper_abstract_hit` |
+| Miss | The source answered properly but has no abstract for this paper (not found, abstract empty, or the title matched a different paper) | `paper_abstract_miss` |
+| Transient error | HTTP 429, 5xx, timeout, or network error | **Not logged.** The call is retried with backoff. Otherwise one outage would mark the source as missed forever |
 
-**Batch calls.** When one request covers many papers (C.2), each paper gets its own row with the shared `api` and its own part of the `response`.
+**Batch calls.** When one request covers many papers (C.2), each paper gets its own row with the shared `request` and its own part of the `response`.
 
-**Written by:** `b_abstract.py`, `e_abstract.md`, `g_remaining.md`
+**Written by:** `b_fetch.py`, `e_lookup.md`, `g_infer.md`
 
-## A.5 `paper_rule`
+## A.5 `paper_seed`
+Papers known to be relevant, used to calibrate the screening threshold (C.4). Filled in by hand; no pipeline file writes to it.
+
+| Field | Description |
+|---|---|
+| `paper_id` | Primary key, references `paper_dblp.paper_id` |
+| `category` | Expected category (A.10): `baseline`, `benchmark`, `survey`, or `evaluation` |
+| `evidence` | Why it is known to be relevant (e.g. a citing survey or a URL) |
+
+**Choosing seeds.** Pick papers from outside the pipeline (own knowledge, survey/SoK reference lists, benchmark leaderboards), not by embedding score, since the seeds test that score. Cover every category, and include papers whose titles lack obvious keywords. A seed must already be in `paper_dblp`.
+
+**Written by:** hand
+
+## A.6 `paper_screen`
 Semantic screening result. Covers **every** paper, with or without an abstract.
 
 | Field | Default | Description |
 |---|---|---|
 | `paper_id` | — | Primary key, references `paper_dblp.paper_id` |
-| `basis` | — | `abstract` or `title`: which text was embedded |
-| `embedded_hash` | — | Hash of the embedded text. When it changes (e.g. an abstract was found), the paper is re-embedded and re-screened |
-| `rule_score` | `NULL` | Best similarity score across the topic queries |
-| `rule_hit` | `NULL` | What let the paper through: `semantic`, `keyword`, or `both` |
-| `rule_review` | `0` | `0` = not yet screened; `1` = screened |
-| `rule_candidate` | `NULL` | `NULL` = undecided; `1` = accepted; `0` = rejected |
+| `embed_basis` | — | `abstract` or `title`: which text was embedded |
+| `embed_hash` | — | Hash of the embedded text. When it changes (e.g. an abstract was found), the paper is re-embedded and re-screened |
+| `similarity` | `NULL` | Best cosine similarity across the topic queries |
+| `passed_by` | `NULL` | Which test let the paper through: `semantic`, `keyword`, or `both`. `NULL` if rejected |
+| `screened` | `0` | `0` = not yet screened; `1` = screened |
+| `passed` | `NULL` | `NULL` = not yet screened; `1` = passed; `0` = rejected |
 
-**Written by:** `c_vector.py` (inserts or resets rows); updated by `d_match.py`
+**Written by:** `c_embed.py` (inserts or resets rows); updated by `d_screen.py`
 
-## A.6 `paper_ai`
+## A.7 `paper_verdict_with_abstract`
 Final AI decision on screened-in papers that **have** an abstract.
 
 | Field | Default | Description |
 |---|---|---|
 | `paper_id` | — | Primary key, references `paper_dblp.paper_id` |
-| `ai_review` | `0` | `0` = not yet reviewed; `1` = reviewed |
-| `ai_candidate` | `NULL` | `NULL` = undecided; otherwise one of the A.8 values |
-| `ai_reason` | `NULL` | One or two sentences explaining the decision, citing the evidence used |
+| `reviewed` | `0` | `0` = not yet reviewed; `1` = reviewed |
+| `verdict` | `NULL` | `NULL` = undecided; otherwise one of the A.10 values |
+| `reason` | `NULL` | One or two sentences explaining the decision, citing the evidence used |
 
-**Written by:** `d_match.py` (inserts accepted papers that have an abstract), `g_remaining.md` (moves in papers whose abstract it finds); updated by `f_search.md`
+**Written by:** `d_screen.py` (inserts papers that passed and have an abstract), `g_infer.md` (moves in papers whose abstract it finds); updated by `f_classify.md`
 
-## A.7 `paper_probably`
-Final AI decision on screened-in papers that have **no** abstract. Same structure as `paper_ai`.
+## A.8 `paper_verdict_without_abstract`
+Final AI decision on screened-in papers that have **no** abstract. Same structure as `paper_verdict_with_abstract`.
 
 | Field | Default | Description |
 |---|---|---|
 | `paper_id` | — | Primary key, references `paper_dblp.paper_id` |
-| `ai_review` | `0` | `0` = not yet reviewed; `1` = reviewed |
-| `ai_candidate` | `NULL` | `NULL` = undecided; otherwise one of the A.8 values |
-| `ai_reason` | `NULL` | One or two sentences explaining the decision, citing the sources used |
+| `reviewed` | `0` | `0` = not yet reviewed; `1` = reviewed |
+| `verdict` | `NULL` | `NULL` = undecided; otherwise one of the A.10 values |
+| `reason` | `NULL` | One or two sentences explaining the decision, citing the sources used |
 
-A paper is never in both `paper_ai` and `paper_probably`.
+A paper is never in both verdict tables.
 
-**Written by:** `g_remaining.md`
+**Written by:** `g_infer.md`
 
-## A.8 Paper categories
-The values of `ai_candidate`. A paper is **relevant** if it would belong in the related-work or evaluation section of a paper on the research topic: it is about LLM- or AI-agent-driven offensive security (penetration testing, red teaming, CTF solving, exploit generation, attack planning, or automated attack chains), or it is a benchmark or environment that such agents are evaluated on.
+## A.9 `paper_embedding` (vector store)
+One vector per `paper_id`, stored outside SQLite at `archive/paper_embedding.*` (e.g. a NumPy/FAISS flat index) or in SQLite with `sqlite-vec`. The embedding model name and vector size are stored with it.
+
+**Written by:** `c_embed.py`
+
+## A.10 Paper categories
+The values of `verdict`. A paper is **relevant** if it would belong in the related-work or evaluation section of a paper on the research topic: it is about LLM- or AI-agent-driven offensive security (penetration testing, red teaming, CTF solving, exploit generation, attack planning, or automated attack chains), or it is a benchmark or environment that such agents are evaluated on.
 
 | Value | Meaning |
 |---|---|
@@ -184,35 +202,35 @@ The values of `ai_candidate`. A paper is **relevant** if it would belong in the 
 
 # Part B: Views
 
-## B.1 `paper_review`
-Screened-in papers that still have no abstract, in priority order. This is the work queue for `e_abstract.md` and `g_remaining.md`.
+## B.1 `paper_lookup_queue`
+Screened-in papers that still have no abstract, in priority order. This is the work queue for `e_lookup.md` and `g_infer.md`.
 
 | Field | Description |
 |---|---|
 | `paper_id` | Paper ID |
-| `rule_score` | Screening score |
-| `failure_count` | Number of failed calls |
+| `similarity` | Screening score |
+| `miss_count` | Number of missed lookups so far |
 
-- **Built on:** `paper_status` joined to `paper_rule`
-- **Filter:** `status = 0` and `rule_candidate = 1`
-- **Sort:** `rule_score` descending (most likely relevant first), then `failure_count` ascending, then `paper_id`
+- **Built on:** `paper_abstract_status` joined to `paper_screen`
+- **Filter:** `has_abstract = 0` and `passed = 1`
+- **Sort:** `similarity` descending (most likely relevant first), then `miss_count` ascending, then `paper_id`
 
-**Read by:** `e_abstract.md`, `g_remaining.md`
+**Read by:** `e_lookup.md`, `g_infer.md`
 
 ## B.2 `paper_list`
-The final list of accepted papers.
+The final list of accepted papers. (Named like `conf_list` and `journal_list`, the final outputs of the other hunters.)
 
 | Field | Description |
 |---|---|
 | *(all `paper_dblp` columns)* | Every column from `paper_dblp` |
 | `category` | `baseline`, `survey`, `benchmark`, or `evaluation` |
-| `ai_reason` | The reason recorded by the AI |
-| `basis` | `abstract` (from `paper_ai`) or `no_abstract` (from `paper_probably`) |
+| `reason` | The reason recorded by the AI |
+| `decided_from` | `abstract` (from `paper_verdict_with_abstract`) or `metadata` (from `paper_verdict_without_abstract`) |
 | `venue_name` | `core_title` or `scopus_title` |
 | `venue_rank` | CORE `ranking` (conferences) or Scopus `quartile` (journals) |
 
-- **Built on:** `paper_ai` UNION ALL `paper_probably`, joined to `paper_dblp`, then LEFT JOINed to `conf_list` and `journal_list` on `venue_key = dblp_key`. Use LEFT JOIN so a pending venue review, which empties those views, can only blank the venue columns and never removes papers.
-- **Filter:** `ai_review = 1` and `ai_candidate` not `reject` and not `NULL`
+- **Built on:** `paper_verdict_with_abstract` UNION ALL `paper_verdict_without_abstract`, joined to `paper_dblp`, then LEFT JOINed to `conf_list` and `journal_list` on `venue_key = dblp_key`. Use LEFT JOIN so a pending venue review, which empties those views, can only blank the venue columns and never removes papers.
+- **Filter:** `reviewed = 1` and `verdict` not `reject` and not `NULL`
 
 ---
 
@@ -221,30 +239,32 @@ The final list of accepted papers.
 ## C.1 `a_extract.py`: Extract papers from DBLP
 
 **Reads:** `archive/dblp.xml`, `conf_list`, `journal_list`
-**Writes:** `paper_dblp`, `paper_status`
+**Writes:** `paper_dblp`, `paper_abstract_status`
 
 1. **Prepare.** Drop the old Paper Hunter objects listed under Scope. Create every table and view in Parts A and B if it does not exist. Stop if `conf_list` or `journal_list` is empty.
-2. **Stream.** Parse `archive/dblp.xml` (5.4 GB) as a stream, using the DTD for entities. Never load the whole file into memory.
-3. **Keep a record only if all of these are true:**
-   - It is an `article` or `inproceedings` record.
-   - Its `publtype` is not `informal`, `withdrawn`, or `data`.
-   - Its `year` is in `YEARS` (a constant at the top of the file; default **2023–2026**, see Open decisions).
-   - Its series key matches a `dblp_key` in `conf_list` or `journal_list`. The series key is the `dblp_key` up to its second `/` (e.g. `conf/ccs/LinL23` → `conf/ccs`). Match on this key, **not** on the venue name text.
-4. **Upsert** each kept record into `paper_dblp` by `dblp_key`: insert new records, update changed fields of existing ones, and keep `paper_id` unchanged.
-5. **Initialize status.** Insert each new `paper_id` into `paper_status`. All other fields take their defaults.
-6. **Report.** Print the number of papers per year and per venue type, and the number of papers without a DOI.
+2. **Year range.** The year range is passed on the command line, e.g. `python a_extract.py --from-year 2023 --to-year 2026`. Both arguments are required, and nothing about years is hard-coded.
+3. **Venue keys.** The accepted venue keys are exactly the `dblp_key` values in `conf_list` and `journal_list`. Nothing else is added.
+4. **Stream.** Parse `archive/dblp.xml` (5.4 GB) as a stream, using the DTD for entities. Never load the whole file into memory.
+5. **Keep a record only if all of these are true:**
+   - It is an `article` or `inproceedings` record. This drops `proceedings` records, which describe a whole volume (e.g. `conf/ccs/2024`, the CCS 2024 book), not a paper.
+   - Its `publtype` is not `withdrawn`. Records marked `software` or `data` are kept: they are real articles in listed journals such as SoftwareX and Data.
+   - Its `year` is within the command-line range.
+   - Its venue key is one of the keys from step 3. The venue key is the `dblp_key` up to its second `/` (e.g. `conf/ccs/LinL23` → `conf/ccs`). Match on this key, **not** on the venue name text.
+6. **Upsert** each kept record into `paper_dblp` by `dblp_key`: insert new records, update changed fields of existing ones, and keep `paper_id` unchanged.
+7. **Initialize status.** Insert each new `paper_id` into `paper_abstract_status`. All other fields take their defaults.
+8. **Report.** Print the number of papers per year and per venue type, and the number of papers without a DOI.
 
 Note: DBLP files some co-located workshop papers under the parent conference key (e.g. `AISec@CCS` under `conf/ccs`). They are kept. This only adds false positives, which later steps remove.
 
 ---
 
-## C.2 `b_abstract.py`: Fetch abstracts via APIs
+## C.2 `b_fetch.py`: Fetch abstracts from APIs
 
-**Reads:** `paper_dblp`, `paper_status`, `paper_success`, `paper_failure`, `.env`
-**Writes:** `paper_abstract`, `paper_success`, `paper_failure`, `paper_status`
+**Reads:** `paper_dblp`, `paper_abstract_status`, `paper_abstract_hit`, `paper_abstract_miss`, `.env`
+**Writes:** `paper_abstract`, `paper_abstract_hit`, `paper_abstract_miss`, `paper_abstract_status`
 
 ### Behavior
-For every paper with `status = 0`, fetch the abstract, skipping any (source, lookup) pair already logged for that paper.
+For every paper with `has_abstract = 0`, fetch the abstract, skipping any (`source`, `lookup_by`) pair already logged for that paper.
 
 ### Lookup order (per source)
 1. **DOI**, if the paper has one. Use batch requests: OpenAlex `filter=doi:a|b|…` (up to 50 DOIs per request) and Semantic Scholar `POST /paper/batch` (up to 500 IDs per request).
@@ -262,10 +282,10 @@ Title lookups can return a different paper. Accept a title result only if **all*
 - the year is within ±1, and
 - at least one author surname is shared.
 
-A title result that fails this check is logged as a **failure** for that paper.
+A title result that fails this check is logged as a **miss** for that paper.
 
 ### What counts as an abstract
-The text must be non-empty after cleanup and must not be a placeholder (e.g. "No abstract available", or the title repeated). Otherwise the call is a failure.
+The text must be non-empty after cleanup and must not be a placeholder (e.g. "No abstract available", or the title repeated). Otherwise the lookup is a miss.
 
 ### Efficiency and limits
 - **Maximum yield, minimum time, minimum calls:** achieved by batching, the schedule above, and the skip rules.
@@ -277,156 +297,116 @@ The text must be non-empty after cleanup and must not be a placeholder (e.g. "No
 | Table | Update |
 |---|---|
 | `paper_abstract` | Insert the abstract and `source` if the paper has none yet |
-| `paper_success` | One row per paper per successful call |
-| `paper_failure` | One row per paper per failed call |
-| `paper_status` | Update counts in the same transaction; set `status = 1` when an abstract is stored |
+| `paper_abstract_hit` | One row per paper per lookup that returned the abstract |
+| `paper_abstract_miss` | One row per paper per lookup that did not |
+| `paper_abstract_status` | Update counts in the same transaction; set `has_abstract = 1` when an abstract is stored |
 
 ---
 
-## C.3 `c_vector.py`: Embed every paper
+## C.3 `c_embed.py`: Embed every paper
 
-**Reads:** `paper_dblp`, `paper_abstract`, `paper_rule`
-**Writes:** vector store, `paper_rule`
+**Reads:** `paper_dblp`, `paper_abstract`, `paper_screen`
+**Writes:** `paper_embedding`, `paper_screen`
 
-1. **Model.** Use an open-source embedding model that runs locally (e.g. `BAAI/bge-large-en-v1.5`). Store the model name and vector size with the vector store. The model must not change between `c_vector.py` and `d_match.py`.
+1. **Model.** Use an open-source embedding model that runs locally (e.g. `BAAI/bge-large-en-v1.5`). The model must not change between `c_embed.py` and `d_screen.py`.
 2. **Text to embed** (clean text only, no raw API JSON):
-   - With an abstract (`basis = abstract`): title + abstract.
-   - Without an abstract (`basis = title`): title + venue + year.
+   - With an abstract (`embed_basis = abstract`): title + abstract.
+   - Without an abstract (`embed_basis = title`): title + venue + year.
    - Truncate to the model's maximum input length.
-3. **Incremental.** For each paper, hash the text. Embed it only if the paper has no `paper_rule` row or its `embedded_hash` has changed. When the hash changes, reset `rule_review = 0` and `rule_candidate = NULL` so `d_match.py` screens it again.
-4. **Store.** Save one vector per `paper_id` (overwriting on re-embed). A flat file (e.g. NumPy/FAISS flat index) or `sqlite-vec` is enough. `d_match.py` scores every vector exactly, so no approximate index is needed.
-5. **Initialize screening.** Insert or update the paper's `paper_rule` row with `basis` and `embedded_hash`.
+3. **Incremental.** For each paper, hash the text. Embed it only if the paper has no `paper_screen` row or its `embed_hash` has changed. When the hash changes, reset `screened = 0` and `passed = NULL` so `d_screen.py` screens it again.
+4. **Store.** Save one vector per `paper_id` in `paper_embedding` (overwriting on re-embed). `d_screen.py` scores every vector exactly, so no approximate index is needed.
+5. **Initialize screening.** Insert or update the paper's `paper_screen` row with `embed_basis` and `embed_hash`.
 
 ---
 
-## C.4 `d_match.py`: Screen papers by research topic
+## C.4 `d_screen.py`: Screen papers against the research topic
 
-**Reads:** vector store, `paper_dblp`, `paper_abstract`, `paper_rule`
-**Writes:** `paper_rule`, `paper_ai`
+**Reads:** `paper_embedding`, `paper_dblp`, `paper_abstract`, `paper_screen`, `paper_seed`
+**Writes:** `paper_screen`, `paper_verdict_with_abstract`
 
 ### Method
-Screen every paper with `rule_review = 0`. A paper is **accepted** if **either** test passes:
+Screen every paper with `screened = 0`. A paper **passes** if **either** test passes:
 
-1. **Semantic test.** Compute exact cosine similarity between the paper's vector and **each** of a fixed set of topic queries, and take the maximum. The queries cover the topic and its direct neighbors, because benchmark, survey, and evaluation papers count as relevant (A.8). For example: the research topic itself; LLM agents for penetration testing; automated red teaming with LLMs; LLM agents solving CTF challenges; LLM-driven exploit generation; AI attack planning and attack graphs; autonomous cyber-operations agents; benchmarks for offensive-security agents. Never use a top-k search, because it silently drops papers past k.
+1. **Semantic test.** Compute exact cosine similarity between the paper's vector and **each** of a fixed set of topic queries, and take the maximum. The queries cover the topic and its direct neighbors, because benchmark, survey, and evaluation papers count as relevant (A.10). For example: the research topic itself; LLM agents for penetration testing; automated red teaming with LLMs; LLM agents solving CTF challenges; LLM-driven exploit generation; AI attack planning and attack graphs; autonomous cyber-operations agents; benchmarks for offensive-security agents. Never use a top-k search, because it silently drops papers past k.
 2. **Keyword test.** Case-insensitive match on the title, plus the abstract if one exists, for terms such as: penetration test, pentest, red team, CTF, capture the flag, exploit, attack chain, attack graph, privilege escalation, lateral movement, Metasploit, offensive security, cyber range, kill chain.
 
 ### Threshold (how "no false negatives" is enforced)
-- Keep a **seed set** of at least 30 known-relevant papers covering all four categories (file `seed_papers.txt`, one DBLP key or DOI per line).
-- Set a separate threshold for each `basis`. Each threshold is the **lowest** score any seed paper gets under that basis, minus a safety margin (default 0.05). Score the seed papers under the `title` basis too, so the title threshold is calibrated on its own.
-- Stop with an error if any seed paper is not accepted.
-- Print the number of papers accepted for each basis, so the margin can be tuned.
+- Stop with an error if `paper_seed` is empty.
+- Set a separate threshold for each `embed_basis`. Each threshold is the **lowest** similarity any seed gets under that basis, minus a safety margin (default 0.05). Score every seed under the `title` basis too (title + venue + year), so the title threshold is calibrated on its own.
+- Stop with an error if any seed does not pass.
+- Print the number of papers passed for each basis, so the margin can be tuned.
 
 ### Table updates
 
 | Event | Update |
 |---|---|
-| Paper screened | `paper_rule`: set `rule_review = 1`, `rule_score`, `rule_hit` |
-| Accepted, has abstract | `rule_candidate = 1`; insert into `paper_ai` (defaults) if it is not already there |
-| Accepted, no abstract | `rule_candidate = 1`. It now appears in `paper_review` |
-| Rejected | `rule_candidate = 0`. If the paper is in `paper_ai` with `ai_review = 0` (from an earlier screen), remove it |
+| Paper screened | `paper_screen`: set `screened = 1` and `similarity` |
+| Passed, has abstract | `passed = 1`, `passed_by`; insert into `paper_verdict_with_abstract` (defaults) if it is not already there |
+| Passed, no abstract | `passed = 1`, `passed_by`. It now appears in `paper_lookup_queue` |
+| Rejected | `passed = 0`. If the paper is in `paper_verdict_with_abstract` with `reviewed = 0` (from an earlier screen), remove it |
 
 ---
 
-## C.5 `e_abstract.md`: AI prompt for an online abstract search
+## C.5 `e_lookup.md`: AI prompt to find missing abstracts online
 
-**Reads:** `paper_review`, `paper_dblp`, `paper_failure`
-**Writes:** `paper_abstract`, `paper_success`, `paper_failure`, `paper_status`
+**Reads:** `paper_lookup_queue`, `paper_dblp`, `paper_abstract_miss`
+**Writes:** `paper_abstract`, `paper_abstract_hit`, `paper_abstract_miss`, `paper_abstract_status`
 
 ### Purpose
-The APIs could not find abstracts for some screened-in papers (listed in `paper_review`). This prompt directs an AI to search the web for those abstracts. The prompt must say how the AI writes to the database (the `sqlite3` CLI on `archive/paperhunter.db`, one transaction per paper).
+The APIs could not find abstracts for some screened-in papers (listed in `paper_lookup_queue`). This prompt directs an AI to search the web for those abstracts. The prompt must say how the AI writes to the database (the `sqlite3` CLI on `archive/paperhunter.db`, one transaction per paper).
 
 ### Workflow
-For each paper, in `paper_review` order, in batches of a set size (e.g. 20 per session):
+For each paper, in `paper_lookup_queue` order, in batches of a set size (e.g. 20 per session):
 
 1. **Get the details.** Fetch the paper's full record from `paper_dblp`.
-2. **Check past failures.** Read `paper_failure` for this paper. Do not query any `source` already logged there.
+2. **Check past misses.** Read `paper_abstract_miss` for this paper. Do not query any `source` already logged there.
 3. **Search online.** Use every available detail: DOI landing page, arXiv ID, publisher page, title, authors, venue, year.
 4. **Verify.** Confirm the page is about this paper (title, authors, and venue or year match) and that the text is the paper's own abstract, not a summary, a citing paper's text, or a generated description.
-5. **Log each source.** One row per source tried, with `source` = the domain, `lookup = web`, and the relevant page text in `response`:
-   - Verified abstract found → `paper_success`.
-   - Not found → `paper_failure`.
-6. **Update the results.** If a verified abstract was found, insert it into `paper_abstract` (`source` = page URL) and update `paper_status`, all in one transaction. Otherwise only `paper_status.failure_count` changes.
+5. **Log each source.** One row per source tried, with `source` = the domain, `lookup_by = web`, and the relevant page text in `response`:
+   - Verified abstract found → `paper_abstract_hit`.
+   - Not found → `paper_abstract_miss`.
+6. **Update the results.** If a verified abstract was found, insert it into `paper_abstract` (`source` = page URL) and update `paper_abstract_status`, all in one transaction. Otherwise only `paper_abstract_status.miss_count` changes.
 
 ### Rules
 - **Accuracy:** record an abstract only if it was actually found and verified. Never guess, paraphrase, or generate one.
-- **No repeats:** never query a source already in `paper_failure` for the same paper.
-- **Afterwards:** rerun `c_vector.py` and `d_match.py` so the new abstracts are re-embedded and re-screened.
+- **No repeats:** never query a source already in `paper_abstract_miss` for the same paper.
+- **Afterwards:** rerun `c_embed.py` and `d_screen.py` so the new abstracts are re-embedded and re-screened.
 
 ---
 
-## C.6 `f_search.md`: AI prompt to classify screened papers with abstracts
+## C.6 `f_classify.md`: AI prompt to classify screened papers with abstracts
 
-**Reads:** `paper_ai`, `paper_dblp`, `paper_abstract`
-**Writes:** `paper_ai`
+**Reads:** `paper_verdict_with_abstract`, `paper_dblp`, `paper_abstract`
+**Writes:** `paper_verdict_with_abstract`
 
 ### Purpose
-Make the final decision on each screened-in paper that has an abstract, and categorize the accepted ones. (The text is read from `paper_dblp` and `paper_abstract`, not the vector store, which holds only vectors.)
+Make the final decision on each screened-in paper that has an abstract, and categorize the accepted ones. (The text is read from `paper_dblp` and `paper_abstract`, not from `paper_embedding`, which holds only vectors.)
 
 ### Workflow
-For each row in `paper_ai` with `ai_review = 0`, in batches:
+For each row in `paper_verdict_with_abstract` with `reviewed = 0`, in batches:
 
 1. **Get the data.** Title, authors, venue, year, and abstract.
-2. **Decide.** Apply the relevance definition in A.8 and decide whether to **accept** or **reject** the paper. If it is unclear from the abstract, the AI may check the paper online before deciding.
-3. **Classify.** If accepted, assign exactly one category using A.8 and its tie-break.
-4. **Record.** Set `ai_review = 1`, `ai_candidate` = the category or `reject`, and `ai_reason`.
+2. **Decide.** Apply the relevance definition in A.10 and decide whether to **accept** or **reject** the paper. If it is unclear from the abstract, the AI may check the paper online before deciding.
+3. **Classify.** If accepted, assign exactly one category using A.10 and its tie-break.
+4. **Record.** Set `reviewed = 1`, `verdict` = the category or `reject`, and `reason`.
 
 ---
 
-## C.7 `g_remaining.md`: AI prompt to classify screened papers without abstracts
+## C.7 `g_infer.md`: AI prompt to classify screened papers without abstracts
 
-**Reads:** `paper_review`, `paper_dblp`, `paper_failure`, `paper_probably`
-**Writes:** `paper_probably`, and in the abstract-found case: `paper_abstract`, `paper_success`, `paper_failure`, `paper_status`, `paper_ai`
+**Reads:** `paper_lookup_queue`, `paper_dblp`, `paper_abstract_miss`, `paper_verdict_without_abstract`
+**Writes:** `paper_verdict_without_abstract`, and in the abstract-found case: `paper_abstract`, `paper_abstract_hit`, `paper_abstract_miss`, `paper_abstract_status`, `paper_verdict_with_abstract`
 
 ### Purpose
-Decide on screened-in papers whose abstracts were never found, using every other piece of available information. Run this only after `e_abstract.md` has worked through its queue.
+Decide on screened-in papers whose abstracts were never found, using every other piece of available information. Run this only after `e_lookup.md` has worked through its queue.
 
 ### Workflow
-For each paper in `paper_review` that is not already in `paper_probably`, in batches:
+For each paper in `paper_lookup_queue` that is not already in `paper_verdict_without_abstract`, in batches:
 
-1. **Gather database details.** Combine the paper's records from `paper_dblp` and `paper_failure` (the failure responses often contain keywords, topics, or a TL;DR even without an abstract).
-2. **Search online.** Look for more information: the full-text PDF, the publisher page, citing papers, the project repository, and author pages. Do not retry sources already in `paper_failure` for the abstract.
-3. **If a genuine abstract is found**, handle it the way `e_abstract.md` does (verify, log, store it, update `paper_status`), insert the paper into `paper_ai` with defaults, and move on. `f_search.md` will decide on it.
+1. **Gather database details.** Combine the paper's records from `paper_dblp` and `paper_abstract_miss` (the miss responses often contain keywords, topics, or a TL;DR even without an abstract).
+2. **Search online.** Look for more information: the full-text PDF, the publisher page, citing papers, the project repository, and author pages. Do not retry sources already in `paper_abstract_miss` for the abstract.
+3. **If a genuine abstract is found**, handle it the way `e_lookup.md` does (verify, log, store it, update `paper_abstract_status`), insert the paper into `paper_verdict_with_abstract` with defaults, and move on. `f_classify.md` will decide on it.
 4. **Combine everything.** Merge title, authors, venue, year, keywords, topics, TL;DR, and anything else found.
-5. **Decide.** Apply A.8 and decide whether to **accept** or **reject** the paper. With less evidence, lean toward accepting borderline papers (false positives are acceptable here) and say so in `ai_reason`.
-6. **Classify.** If accepted, assign exactly one category using A.8 and its tie-break.
-7. **Record.** Insert into `paper_probably` with `ai_review = 1`, `ai_candidate`, and `ai_reason`.
-
----
-
-# Changes from the first draft
-
-| # | Gap in the first draft | Fix |
-|---|---|---|
-| 1 | No year limit. All years for 865 conferences and 1,062 journals would be millions of papers (2023–2026 alone is about 1.06M) | `YEARS` constant in `a_extract.py`, default 2023–2026 |
-| 2 | "Venue appears in `conf_list`" was undefined. Those lists hold DBLP series keys, not venue names | Match the series prefix of `dblp_key` against `dblp_key`; keep only `article`/`inproceedings`; drop informal/withdrawn |
-| 3 | "All DBLP fields" can't be columns (authors and `ee` repeat), and a fresh `paper_id` on every run would break every foreign key | Fixed schema; upsert by `dblp_key`; stable `paper_id` |
-| 4 | No pending-work rules, so a rerun would repeat paid API and AI calls | Global rule 1 and a per-step pending filter |
-| 5 | Rate-limit and timeout errors counted as failures, and the "never retry a failed source" rule would then block that source forever | Transient outcome: not logged, retried with backoff |
-| 6 | "Skip sources already in `paper_failure`" compared full URLs, which never repeat exactly | `source` and `lookup` columns |
-| 7 | OpenAlex API keys would be stored in `api` URLs | Keys removed before logging |
-| 8 | Title fallback could store another paper's abstract | Title/year/author match check |
-| 9 | Title fallback also ran when the DOI lookup found the work with no abstract, which wastes a call | Title lookup only when the work was not found |
-| 10 | "Both APIs at once" conflicted with "minimum API calls", and one call per paper is far too slow for about 1M papers | Batch endpoints; S2 handles only OpenAlex misses; both workers run at the same time |
-| 11 | A batch call covers many papers, but the logs are one row per paper | One row per paper with that paper's part of the response |
-| 12 | Which abstract to keep when both sources return one was undefined | First stored wins; `source` recorded |
-| 13 | **Papers without abstracts were never screened.** `c_abstract` (AI web search) and `g_remaining` (AI decision) would run on every such paper. At a 7–15% miss rate that is roughly 75k–160k AI web sessions | Embed and screen every paper (title basis when there is no abstract); AI steps see only screened-in papers; steps reordered and renamed (`c_vector`, `d_match`, `e_abstract`) |
-| 14 | `paper_review` priority by fewest failures put papers that were barely tried first and ignored relevance | Sort by `rule_score` first |
-| 15 | Embedding raw API JSON adds noise and makes papers with and without responses incomparable | Embed clean title + abstract only |
-| 16 | "No false negatives" had no method or check, and a single topic sentence is narrower than the four accepted categories | Multiple topic queries + keyword OR rule + seed-set-calibrated thresholds for each basis + hard stop if a seed paper is missed |
-| 17 | A top-k vector search silently drops papers past k | Exact scoring of every vector |
-| 18 | `f_search` read text from the vector store, which holds only vectors | Read from `paper_dblp` + `paper_abstract` |
-| 19 | The categories were tautological ("Baseline paper") and there was no relevance definition or tie-break | Definitions, relevance scope, and tie-break order in A.8 |
-| 20 | `g_remaining` searched online but discarded any abstract it found and logged nothing | Found abstracts follow the `e_abstract` path and the paper moves to `paper_ai` |
-| 21 | AI decisions could not be audited | `ai_reason` column |
-| 22 | `paper_list` INNER JOINed views that empty out during a venue review, which would silently empty the final list | LEFT JOIN; venue name and rank added |
-| 23 | New table names collide with old objects (`paper_dblp`, `paper_review`, `paper_list`) | `a_extract.py` drops the old Paper Hunter objects first |
-| 24 | The AI prompts did not say how they write to the database | `sqlite3` CLI, one transaction per paper |
-
-# Open decisions
-
-These have working defaults in the plan. Change them if needed.
-
-1. **Year window:** 2023–2026 (the same as the old extractor). Older pentest-automation work (pre-LLM planners, attack-graph tools) would need an earlier start year.
-2. **Series lineage:** predecessor series keys (`conf_dblp_lineage`, `journal_dblp_lineage`) are **not** matched. With a 2023+ window this rarely matters. If the window is widened, include predecessor keys of listed series.
-3. **Seed set:** `seed_papers.txt` needs at least 30 known-relevant papers before `d_match.py` can run.
-4. **Embedding model:** `bge-large-en-v1.5` is a suggestion. Any local model works if `c_vector.py` and `d_match.py` use the same one.
+5. **Decide.** Apply A.10 and decide whether to **accept** or **reject** the paper. With less evidence, lean toward accepting borderline papers (false positives are acceptable here) and say so in `reason`.
+6. **Classify.** If accepted, assign exactly one category using A.10 and its tie-break.
+7. **Record.** Insert into `paper_verdict_without_abstract` with `reviewed = 1`, `verdict`, and `reason`.
