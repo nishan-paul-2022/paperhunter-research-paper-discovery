@@ -1,12 +1,32 @@
 #!/usr/bin/env python3
 import argparse
+import json
+import os
+import re
 import sqlite3
 import sys
+import time
+import urllib.parse
+from collections import Counter
 from pathlib import Path
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
+XML_PATH = REPO_ROOT / "archive" / "dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
+BATCH_SIZE = 5_000
+DOI_RE = re.compile(r"^https?://(?:dx\.)?doi\.org/(10\.\S+)$", re.I)
+ARXIV_RE = re.compile(
+    r"^https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/([a-z.-]+/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?/?$", re.I)
+ARXIV_DOI_RE = re.compile(r"^10\.48550/arxiv\.(.+?)(?:v\d+)?$", re.I)
+COLUMNS = ("dblp_key", "venue_key", "record_type", "title", "authors", "year", "venue", "volume", "number",
+           "pages", "doi", "arxiv_id", "ee", "url", "crossref", "mdate")
+UPSERT = (
+    f"INSERT INTO paper_dblp ({', '.join(COLUMNS)}) VALUES ({', '.join('?' * len(COLUMNS))}) "
+    f"ON CONFLICT (dblp_key) DO UPDATE SET {', '.join(f'{c} = excluded.{c}' for c in COLUMNS[1:])} "
+    f"WHERE ({', '.join(f'paper_dblp.{c}' for c in COLUMNS[1:])}) "
+    f"IS NOT ({', '.join(f'excluded.{c}' for c in COLUMNS[1:])})"
+)
 
 # Old Paper Hunter objects, children before parents so foreign keys never block a drop.
 OLD_OBJECTS = (
@@ -176,12 +196,160 @@ def prepare_schema(conn: sqlite3.Connection) -> None:
     print(f"  ✓  {dropped} old objects dropped  |  {tables} paper tables, {views} paper views present\n")
 
 
+def venue_keys(conn: sqlite3.Connection) -> tuple[set[str], set[str]]:
+    conf = {k for (k,) in conn.execute("SELECT dblp_key FROM conf_list")}
+    journal = {k for (k,) in conn.execute("SELECT dblp_key FROM journal_list")}
+    return conf, journal
+
+
+# Same rule as conference-hunter: the issue label of a journal stream key journals/<name>#<label>.
+def issue_label(number: str) -> str:
+    label = re.sub(r"[\s_.-]*\d+$", "", " ".join(number.split()))
+    return label if re.search(r"[A-Za-z]", label) else ""
+
+
+def match_venue(el, keys: set[str]) -> str | None:
+    parts = el.get("key", "").split("/")
+    if len(parts) < 3:
+        return None
+    prefix = "/".join(parts[:2])
+    if el.tag == "article" and parts[0] == "journals":
+        label = issue_label(el.findtext("number") or "")
+        if label and f"{prefix}#{label}" in keys:
+            return f"{prefix}#{label}"
+    return prefix if prefix in keys else None
+
+
+def text(el, tag: str) -> str | None:
+    child = el.find(tag)
+    if child is None:
+        return None
+    value = " ".join("".join(child.itertext()).split())
+    return value or None
+
+
+def ids_from_ee(ee: list[str]) -> tuple[str | None, str | None]:
+    doi = arxiv_id = None
+    for link in ee:
+        m = DOI_RE.match(link)
+        if m:
+            value = urllib.parse.unquote(m.group(1)).lower()
+            a = ARXIV_DOI_RE.match(value)
+            if a:
+                arxiv_id = arxiv_id or a.group(1)
+            doi = doi or value
+            continue
+        m = ARXIV_RE.match(link)
+        if m:
+            arxiv_id = arxiv_id or m.group(1).lower()
+    return doi, arxiv_id
+
+
+def record_row(el, venue_key: str, year: int) -> tuple:
+    ee = [v for v in ("".join(e.itertext()).strip() for e in el.findall("ee")) if v]
+    doi, arxiv_id = ids_from_ee(ee)
+    authors = [" ".join("".join(a.itertext()).split()) for a in el.findall("author")]
+    venue = text(el, "booktitle" if el.tag == "inproceedings" else "journal")
+    return (el.get("key"), venue_key, el.tag, text(el, "title"), json.dumps(authors, ensure_ascii=False), year,
+            venue, text(el, "volume"), text(el, "number"), text(el, "pages"), doi, arxiv_id,
+            json.dumps(ee, ensure_ascii=False), text(el, "url"), text(el, "crossref"), el.get("mdate"))
+
+
+def write_batch(conn: sqlite3.Connection, rows: list[tuple]) -> tuple[int, int]:
+    with conn:
+        before = conn.total_changes
+        conn.executemany(UPSERT, rows)
+        changed = conn.total_changes - before
+        before = conn.total_changes
+        conn.executemany(
+            "INSERT OR IGNORE INTO paper_abstract_status (paper_id) SELECT paper_id FROM paper_dblp WHERE dblp_key = ?",
+            [(r[0],) for r in rows],
+        )
+        new = conn.total_changes - before
+    return new, changed - new
+
+
+def extract(conn: sqlite3.Connection, xml_path: Path, from_year: int, to_year: int) -> None:
+    from lxml import etree
+
+    print("━" * 70)
+    print(f"  Phase 2 – DBLP papers {from_year}–{to_year} → paper_dblp, paper_abstract_status")
+    print("━" * 70)
+    conf, journal = venue_keys(conn)
+    keys = conf | journal
+    print(f"  {len(conf):,} conference keys + {len(journal):,} journal keys  |  "
+          f"scanning {xml_path.name} ({xml_path.stat().st_size // 1_000_000:,} MB)\n")
+    size = os.path.getsize(xml_path)
+    started = time.time()
+    seen = 0
+    skipped: Counter = Counter()
+    kept = inserted = updated = 0
+    rows: list[tuple] = []
+    with open(xml_path, "rb") as f:
+        ctx = etree.iterparse(f, events=("end",), tag=("article", "inproceedings"),
+                              load_dtd=True, resolve_entities=True, huge_tree=True)
+        for _, el in ctx:
+            seen += 1
+            year_text = (el.findtext("year") or "").strip()
+            venue_key = match_venue(el, keys)
+            if venue_key is None:
+                skipped["venue"] += 1
+            elif not year_text.isdigit() or not from_year <= int(year_text) <= to_year:
+                skipped["year"] += 1
+            elif el.get("publtype") == "withdrawn":
+                skipped["withdrawn"] += 1
+            else:
+                rows.append(record_row(el, venue_key, int(year_text)))
+                kept += 1
+                if len(rows) >= BATCH_SIZE:
+                    new, changed = write_batch(conn, rows)
+                    inserted, updated, rows = inserted + new, updated + changed, []
+            if seen % 500_000 == 0:
+                print(f"  {f.tell() * 100 // size:3}%  |  records scanned: {seen:,}  |  kept: {kept:,}  |  "
+                      f"{time.time() - started:,.0f}s", end="\r", flush=True)
+            el.clear()
+            while el.getprevious() is not None:
+                del el.getparent()[0]
+    if rows:
+        new, changed = write_batch(conn, rows)
+        inserted, updated = inserted + new, updated + changed
+    print(f"  100%  |  records scanned: {seen:,}  |  kept: {kept:,}  |  {time.time() - started:,.0f}s")
+    print(f"\n  ✓  {inserted:,} inserted  |  {updated:,} updated  |  {kept - inserted - updated:,} unchanged  |  "
+          f"skipped: {skipped['venue']:,} unlisted venue, {skipped['year']:,} out of range, "
+          f"{skipped['withdrawn']:,} withdrawn\n")
+    report(conn, conf, from_year, to_year)
+
+
+def report(conn: sqlite3.Connection, conf: set[str], from_year: int, to_year: int) -> None:
+    counts: Counter = Counter()
+    no_doi = 0
+    for venue_key, year, doi in conn.execute(
+            "SELECT venue_key, year, doi FROM paper_dblp WHERE year BETWEEN ? AND ?", (from_year, to_year)):
+        counts[year, "conference" if venue_key in conf else "journal"] += 1
+        no_doi += doi is None
+    print(f"  {'year':>6}  {'conference':>12}  {'journal':>12}  {'total':>12}")
+    for year in range(from_year, to_year + 1):
+        c, j = counts[year, "conference"], counts[year, "journal"]
+        print(f"  {year:>6}  {c:>12,}  {j:>12,}  {c + j:>12,}")
+    c = sum(n for (_, t), n in counts.items() if t == "conference")
+    j = sum(n for (_, t), n in counts.items() if t == "journal")
+    print(f"  {'total':>6}  {c:>12,}  {j:>12,}  {c + j:>12,}")
+    print(f"\n  Papers without a DOI: {no_doi:,} ({no_doi * 100 / max(c + j, 1):.1f}%)\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract papers from DBLP into paper_dblp.")
+    parser.add_argument("--from-year", type=int, help="first publication year to keep (required)")
+    parser.add_argument("--to-year", type=int, help="last publication year to keep (required)")
     parser.add_argument("--schema-only", action="store_true", help="create the schema and stop")
     args = parser.parse_args()
     if not args.schema_only:
-        parser.error("extraction is not implemented yet; run with --schema-only")
+        if args.from_year is None or args.to_year is None:
+            parser.error("the following arguments are required: --from-year, --to-year")
+        if args.from_year > args.to_year:
+            parser.error("--from-year must not be after --to-year")
+        if not XML_PATH.exists():
+            sys.exit(f"dblp.xml not found: {XML_PATH}")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║         paperhunter  ·  Paper Extractor                              ║")
@@ -189,7 +357,13 @@ def main() -> None:
     print(f"\n  Database: {DB_PATH}\n")
     conn = connect()
     prepare_schema(conn)
+    if not args.schema_only:
+        extract(conn, XML_PATH, args.from_year, args.to_year)
     conn.close()
+    print("━" * 70)
+    print("  Done.  → Run b_fetch.py next" if not args.schema_only else "  Done (schema only).")
+    print("━" * 70)
+    print()
 
 
 if __name__ == "__main__":
