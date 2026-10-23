@@ -15,6 +15,11 @@ REPO_ROOT = HUNTER_DIR.parent
 XML_PATH = REPO_ROOT / "archive" / "dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 BATCH_SIZE = 5_000
+PAPER_TAGS = ("article", "inproceedings")
+# Every child type of <dblp> in dblp.dtd. All are cleared after parsing, or long runs of
+# non-paper records (e.g. www person pages) pile up in the tree until the next paper.
+RECORD_TAGS = PAPER_TAGS + ("proceedings", "book", "incollection", "phdthesis", "mastersthesis",
+                            "www", "person", "data")
 DOI_RE = re.compile(r"^https?://(?:dx\.)?doi\.org/(10\.\S+)$", re.I)
 ARXIV_RE = re.compile(
     r"^https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/([a-z.-]+/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?/?$", re.I)
@@ -286,13 +291,15 @@ def extract(conn: sqlite3.Connection, xml_path: Path, from_year: int, to_year: i
     kept = inserted = updated = 0
     rows: list[tuple] = []
     with open(xml_path, "rb") as f:
-        ctx = etree.iterparse(f, events=("end",), tag=("article", "inproceedings"),
+        ctx = etree.iterparse(f, events=("end",), tag=RECORD_TAGS,
                               load_dtd=True, resolve_entities=True, huge_tree=True)
         for _, el in ctx:
             seen += 1
             year_text = (el.findtext("year") or "").strip()
-            venue_key = match_venue(el, keys)
-            if venue_key is None:
+            venue_key = match_venue(el, keys) if el.tag in PAPER_TAGS else None
+            if el.tag not in PAPER_TAGS:
+                skipped["type"] += 1
+            elif venue_key is None:
                 skipped["venue"] += 1
             elif not year_text.isdigit() or not from_year <= int(year_text) <= to_year:
                 skipped["year"] += 1
@@ -315,7 +322,8 @@ def extract(conn: sqlite3.Connection, xml_path: Path, from_year: int, to_year: i
         inserted, updated = inserted + new, updated + changed
     print(f"  100%  |  records scanned: {seen:,}  |  kept: {kept:,}  |  {time.time() - started:,.0f}s")
     print(f"\n  ✓  {inserted:,} inserted  |  {updated:,} updated  |  {kept - inserted - updated:,} unchanged  |  "
-          f"skipped: {skipped['venue']:,} unlisted venue, {skipped['year']:,} out of range, "
+          f"skipped: {skipped['type']:,} not article/inproceedings, "
+          f"{skipped['venue']:,} unlisted venue, {skipped['year']:,} out of range, "
           f"{skipped['withdrawn']:,} withdrawn\n")
     report(conn, conf, from_year, to_year)
 
