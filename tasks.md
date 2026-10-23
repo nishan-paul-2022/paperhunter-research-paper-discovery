@@ -21,7 +21,7 @@ This is the work plan for building the pipeline specified in `plan.md`. Do **one
 - [x] Task 2: DBLP extraction (`a_extract.py`, part 2)
 - [x] Task 3: OpenAlex fetching (`b_fetch.py`, part 1)
 - [x] Task 4: Semantic Scholar, arXiv and title fallback (`b_fetch.py`, part 2)
-- [ ] Task 5: Embedding (`c_embed.py`)
+- [x] Task 5: Embedding (`c_embed.py`)
 - [ ] Task 6: Seed set (**done by the user, not the AI**)
 - [ ] Task 7: Screening (`d_screen.py`)
 - [ ] Task 8: Web abstract lookup prompt (`e_lookup.md`)
