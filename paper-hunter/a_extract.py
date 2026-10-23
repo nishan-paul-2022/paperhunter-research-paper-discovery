@@ -18,8 +18,6 @@ DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 SCHEMA_PATH = REPO_ROOT / "circumstance" / "b_schema.py"
 BATCH_SIZE = 5_000
 PAPER_TAGS = ("article", "inproceedings")
-# Every child type of <dblp> in dblp.dtd. All are cleared after parsing, or long runs of
-# non-paper records (e.g. www person pages) pile up in the tree until the next paper.
 RECORD_TAGS = PAPER_TAGS + ("proceedings", "book", "incollection", "phdthesis", "mastersthesis",
                             "www", "person", "data")
 DOI_RE = re.compile(r"^https?://(?:dx\.)?doi\.org/(10\.\S+)$", re.I)
@@ -35,14 +33,11 @@ UPSERT = (
     f"IS NOT ({', '.join(f'excluded.{c}' for c in COLUMNS[1:])})"
 )
 
-# Old Paper Hunter objects, children before parents so foreign keys never block a drop.
 OLD_OBJECTS = (
     "paper_review", "paper_list", "paper_summary",
     "paper_candidate_ai", "paper_openalex", "paper_s2", "paper_dblp",
 )
-# Exists only in the new schema; its presence means the old objects are already gone.
 NEW_SCHEMA_MARKER = "paper_abstract_status"
-
 
 
 def paper_schema() -> str:
@@ -101,7 +96,6 @@ def venue_keys(conn: sqlite3.Connection) -> tuple[set[str], set[str]]:
     return conf, journal
 
 
-# Same rule as conference-hunter: the issue label of a journal stream key journals/<name>#<label>.
 def issue_label(number: str) -> str:
     label = re.sub(r"[\s_.-]*\d+$", "", " ".join(number.split()))
     return label if re.search(r"[A-Za-z]", label) else ""

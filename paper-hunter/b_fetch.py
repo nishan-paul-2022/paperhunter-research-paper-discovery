@@ -21,8 +21,8 @@ ENV_PATH = REPO_ROOT / ".env"
 AGENT = "paperhunter-paper-hunter/1.0"
 
 OPENALEX = "https://api.openalex.org"
-OPENALEX_BATCH = 50  # DOIs per filter request (plan.md C.2)
-OPENALEX_RPS = 10  # documented limit with a key is 30/s; stay well below it
+OPENALEX_BATCH = 50
+OPENALEX_RPS = 10
 OPENALEX_SELECT = "id,doi,display_name,publication_year,type,keywords,primary_topic,abstract_inverted_index"
 
 MAX_ATTEMPTS = 6
@@ -52,8 +52,6 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
-
-# ── request hygiene ─────────────────────────────────────────────────────────
 
 def redact(url: str, secrets: list[str]) -> str:
     parts = urllib.parse.urlsplit(url)
@@ -87,8 +85,6 @@ class RateLimiter:
 
 
 class Http:
-    """GET/POST with rate limiting and retries. Returns a response that is a proper answer
-    (2xx or a non-transient 4xx); raises TransientError when retries run out."""
 
     def __init__(self, limiter: RateLimiter, session: requests.Session | None = None):
         self.limiter = limiter
@@ -111,7 +107,7 @@ class Http:
                 if r.status_code not in TRANSIENT_STATUS:
                     return r
                 if r.status_code == 429 and on_429 is not None and on_429(r):
-                    continue  # switched to a fresh key: retry at once (raises QuotaExhausted when none is left)
+                    continue
                 reason = f"HTTP {r.status_code}"
                 after = r.headers.get("Retry-After", "")
                 if after.isdigit():
@@ -124,8 +120,6 @@ class Http:
         raise TransientError(f"no answer after {MAX_ATTEMPTS} attempts")
 
 
-# ── abstract cleanup and validation ─────────────────────────────────────────
-
 def rebuild_inverted_index(inverted: dict | None) -> str:
     if not inverted:
         return ""
@@ -136,7 +130,7 @@ def rebuild_inverted_index(inverted: dict | None) -> str:
 def clean_text(text: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text or "")
     text = html.unescape(text)
-    text = re.sub(r"<[^>]+>", " ", text)  # tags that were entity-escaped
+    text = re.sub(r"<[^>]+>", " ", text)
     text = " ".join(text.split())
     return re.sub(r"^(abstract|summary)\s*[:.\-–—]?\s+", "", text, flags=re.I)
 
@@ -153,8 +147,6 @@ def valid_abstract(text: str, title: str | None) -> bool:
     return len(text.split()) >= MIN_ABSTRACT_WORDS
 
 
-# ── outcomes and database writes ────────────────────────────────────────────
-
 @dataclass
 class Outcome:
     paper_id: int
@@ -162,8 +154,8 @@ class Outcome:
     lookup_by: str
     request: str
     response: str
-    abstract: str | None  # set only for a hit
-    found: bool  # the source found the work (used by the title-fallback rule)
+    abstract: str | None
+    found: bool
 
 
 def pending_papers(conn: sqlite3.Connection, source: str, lookup_by: str, column: str, limit: int | None):
@@ -183,7 +175,6 @@ def pending_papers(conn: sqlite3.Connection, source: str, lookup_by: str, column
 
 
 def record(conn: sqlite3.Connection, outcomes: list[Outcome]) -> None:
-    """Log rows, abstracts and status counts for one batch in a single transaction."""
     with conn:
         for o in outcomes:
             table = "paper_abstract_hit" if o.abstract else "paper_abstract_miss"
@@ -206,8 +197,6 @@ def record(conn: sqlite3.Connection, outcomes: list[Outcome]) -> None:
                              (o.paper_id,))
 
 
-# ── OpenAlex ────────────────────────────────────────────────────────────────
-
 class OpenAlex:
     name = "openalex"
 
@@ -226,7 +215,7 @@ class OpenAlex:
 
     def _on_429(self, r: requests.Response) -> bool:
         if r.headers.get("X-RateLimit-Remaining", "").strip() not in ("0", "-1"):
-            return False  # per-second limit: back off and retry with the same key
+            return False
         self.key_no += 1
         if self.key_no >= len(self.keys):
             raise QuotaExhausted("every OpenAlex key has used up its daily budget")
@@ -240,7 +229,6 @@ class OpenAlex:
             auth=_Bearer(lambda: self.keys[self.key_no]),
         )
         if r.status_code in (401, 403):
-            # Not an answer about the paper: a bad or unactivated key would otherwise log false misses.
             sys.exit(f"OpenAlex rejected key {self.key_no + 1} (HTTP {r.status_code}): {r.text[:200]}")
         self.remaining = r.headers.get("X-RateLimit-Remaining", self.remaining)
         return r, redact(url, self.secrets())
@@ -256,7 +244,6 @@ class OpenAlex:
                                          "page": page, "select": OPENALEX_SELECT})
             request_url = request_url or url
             if r.status_code != 200:
-                # A malformed batch is answered with 4xx; fall back to one lookup per DOI.
                 return [o for doi, group in by_doi.items()
                         for o in self.lookup_doi_single(doi, group)]
             data = r.json()
@@ -300,8 +287,6 @@ class _Bearer(requests.auth.AuthBase):
         r.headers["Authorization"] = f"Bearer {self.key()}"
         return r
 
-
-# ── driver ──────────────────────────────────────────────────────────────────
 
 def run_openalex(conn: sqlite3.Connection, limit: int | None, session: requests.Session | None = None) -> Counter:
     oa = OpenAlex(session)
