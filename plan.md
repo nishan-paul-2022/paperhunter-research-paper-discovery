@@ -9,6 +9,8 @@ The `paper-hunter/` folder needs a major overhaul. **Nothing that exists today c
 | 1 | `a_extract.py` | Python | Extract papers from DBLP and initialize their status |
 | 2 | `b_abstract.py` | Python | Fetch abstracts via the OpenAlex and Semantic Scholar APIs |
 | 3 | `c_abstract.md` | AI prompt | Find abstracts that the APIs missed by searching online |
+| 4 | `d_vector.py` | Python | Build a vector database of papers that have abstracts |
+| 5 | `e_match.py` | Python | Semantically filter papers against the research topic |
 
 ---
 
@@ -37,7 +39,7 @@ Tracks the abstract-retrieval status of each paper.
 | `status` | `0` | `0` = no abstract found yet; `1` = abstract found |
 
 - `a_extract.py` inserts **only `paper_id`**. All other fields take their default value of `0`.
-- `failure_count` and `success_count` are derived from the `paper_failure` and `paper_success` tables (see 2.3).
+- `failure_count` and `success_count` are derived from the `paper_failure` and `paper_success` tables (see 2.4).
 
 **Definitions**
 - **Success:** an API call whose response contains the paper's abstract.
@@ -117,7 +119,7 @@ For each paper, in the order listed in `paper_review` (highest priority first):
 2. **Check past failures.** Read `paper_failure` for this `paper_id`. Skip every API or website already logged there, because searching them again wastes tokens.
 3. **Search online.** Use every available detail to search for the abstract: DOI, venue, title, authors, year, and every other field in `paper_dblp`.
 4. **Log each source.** Record every API or website the AI tries:
-   - **Abstract found:** log it in `paper_success`.
+   - **Abstract found:** log it in `paper_success`, with whatever information the source returned in the `response` field.
    - **Abstract not found:** log it in `paper_failure`, with whatever information the source returned in the `response` field.
 5. **Update the results.**
    - **If a genuine abstract is found:** update `paper_abstract`, `paper_success`, and `paper_status`.
@@ -126,3 +128,54 @@ For each paper, in the order listed in `paper_review` (highest priority first):
 ### 3.3 Rules
 - **Accuracy:** record an abstract only if the AI has truly found it. Never guess or generate one.
 - **No repeats:** never query a source already logged in `paper_failure` for the same paper.
+
+---
+
+## 4. `d_vector.py`: Build the vector database
+
+### 4.1 Embedding model
+- Use an **open-source embedding model hosted locally**.
+
+### 4.2 Input
+- Process every paper in the `paper_abstract` table.
+- For each paper, combine its details from:
+  - `paper_dblp`: bibliographic metadata
+  - `paper_abstract`: the abstract
+  - `paper_success`: the raw responses from successful sources
+
+### 4.3 Output
+- Embed each paper and store it in the **vector database**.
+
+### 4.4 Table: `paper_rule`
+Tracks each paper's screening result against the research topic.
+
+| Field | Default | Description |
+|---|---|---|
+| `paper_id` | — | References `paper_dblp.paper_id` |
+| `rule_review` | `0` | `0` = not yet reviewed; `1` = reviewed by `e_match.py` |
+| `rule_candidate` | `NULL` | `NULL` = undecided; `1` = accepted as a candidate |
+
+- `d_vector.py` inserts **only `paper_id`**. The other fields take their default values.
+
+---
+
+## 5. `e_match.py`: Filter papers by research topic
+
+### 5.1 Research topic
+> **LLM-based agentic framework for autonomous black-box penetration testing over long-horizon attack chains**
+
+### 5.2 Method
+- Run a **semantic search** in the vector database using the same embedding model as `d_vector.py`.
+- Screen every paper in the `paper_abstract` table.
+
+### 5.3 Filtering requirement
+- **No false negatives:** a relevant paper must never be excluded.
+- **False positives are acceptable:** an irrelevant paper may be included.
+- Apply the filter with the highest level of rigor that satisfies both rules above.
+
+### 5.4 Updates to `paper_rule`
+
+| Event | Update |
+|---|---|
+| Paper reviewed | Set `rule_review = 1` |
+| Paper accepted | Set `rule_candidate = 1` |
