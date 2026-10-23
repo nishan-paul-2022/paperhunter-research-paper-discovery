@@ -398,6 +398,17 @@ CREATE TABLE IF NOT EXISTS paper_verdict_without_abstract (
 );
 CREATE INDEX IF NOT EXISTS paper_verdict_without_abstract_reviewed ON paper_verdict_without_abstract (reviewed);
 
+CREATE TABLE IF NOT EXISTS paper_embedding_model (
+    id    INTEGER PRIMARY KEY CHECK (id = 1),
+    model TEXT NOT NULL CHECK (length(trim(model)) > 0),
+    dim   INTEGER NOT NULL CHECK (dim > 0)
+);
+
+CREATE TABLE IF NOT EXISTS paper_embedding (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    vector   BLOB NOT NULL CHECK (length(vector) > 0 AND length(vector) % 4 = 0)
+);
+
 DROP VIEW IF EXISTS paper_lookup_queue;
 CREATE VIEW paper_lookup_queue AS
 SELECT s.paper_id, sc.similarity, s.miss_count
