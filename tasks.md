@@ -16,7 +16,7 @@ This is the work plan for building the pipeline specified in `plan.md`. Do **one
 
 ## Status
 
-- [ ] Task 0: Prepare the workspace
+- [x] Task 0: Prepare the workspace
 - [ ] Task 1: Schema (`a_extract.py`, part 1)
 - [ ] Task 2: DBLP extraction (`a_extract.py`, part 2)
 - [ ] Task 3: OpenAlex fetching (`b_fetch.py`, part 1)
