@@ -303,173 +303,131 @@ JOIN journal_scopus s ON s.id = d.scopus_id
 JOIN journal_dblp_venue k ON k.dblp_key = d.dblp_key
 WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM journal_review)
 ORDER BY s.quartile, lower(s.scopus_title), d.dblp_key;
+"""
 
+PAPER_SCHEMA = """
 CREATE TABLE IF NOT EXISTS paper_dblp (
-    id        INTEGER PRIMARY KEY,
-    dblp_key  TEXT NOT NULL UNIQUE,
-    venue_key TEXT NOT NULL,
-    year      INTEGER NOT NULL,
-    title     TEXT NOT NULL,
-    authors   TEXT NOT NULL,
-    venue     TEXT NOT NULL,
-    doi       TEXT
+    paper_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    dblp_key    TEXT NOT NULL UNIQUE,
+    venue_key   TEXT NOT NULL,
+    record_type TEXT NOT NULL CHECK (record_type IN ('article', 'inproceedings')),
+    title       TEXT,
+    authors     TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(authors) AND json_type(authors) = 'array'),
+    year        INTEGER NOT NULL,
+    venue       TEXT,
+    volume      TEXT,
+    number      TEXT,
+    pages       TEXT,
+    doi         TEXT,
+    arxiv_id    TEXT,
+    ee          TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(ee) AND json_type(ee) = 'array'),
+    url         TEXT,
+    crossref    TEXT,
+    mdate       TEXT
 );
-CREATE INDEX IF NOT EXISTS paper_dblp_venue ON paper_dblp (venue_key);
+CREATE INDEX IF NOT EXISTS paper_dblp_venue_key ON paper_dblp (venue_key);
+CREATE INDEX IF NOT EXISTS paper_dblp_year ON paper_dblp (year);
+CREATE INDEX IF NOT EXISTS paper_dblp_doi ON paper_dblp (doi);
+CREATE INDEX IF NOT EXISTS paper_dblp_arxiv_id ON paper_dblp (arxiv_id);
 
-CREATE TABLE IF NOT EXISTS paper_openalex (
-    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
-    via          TEXT NOT NULL CHECK (via IN ('doi', 'title')),
-    found        INTEGER NOT NULL CHECK (found IN (0, 1)),
-    openalex_id  TEXT,
-    doi          TEXT,
-    title        TEXT,
-    year         INTEGER,
-    abstract     TEXT,
-    keywords     TEXT,
-    topics       TEXT,
-    work_type    TEXT,
-    is_paratext  INTEGER CHECK (is_paratext IN (0, 1)),
-    is_retracted INTEGER CHECK (is_retracted IN (0, 1)),
-    language     TEXT,
-    arxiv_id     TEXT,
-    fetched_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((found = 1) = (openalex_id IS NOT NULL))
+CREATE TABLE IF NOT EXISTS paper_abstract_status (
+    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    has_abstract INTEGER NOT NULL DEFAULT 0 CHECK (has_abstract IN (0, 1)),
+    hit_count    INTEGER NOT NULL DEFAULT 0 CHECK (hit_count >= 0),
+    miss_count   INTEGER NOT NULL DEFAULT 0 CHECK (miss_count >= 0)
 );
+CREATE INDEX IF NOT EXISTS paper_abstract_status_has_abstract ON paper_abstract_status (has_abstract);
 
-CREATE TABLE IF NOT EXISTS paper_s2 (
-    paper_id   INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
-    via        TEXT NOT NULL CHECK (via IN ('doi', 'title')),
-    found      INTEGER NOT NULL CHECK (found IN (0, 1)),
-    s2_id      TEXT,
-    doi        TEXT,
-    title      TEXT,
-    year       INTEGER,
-    abstract   TEXT,
-    tldr       TEXT,
-    fields     TEXT,
-    arxiv_id   TEXT,
-    fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((found = 1) = (s2_id IS NOT NULL))
+CREATE TABLE IF NOT EXISTS paper_abstract (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    abstract TEXT NOT NULL CHECK (length(trim(abstract)) > 0),
+    source   TEXT NOT NULL CHECK (length(trim(source)) > 0)
 );
 
-DROP VIEW IF EXISTS paper_summary;
-CREATE VIEW paper_summary AS
-SELECT p.id AS paper_id, p.title,
-       CASE WHEN length(s.abstract) >= 120 THEN s.abstract END AS abstract_s2,
-       CASE WHEN length(o.abstract) >= 120 THEN o.abstract END AS abstract_openalex,
-       s.tldr, o.keywords, o.topics, s.fields, o.work_type, o.is_paratext
-FROM paper_dblp p
-LEFT JOIN paper_openalex o ON o.paper_id = p.id
-LEFT JOIN paper_s2 s ON s.paper_id = p.id;
+CREATE TABLE IF NOT EXISTS paper_abstract_hit (
+    paper_id  INTEGER NOT NULL REFERENCES paper_dblp (paper_id),
+    source    TEXT NOT NULL CHECK (length(trim(source)) > 0),
+    lookup_by TEXT NOT NULL CHECK (lookup_by IN ('doi', 'arxiv', 'title', 'web')),
+    request   TEXT NOT NULL,
+    response  TEXT NOT NULL DEFAULT '',
+    called_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS paper_abstract_hit_lookup ON paper_abstract_hit (paper_id, source, lookup_by);
 
-CREATE TABLE IF NOT EXISTS paper_candidate_ai (
-    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp ON DELETE CASCADE,
-    verdict      TEXT NOT NULL CHECK (verdict IN ('accept', 'reject')),
-    role         TEXT CHECK (role IN ('baseline', 'benchmark', 'evaluation', 'survey')),
-    p            REAL NOT NULL CHECK (p >= 0 AND p <= 1),
-    agent        TEXT CHECK (agent IN ('y', 'p', 'n', 'u')),
-    offense      TEXT CHECK (offense IN ('y', 'p', 'n', 'u')),
-    black_box    TEXT CHECK (black_box IN ('y', 'p', 'n', 'u')),
-    long_horizon TEXT CHECK (long_horizon IN ('y', 'p', 'n', 'u')),
-    quote        TEXT,
-    quote_src    TEXT CHECK (quote_src IN ('title', 'abstract', 'tldr')),
-    reject_class TEXT CHECK (reject_class IN ('off_domain', 'security_other', 'defensive_only',
-                                              'vuln_detection_or_code_scan', 'generic_llm_security',
-                                              'static_qa_benchmark', 'llm_no_offense', 'frontmatter')),
-    reason       TEXT NOT NULL CHECK (length(trim(reason)) >= 10
-                                      AND length(trim(reason)) - length(replace(trim(reason), ' ', '')) < 60),
-    reviewer     TEXT NOT NULL CHECK (length(trim(reviewer)) > 0),
-    decided_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK (verdict <> 'accept' OR (role IS NOT NULL AND p >= 0.5 AND agent = 'y' AND offense = 'y'
-                                   AND black_box IS NOT NULL AND long_horizon IS NOT NULL
-                                   AND quote_src IS NOT NULL AND reject_class IS NULL
-                                   AND length(trim(quote)) - length(replace(trim(quote), ' ', '')) BETWEEN 3 AND 44)),
-    CHECK (verdict <> 'reject' OR (reject_class IS NOT NULL AND p < 0.5
-                                   AND role IS NULL AND quote IS NULL AND quote_src IS NULL)),
-    CHECK (role IS NOT 'baseline' OR (black_box <> 'n' AND long_horizon <> 'n'))
+CREATE TABLE IF NOT EXISTS paper_abstract_miss (
+    paper_id  INTEGER NOT NULL REFERENCES paper_dblp (paper_id),
+    source    TEXT NOT NULL CHECK (length(trim(source)) > 0),
+    lookup_by TEXT NOT NULL CHECK (lookup_by IN ('doi', 'arxiv', 'title', 'web')),
+    request   TEXT NOT NULL,
+    response  TEXT NOT NULL DEFAULT '',
+    called_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS paper_abstract_miss_lookup ON paper_abstract_miss (paper_id, source, lookup_by);
+
+CREATE TABLE IF NOT EXISTS paper_seed (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    category TEXT NOT NULL CHECK (category IN ('baseline', 'benchmark', 'survey', 'evaluation')),
+    evidence TEXT NOT NULL CHECK (length(trim(evidence)) > 0)
 );
 
-DROP VIEW IF EXISTS paper_review;
-CREATE VIEW paper_review AS
-SELECT 'UNFETCHED' AS issue, p.id AS paper_id, p.dblp_key,
-       'run paper-hunter/b_details.py' AS detail
-FROM paper_dblp p
-WHERE NOT EXISTS (SELECT 1 FROM paper_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
-   OR (NOT EXISTS (SELECT 1 FROM paper_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
-       AND NOT EXISTS (SELECT 1 FROM paper_summary d WHERE d.paper_id = p.id
-                         AND (d.abstract_s2 IS NOT NULL OR d.abstract_openalex IS NOT NULL)))
-UNION ALL
-SELECT 'UNDECIDED', p.id, p.dblp_key, NULL
-FROM paper_dblp p
-WHERE NOT EXISTS (SELECT 1 FROM paper_candidate_ai d WHERE d.paper_id = p.id)
-  AND EXISTS (SELECT 1 FROM paper_s2 s WHERE s.paper_id = p.id AND (s.found = 1 OR s.via = 'title'))
-  AND (EXISTS (SELECT 1 FROM paper_openalex o WHERE o.paper_id = p.id AND (o.found = 1 OR o.via = 'title'))
-       OR EXISTS (SELECT 1 FROM paper_summary d WHERE d.paper_id = p.id
-                    AND (d.abstract_s2 IS NOT NULL OR d.abstract_openalex IS NOT NULL)))
-UNION ALL
-SELECT 'INVALID', d.paper_id, p.dblp_key,
-       'quote no longer in the stored ' || d.quote_src || ': delete the decision and review the paper again'
-FROM paper_candidate_ai d
-JOIN paper_dblp p ON p.id = d.paper_id
-JOIN paper_summary x ON x.paper_id = d.paper_id
-WHERE d.verdict = 'accept'
-  AND coalesce(CASE d.quote_src
-                 WHEN 'title' THEN instr(lower(x.title), lower(trim(d.quote))) > 0
-                 WHEN 'abstract' THEN instr(lower(x.abstract_s2), lower(trim(d.quote))) > 0
-                                   OR instr(lower(x.abstract_openalex), lower(trim(d.quote))) > 0
-                 ELSE instr(lower(x.tldr), lower(trim(d.quote))) > 0 END, 0) = 0;
+CREATE TABLE IF NOT EXISTS paper_screen (
+    paper_id    INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    embed_basis TEXT NOT NULL CHECK (embed_basis IN ('abstract', 'title')),
+    embed_hash  TEXT NOT NULL,
+    similarity  REAL,
+    passed_by   TEXT CHECK (passed_by IN ('semantic', 'keyword', 'both')),
+    screened    INTEGER NOT NULL DEFAULT 0 CHECK (screened IN (0, 1)),
+    passed      INTEGER CHECK (passed IN (0, 1))
+);
+CREATE INDEX IF NOT EXISTS paper_screen_screened ON paper_screen (screened);
+CREATE INDEX IF NOT EXISTS paper_screen_passed ON paper_screen (passed);
 
-DROP TRIGGER IF EXISTS paper_candidate_ai_fetched;
-CREATE TRIGGER paper_candidate_ai_fetched BEFORE INSERT ON paper_candidate_ai
-WHEN NOT EXISTS (SELECT 1 FROM paper_review r WHERE r.paper_id = NEW.paper_id AND r.issue = 'UNDECIDED')
-BEGIN SELECT RAISE(ABORT, 'paper is not UNDECIDED in paper_review (unknown, not fetched yet, or already decided)'); END;
+CREATE TABLE IF NOT EXISTS paper_verdict_with_abstract (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    reviewed INTEGER NOT NULL DEFAULT 0 CHECK (reviewed IN (0, 1)),
+    verdict  TEXT CHECK (verdict IN ('baseline', 'benchmark', 'survey', 'evaluation', 'reject')),
+    reason   TEXT
+);
+CREATE INDEX IF NOT EXISTS paper_verdict_with_abstract_reviewed ON paper_verdict_with_abstract (reviewed);
 
-DROP TRIGGER IF EXISTS paper_candidate_ai_quote_ins;
-CREATE TRIGGER paper_candidate_ai_quote_ins BEFORE INSERT ON paper_candidate_ai
-WHEN NEW.verdict = 'accept' AND NOT EXISTS (
-    SELECT 1 FROM paper_summary d
-    WHERE d.paper_id = NEW.paper_id
-      AND CASE NEW.quote_src
-            WHEN 'title' THEN instr(lower(d.title), lower(trim(NEW.quote))) > 0
-            WHEN 'abstract' THEN instr(lower(d.abstract_s2), lower(trim(NEW.quote))) > 0
-                              OR instr(lower(d.abstract_openalex), lower(trim(NEW.quote))) > 0
-            ELSE instr(lower(d.tldr), lower(trim(NEW.quote))) > 0 END
-)
-BEGIN SELECT RAISE(ABORT, 'quote not found verbatim in the stored quote_src text'); END;
+CREATE TABLE IF NOT EXISTS paper_verdict_without_abstract (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    reviewed INTEGER NOT NULL DEFAULT 0 CHECK (reviewed IN (0, 1)),
+    verdict  TEXT CHECK (verdict IN ('baseline', 'benchmark', 'survey', 'evaluation', 'reject')),
+    reason   TEXT
+);
+CREATE INDEX IF NOT EXISTS paper_verdict_without_abstract_reviewed ON paper_verdict_without_abstract (reviewed);
 
-DROP TRIGGER IF EXISTS paper_candidate_ai_quote_upd;
-CREATE TRIGGER paper_candidate_ai_quote_upd BEFORE UPDATE ON paper_candidate_ai
-WHEN NEW.verdict = 'accept' AND NOT EXISTS (
-    SELECT 1 FROM paper_summary d
-    WHERE d.paper_id = NEW.paper_id
-      AND CASE NEW.quote_src
-            WHEN 'title' THEN instr(lower(d.title), lower(trim(NEW.quote))) > 0
-            WHEN 'abstract' THEN instr(lower(d.abstract_s2), lower(trim(NEW.quote))) > 0
-                              OR instr(lower(d.abstract_openalex), lower(trim(NEW.quote))) > 0
-            ELSE instr(lower(d.tldr), lower(trim(NEW.quote))) > 0 END
-)
-BEGIN SELECT RAISE(ABORT, 'quote not found verbatim in the stored quote_src text'); END;
+DROP VIEW IF EXISTS paper_lookup_queue;
+CREATE VIEW paper_lookup_queue AS
+SELECT s.paper_id, sc.similarity, s.miss_count
+FROM paper_abstract_status s
+JOIN paper_screen sc ON sc.paper_id = s.paper_id
+WHERE s.has_abstract = 0 AND sc.passed = 1
+ORDER BY sc.similarity DESC, s.miss_count, s.paper_id;
 
 DROP VIEW IF EXISTS paper_list;
 CREATE VIEW paper_list AS
-SELECT p.dblp_key, d.role, d.p, p.year, p.title, p.authors, p.venue, p.venue_key,
-       coalesce((SELECT c.ranking FROM conf_list c WHERE c.dblp_key = p.venue_key),
-                (SELECT j.quartile FROM journal_list j WHERE j.dblp_key = p.venue_key)) AS rank,
-       p.doi, coalesce(s.arxiv_id, o.arxiv_id) AS arxiv_id, d.quote, d.reason
-FROM paper_candidate_ai d
-JOIN paper_dblp p ON p.id = d.paper_id
-LEFT JOIN paper_openalex o ON o.paper_id = d.paper_id
-LEFT JOIN paper_s2 s ON s.paper_id = d.paper_id
-WHERE d.verdict = 'accept' AND NOT EXISTS (SELECT 1 FROM paper_review WHERE issue <> 'UNFETCHED')
-ORDER BY CASE d.role WHEN 'baseline' THEN 0 WHEN 'benchmark' THEN 1 WHEN 'evaluation' THEN 2 ELSE 3 END,
-         d.p DESC, p.dblp_key;
+SELECT p.*,
+       v.verdict AS category,
+       v.reason,
+       v.decided_from,
+       CASE WHEN c.dblp_key IS NOT NULL THEN c.core_title ELSE j.scopus_title END AS venue_name,
+       CASE WHEN c.dblp_key IS NOT NULL THEN c.ranking ELSE j.quartile END AS venue_rank
+FROM (SELECT paper_id, reviewed, verdict, reason, 'abstract' AS decided_from FROM paper_verdict_with_abstract
+      UNION ALL
+      SELECT paper_id, reviewed, verdict, reason, 'metadata' AS decided_from FROM paper_verdict_without_abstract) v
+JOIN paper_dblp p ON p.paper_id = v.paper_id
+LEFT JOIN conf_list c ON c.dblp_key = p.venue_key
+LEFT JOIN journal_list j ON j.dblp_key = p.venue_key
+WHERE v.reviewed = 1 AND v.verdict IS NOT NULL AND v.verdict <> 'reject';
 """
 
 
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DB_PATH
     conn = sqlite3.connect(path)
-    conn.executescript(SCHEMA)
+    conn.executescript(SCHEMA + PAPER_SCHEMA)
     broken = conn.execute("PRAGMA foreign_key_check").fetchall()
     if broken:
         sys.exit(f"foreign key violations: {broken[:10]}")
