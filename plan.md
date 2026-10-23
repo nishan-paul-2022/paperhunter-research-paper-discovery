@@ -322,7 +322,7 @@ The text must be non-empty after cleanup and must not be a placeholder (e.g. "No
 ## C.4 `d_screen.py`: Screen papers against the research topic
 
 **Reads:** `paper_embedding`, `paper_dblp`, `paper_abstract`, `paper_screen`, `paper_seed`
-**Writes:** `paper_screen`, `paper_verdict_with_abstract`
+**Writes:** `paper_screen`, `paper_verdict_with_abstract`, `paper_screen_threshold`
 
 ### Method
 Screen every paper with `screened = 0`. A paper **passes** if **either** test passes:
@@ -334,6 +334,7 @@ Screen every paper with `screened = 0`. A paper **passes** if **either** test pa
 - Stop with an error if `paper_seed` is empty.
 - Set a separate threshold for each `embed_basis`. Each threshold is the **lowest** similarity any seed gets under that basis, minus a safety margin (default 0.05). Score every seed under the `title` basis too (title + venue + year), so the title threshold is calibrated on its own.
 - Stop with an error if any seed does not pass.
+- Store the thresholds used in `paper_screen_threshold` (`embed_basis`, `threshold`, `computed_at`). If they differ from the previous run (e.g. seeds were added), set `screened = 0` for every paper so all of them are screened again. Screening is only vector math, so a full rescreen is cheap.
 - Print the number of papers passed for each basis, so the margin can be tuned.
 
 ### Table updates
