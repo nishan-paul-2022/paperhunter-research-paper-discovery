@@ -13,7 +13,7 @@ HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 sys.path.insert(0, str(HUNTER_DIR))
-import c_embed
+import e_embed
 
 MARGIN = 0.05
 SAMPLE_REJECTED = 20
@@ -50,7 +50,7 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
 def model_name(conn: sqlite3.Connection) -> str:
     row = conn.execute("SELECT model FROM paper_embedding_model WHERE id = 1").fetchone()
     if row is None:
-        sys.exit("paper_embedding_model is empty; run paper-hunter/c_embed.py first")
+        sys.exit("paper_embedding_model is empty; run paper-hunter/e_embed.py first")
     return row[0]
 
 
@@ -60,7 +60,7 @@ def keyword_hit(*parts: str | None) -> bool:
 
 
 def encode(model, texts: list[str]) -> np.ndarray:
-    return model.encode(texts, batch_size=c_embed.BATCH_SIZE, normalize_embeddings=True,
+    return model.encode(texts, batch_size=e_embed.BATCH_SIZE, normalize_embeddings=True,
                         convert_to_numpy=True).astype(np.float32)
 
 
@@ -78,8 +78,8 @@ def calibrate(conn: sqlite3.Connection, model, queries: np.ndarray) -> dict[str,
 
     natural_texts, title_texts, meta = [], [], []
     for paper_id, category, title, abstract, venue, year in seeds:
-        basis, natural = c_embed.build_text(title, abstract, venue, year)
-        _, title_only = c_embed.build_text(title, None, venue, year)
+        basis, natural = e_embed.build_text(title, abstract, venue, year)
+        _, title_only = e_embed.build_text(title, None, venue, year)
         natural_texts.append(natural)
         title_texts.append(title_only)
         meta.append((paper_id, category, basis, title, abstract))
@@ -90,7 +90,7 @@ def calibrate(conn: sqlite3.Connection, model, queries: np.ndarray) -> dict[str,
     abstract_scores = [natural_sim[i] for i, m in enumerate(meta) if m[2] == "abstract"]
     if not abstract_scores:
         sys.exit("no seed has an abstract, so the abstract-basis threshold cannot be calibrated.\n"
-                 "Run b_fetch.py and c_embed.py so seed abstracts are fetched and embedded.")
+                 "Run c_fetch.py and e_embed.py so seed abstracts are fetched and embedded.")
     thresholds = {
         "abstract": float(min(abstract_scores)) - MARGIN,
         "title": float(min(title_sim)) - MARGIN,
@@ -190,10 +190,10 @@ def main() -> None:
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {DB_PATH}\n")
     conn = connect()
-    conn.executescript(c_embed.paper_schema())
+    conn.executescript(e_embed.paper_schema())
     name = model_name(conn)
     print(f"  model {name}")
-    model = c_embed.load_model(name)
+    model = e_embed.load_model(name)
     queries = encode(model, QUERIES)
     print(f"  {len(QUERIES)} topic queries embedded ({model.get_sentence_embedding_dimension()} dims, device {model.device})\n")
 

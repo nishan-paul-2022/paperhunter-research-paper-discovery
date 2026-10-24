@@ -55,10 +55,18 @@ Give `journal-hunter/c_search.md` to the AI.
 ### 7. Papers
 
 ```bash
-python3 paper-hunter/a_extract.py
-python3 paper-hunter/b_details.py
+python3 paper-hunter/a_extract.py --from-year 2023 --to-year 2026
+python3 paper-hunter/b_arxiv.py
+python3 paper-hunter/c_fetch.py
 ```
 
-Give `paper-hunter/c_search.md` to the AI; it reviews every paper fetched so far. When an API's daily budget stops `b_details.py`, run it again the next day, then give the prompt to the AI again: only the newly fetched papers are reviewed.
+Give `paper-hunter/d_arxiv.md` to the AI, then run `c_fetch.py` again.
+
+```bash
+python3 paper-hunter/e_embed.py
+python3 paper-hunter/f_screen.py
+```
+
+Give `paper-hunter/g_lookup.md` to the AI, then run `e_embed.py` and `f_screen.py` again. Then give `paper-hunter/h_classify.md`, then `paper-hunter/i_infer.md`, then `h_classify.md` once more for the papers `i_infer.md` moved.
 
 **Output:** view `paper_list`

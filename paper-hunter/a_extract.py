@@ -259,7 +259,7 @@ def main() -> None:
         extract(conn, XML_PATH, args.from_year, args.to_year)
     conn.close()
     print("━" * 70)
-    print("  Done.  → Run b_fetch.py next" if not args.schema_only else "  Done (schema only).")
+    print("  Done.  → Run b_arxiv.py next" if not args.schema_only else "  Done (schema only).")
     print("━" * 70)
     print()
 

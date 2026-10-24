@@ -2,7 +2,7 @@
 
 You are an autonomous reviewer with web search and shell access. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Some screened-in papers still have no abstract after the APIs and the web-lookup pass. They are listed in `paper_lookup_queue`. For each, either find and store a genuine abstract online, or, failing that, decide from every other piece of evidence whether the paper is relevant and classify it. Run this only after the web-lookup prompt (`e_lookup.md`) has worked through the queue.
+**Goal.** Some screened-in papers still have no abstract after the APIs and the web-lookup pass. They are listed in `paper_lookup_queue`. For each, either find and store a genuine abstract online, or, failing that, decide from every other piece of evidence whether the paper is relevant and classify it. Run this only after the web-lookup prompt (`g_lookup.md`) has worked through the queue.
 
 ## Ground rules
 
@@ -63,7 +63,7 @@ Use the full-text PDF, the publisher page, citing papers, the project repository
 
 ### 3. If a genuine abstract is found
 
-Handle it exactly as `e_lookup.md` does, then stop working on the paper (its final decision is left to `f_classify.md`):
+Handle it exactly as `g_lookup.md` does, then stop working on the paper (its final decision is left to `h_classify.md`):
 
 - Verify the page is this exact paper and the text is its own abstract, copied verbatim.
 - In **one transaction**: insert the hit into `paper_abstract_hit` (`lookup_by = 'web'`, `source` = domain), insert the abstract into `paper_abstract` (`source` = page URL), update `paper_abstract_status` (`hit_count = hit_count + 1`, `has_abstract = 1`, plus `miss_count` for any sources that missed), and insert the paper into `paper_verdict_with_abstract` with its default values (no verdict).
@@ -125,4 +125,4 @@ Use the paper's chosen value in place of `'baseline'`. Add one `paper_abstract_m
 
 Re-read the queue and continue until no unreviewed papers remain. Accepted papers (verdict not `reject`) appear in the `paper_list` view.
 
-**Afterwards:** run `f_classify.md` again for any papers this prompt moved into `paper_verdict_with_abstract`.
+**Afterwards:** run `h_classify.md` again for any papers this prompt moved into `paper_verdict_with_abstract`.

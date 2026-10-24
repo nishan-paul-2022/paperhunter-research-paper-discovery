@@ -106,4 +106,4 @@ Adjust each run to the sources you actually tried:
 
 When the batch is done, re-read the queue and continue until it is empty or only papers remain whose every reachable source has been tried and missed.
 
-**Afterwards:** rerun `paper-hunter/c_embed.py` and `paper-hunter/d_screen.py` so the newly found abstracts are re-embedded (switching those papers from the title basis to the abstract basis) and re-screened.
+**Afterwards:** rerun `paper-hunter/e_embed.py` and `paper-hunter/f_screen.py` so the newly found abstracts are re-embedded (switching those papers from the title basis to the abstract basis) and re-screened.
