@@ -25,7 +25,7 @@ This is the work plan for building the pipeline specified in `plan.md`. Do **one
 - [x] Task 6: Seed set (**done by the user, not the AI**)
 - [x] Task 7: Screening (`d_screen.py`)
 - [x] Task 8: Web abstract lookup prompt (`e_lookup.md`)
-- [ ] Task 9: Classification prompt (`f_classify.md`)
+- [x] Task 9: Classification prompt (`f_classify.md`)
 - [ ] Task 10: No-abstract inference prompt (`g_infer.md`)
 - [ ] Task 11: End-to-end check
 
