@@ -2,7 +2,7 @@
 
 ## Tables
 
-### paper_list_dblp
+### paper_dblp [archive/dblp.xml, conf_list, journal_list]
 
 | Column | Type |
 |---|---|
@@ -53,14 +53,7 @@
 | request | TEXT |
 | response | TEXT |
 
-### paper_screen_vector
-
-| Column | Type |
-|---|---|
-| paper_id | INTEGER |
-| vector | BLOB |
-
-### paper_screen_model
+### paper_semantic_model
 
 | Column | Type |
 |---|---|
@@ -68,20 +61,13 @@
 | model | TEXT |
 | dim | INTEGER |
 
-### paper_screen_shortlist
+### paper_semantic_keyword
 
 | Column | Type |
 |---|---|
-| paper_id | INTEGER |
+| keyword | TEXT |
 
-### paper_screen_threshold
-
-| Column | Type |
-|---|---|
-| embed_basis | TEXT |
-| threshold | REAL |
-
-### paper_screen_seed
+### paper_semantic_query
 
 | Column | Type |
 |---|---|
@@ -89,15 +75,50 @@
 | category | TEXT |
 | evidence | TEXT |
 
-## Views
+### paper_semantic_seed
 
-### paper_absent_abstract
+| Column | Type |
+|---|---|
+| paper_id | INTEGER |
+| category | TEXT |
+| evidence | TEXT |
+
+### paper_semantic_vector
+
+| Column | Type |
+|---|---|
+| paper_id | INTEGER |
+| vector | BLOB |
+
+### paper_semantic_shortlist
 
 | Column | Type |
 |---|---|
 | paper_id | INTEGER |
 
-### paper_list
+### paper_semantic_threshold
+
+| Column | Type |
+|---|---|
+| embed_basis | TEXT |
+| threshold | REAL |
+
+### paper_ai_shortlist
+
+| Column | Type |
+|---|---|
+| paper_id | INTEGER |
+| category | TEXT |
+
+## Views
+
+### paper_absent_abstract [paper_field_abstract]
+
+| Column | Type |
+|---|---|
+| paper_id | INTEGER |
+
+### paper_list [paper_dblp, paper_field_arxiv, paper_field_abstract, paper_ai_shortlist, conf_list, journal_list]
 
 | Column | Type |
 |---|---|
@@ -110,11 +131,12 @@
 | venue | TEXT |
 | doi | TEXT |
 | arxiv_id | TEXT |
+| abstract | TEXT |
 | category | TEXT |
 | venue_name | TEXT |
 | venue_rank | TEXT |
 
-### paper_summary
+### paper_summary [paper_dblp, paper_field_arxiv, paper_field_abstract, paper_details_arxiv, paper_details_openalex, paper_details_s2, conf_list, journal_list, paper_list]
 
 | Column | Type |
 |---|---|
@@ -137,3 +159,11 @@
 | venue_name | TEXT |
 | venue_rank | TEXT |
 | category | TEXT |
+
+a_extract.py => complete paper_dblp and populate paper_id in paper_field_arxiv, paper_field_abstract, paper_details_arxiv, paper_details_openalex, paper_details_s2
+b_arxiv.py => put all possible values in paper_field_arxiv
+c_fetch.py => put all possible values in paper_field_arxiv, paper_field_abstract, paper_details_arxiv, paper_details_openalex, paper_details_s2
+d_abstract.md => put all possible values in paper_field_abstract
+e_embedding.py => complete paper_semantic_vector
+f_semantic.py => complete paper_semantic_shortlist
+g_search.md => complete paper_ai_shortlist
