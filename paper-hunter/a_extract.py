@@ -26,11 +26,13 @@ ARXIV_RE = re.compile(
 ARXIV_DOI_RE = re.compile(r"^10\.48550/arxiv\.(.+?)(?:v\d+)?$", re.I)
 COLUMNS = ("dblp_key", "venue_key", "record_type", "title", "authors", "year", "venue", "volume", "number",
            "pages", "doi", "arxiv_id", "ee", "url", "crossref", "mdate")
+KEEP_IF_NULL = {"arxiv_id"}
+NEW_VALUE = {c: (f"coalesce(excluded.{c}, paper_dblp.{c})" if c in KEEP_IF_NULL else f"excluded.{c}") for c in COLUMNS}
 UPSERT = (
     f"INSERT INTO paper_dblp ({', '.join(COLUMNS)}) VALUES ({', '.join('?' * len(COLUMNS))}) "
-    f"ON CONFLICT (dblp_key) DO UPDATE SET {', '.join(f'{c} = excluded.{c}' for c in COLUMNS[1:])} "
+    f"ON CONFLICT (dblp_key) DO UPDATE SET {', '.join(f'{c} = {NEW_VALUE[c]}' for c in COLUMNS[1:])} "
     f"WHERE ({', '.join(f'paper_dblp.{c}' for c in COLUMNS[1:])}) "
-    f"IS NOT ({', '.join(f'excluded.{c}' for c in COLUMNS[1:])})"
+    f"IS NOT ({', '.join(NEW_VALUE[c] for c in COLUMNS[1:])})"
 )
 
 OLD_OBJECTS = (

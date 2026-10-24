@@ -415,6 +415,34 @@ CREATE TABLE IF NOT EXISTS paper_embedding (
     vector   BLOB NOT NULL CHECK (length(vector) > 0 AND length(vector) % 4 = 0)
 );
 
+CREATE TABLE IF NOT EXISTS paper_corr (
+    dblp_key TEXT PRIMARY KEY CHECK (dblp_key LIKE 'journals/corr/%'),
+    arxiv_id TEXT NOT NULL,
+    title    TEXT NOT NULL,
+    year     INTEGER NOT NULL,
+    authors  TEXT NOT NULL CHECK (json_valid(authors) AND json_type(authors) = 'array')
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS paper_corr_arxiv_id ON paper_corr (arxiv_id);
+
+CREATE TABLE IF NOT EXISTS paper_arxiv_candidate (
+    paper_id       INTEGER NOT NULL REFERENCES paper_dblp (paper_id),
+    dblp_key       TEXT NOT NULL REFERENCES paper_corr (dblp_key),
+    title_sim      REAL NOT NULL CHECK (title_sim BETWEEN 0 AND 1),
+    author_jaccard REAL NOT NULL CHECK (author_jaccard BETWEEN 0 AND 1),
+    PRIMARY KEY (paper_id, dblp_key)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS paper_arxiv_match (
+    paper_id   INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    arxiv_id   TEXT,
+    method     TEXT NOT NULL CHECK (method IN ('exact', 'close', 'ai', 'arxiv_api', 'web', 'none')),
+    source     TEXT,
+    reason     TEXT,
+    decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK ((method = 'none') = (arxiv_id IS NULL))
+);
+CREATE INDEX IF NOT EXISTS paper_arxiv_match_method ON paper_arxiv_match (method);
+
 DROP VIEW IF EXISTS paper_lookup_queue;
 CREATE VIEW paper_lookup_queue AS
 SELECT s.paper_id, sc.similarity, s.miss_count
