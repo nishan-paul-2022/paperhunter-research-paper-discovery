@@ -1,4 +1,4 @@
-# 🏹 PaperHunter
+# 🏹 PaperHunter: Evidence-Grounded Research Paper Discovery and Categorization at Scale
 
 All data lives in `archive/paperhunter.db`.
 
