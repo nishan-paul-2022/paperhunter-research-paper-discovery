@@ -404,6 +404,12 @@ CREATE TABLE IF NOT EXISTS paper_embedding_model (
     dim   INTEGER NOT NULL CHECK (dim > 0)
 );
 
+CREATE TABLE IF NOT EXISTS paper_screen_threshold (
+    embed_basis TEXT PRIMARY KEY CHECK (embed_basis IN ('abstract', 'title')),
+    threshold   REAL NOT NULL,
+    computed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS paper_embedding (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
     vector   BLOB NOT NULL CHECK (length(vector) > 0 AND length(vector) % 4 = 0)
