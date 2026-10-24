@@ -34,19 +34,19 @@ This is the work plan for building the pipeline specified in `plan.md`. Do **one
 ## Task 0: Prepare the workspace
 
 **Implements:** `plan.md` Scope
-**Files:** delete `paper-hunter/a_extract.py`, `paper-hunter/b_details.py`, `paper-hunter/c_search.md`; create `paper-hunter/requirements.txt`
+**Files:** delete `paper-hunter/a_extract.py`, `paper-hunter/b_details.py`, `paper-hunter/c_search.md`; create `requirements.txt` (repo root)
 
 **Steps**
 1. Delete the three old files in `paper-hunter/`. They are not reused (Scope). Do **not** drop any database tables yet; Task 1 does that.
 2. Check the inputs exist and print their sizes: `archive/dblp.xml`, `archive/dblp.dtd`, `archive/paperhunter.db`.
 3. Print the row counts of `conf_list` and `journal_list`. Both must be non-zero.
 4. Check that `.env` defines the variables the pipeline will use: `OPENALEX_API_KEY_1` … `OPENALEX_API_KEY_5`, `S2_API_KEY`, `CONTACT_MAILTO`. Print only each variable's name and whether it is set. **Never print values.**
-5. Create `paper-hunter/requirements.txt` with the third-party packages the pipeline will need: an HTTP client, `lxml` for streaming XML, the embedding stack (`sentence-transformers`, `numpy`), and a vector store if one is chosen in Task 5. Pin exact versions. Install them in the active environment.
+5. Create `requirements.txt` in the repo root with the third-party packages the pipeline will need: an HTTP client, `lxml` for streaming XML, the embedding stack (`sentence-transformers`, `numpy`), and a vector store if one is chosen in Task 5. Pin exact versions. Install them in the active environment.
 
 **Done when**
-- `paper-hunter/` contains only `requirements.txt`.
+- `paper-hunter/` is empty (the old files are deleted); `requirements.txt` is in the repo root.
 - The input checks, list counts, and `.env` check pass, and their output is shown.
-- `pip install -r paper-hunter/requirements.txt` succeeds.
+- `pip install -r requirements.txt` succeeds.
 
 ---
 
@@ -151,7 +151,7 @@ After this task, the user runs `b_fetch.py` without `--limit` on all papers. Thi
 ## Task 5: Embedding (`c_embed.py`)
 
 **Implements:** `plan.md` A.6, A.9, C.3
-**Files:** create `paper-hunter/c_embed.py`; update `paper-hunter/requirements.txt` if needed
+**Files:** create `paper-hunter/c_embed.py`; update `requirements.txt` if needed
 
 **Steps**
 1. Load the local embedding model (default `BAAI/bge-large-en-v1.5`). Use the GPU if one is available, otherwise the CPU.
