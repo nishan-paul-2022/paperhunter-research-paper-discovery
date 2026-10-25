@@ -8,13 +8,14 @@ Database schema and processing pipeline for collecting, enriching, embedding and
 
 1. [Tables](#1-tables)
    - [Core Paper Data](#11-core-paper-data)
-   - [External API Details](#12-external-api-details)
+   - [Progress](#12-progress)
    - [Semantic Search](#13-semantic-search)
    - [AI Shortlist](#14-ai-shortlist)
 2. [Views](#2-views)
 3. [Pipeline](#3-pipeline)
    - [Overview](#31-overview)
-   - [Step Details](#32-step-details)
+   - [Status Rules](#32-status-rules)
+   - [Step Details](#33-step-details)
 
 ---
 
@@ -53,26 +54,16 @@ Database schema and processing pipeline for collecting, enriching, embedding and
 | `paper_id` | INTEGER |
 | `abstract` | TEXT    |
 
-### 1.2 External API Details
+### 1.2 Progress
 
-The following three tables share the same structure and store the raw request and response for each external source.
+#### `paper_status`
 
-| Table                    | Source           |
-|--------------------------|------------------|
-| `paper_details_arxiv`    | arXiv            |
-| `paper_details_openalex` | OpenAlex         |
-| `paper_details_s2`       | Semantic Scholar |
+One row per paper. `status` is the last step that has finished with the paper: `A`, `B`, `C`, `D`, `E`, `F` or `G`.
 
 | Column     | Type    |
 |------------|---------|
 | `paper_id` | INTEGER |
-| `request`  | TEXT    |
-| `response` | TEXT    |
-
-- `request IS NULL` means the source has not been called for this paper yet.
-- `request` is the URL of the call that settled the paper (for a batch call, the batch URL). If a DOI lookup is followed by a title lookup, the title lookup is stored.
-- `response` is this paper's own record from the response, or empty when the source has no record for it.
-- Only definitive answers are stored (found / not found). Failed calls (timeouts, 429, 5xx) are not stored, so the next run retries them.
+| `status`   | TEXT    |
 
 ### 1.3 Semantic Search
 
@@ -132,7 +123,7 @@ The following three tables share the same structure and store the raw request an
 
 #### `paper_ai_shortlist`
 
-Every reviewed paper gets a row. `category` is the accepted category, or `reject`.
+Accepted papers only.
 
 | Column     | Type    |
 |------------|---------|
@@ -152,8 +143,6 @@ Every reviewed paper gets a row. `category` is the accepted category, or `reject
 | `paper_id` | INTEGER |
 
 ### `paper_list`
-
-Accepted papers only (`category` is not `reject`).
 
 **Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_ai_shortlist`, `conf_list`, `journal_list`
 
@@ -175,31 +164,26 @@ Accepted papers only (`category` is not `reject`).
 
 ### `paper_summary`
 
-**Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_details_arxiv`, `paper_details_openalex`, `paper_details_s2`, `conf_list`, `journal_list`, `paper_ai_shortlist`
+**Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_status`, `conf_list`, `journal_list`, `paper_ai_shortlist`
 
-| Column              | Type    |
-|---------------------|---------|
-| `paper_id`          | INTEGER |
-| `dblp_key`          | TEXT    |
-| `venue_key`         | TEXT    |
-| `record_type`       | TEXT    |
-| `title`             | TEXT    |
-| `authors`           | TEXT    |
-| `year`              | INTEGER |
-| `venue`             | TEXT    |
-| `doi`               | TEXT    |
-| `ee`                | TEXT    |
-| `arxiv_id`          | TEXT    |
-| `abstract`          | TEXT    |
-| `request_arxiv`     | TEXT    |
-| `response_arxiv`    | TEXT    |
-| `request_openalex`  | TEXT    |
-| `response_openalex` | TEXT    |
-| `request_s2`        | TEXT    |
-| `response_s2`       | TEXT    |
-| `venue_name`        | TEXT    |
-| `venue_rank`        | TEXT    |
-| `category`          | TEXT    |
+| Column        | Type    |
+|---------------|---------|
+| `paper_id`    | INTEGER |
+| `dblp_key`    | TEXT    |
+| `venue_key`   | TEXT    |
+| `record_type` | TEXT    |
+| `title`       | TEXT    |
+| `authors`     | TEXT    |
+| `year`        | INTEGER |
+| `venue`       | TEXT    |
+| `doi`         | TEXT    |
+| `ee`          | TEXT    |
+| `arxiv_id`    | TEXT    |
+| `abstract`    | TEXT    |
+| `status`      | TEXT    |
+| `venue_name`  | TEXT    |
+| `venue_rank`  | TEXT    |
+| `category`    | TEXT    |
 
 ---
 
@@ -207,55 +191,64 @@ Accepted papers only (`category` is not `reject`).
 
 ### 3.1 Overview
 
-The pipeline runs forward only: each step runs after the previous one has finished, and no step goes back to change an earlier step's output.
+| Step | File             | Goal                                  | Takes papers at status | Sets status | Inputs                                       | Writes To |
+|------|------------------|---------------------------------------|------------------------|-------------|----------------------------------------------|-----------|
+| A    | `a_extract.py`   | Build the base paper list             | new papers             | `A`         | `archive/dblp.xml`, `conf_list`, `journal_list` | `paper_dblp`, `paper_status`; `paper_id` in `paper_field_arxiv`, `paper_field_abstract` |
+| B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `archive/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
+| C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
+| D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_absent_abstract`, web search | `paper_field_abstract`, `paper_status` |
+| E    | `e_embedding.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_model`, `paper_semantic_vector`, `paper_status` |
+| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_model`, `paper_semantic_query`, `paper_semantic_seed`, `paper_semantic_keyword`, `paper_summary` | `paper_semantic_threshold`, `paper_semantic_shortlist`, `paper_status` |
+| G    | `g_search.md`    | Build the final AI-reviewed shortlist | `F`                    | `G`         | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist`, `paper_status` |
 
-| Step | File             | Goal                                                    | Inputs                                       | Writes To |
-|------|------------------|---------------------------------------------------------|----------------------------------------------|-----------|
-| A    | `a_extract.py`   | Build the base paper list                               | `archive/dblp.xml`, `conf_list`, `journal_list` | `paper_dblp`; `paper_id` in `paper_field_arxiv`, `paper_field_abstract`, `paper_details_arxiv`, `paper_details_openalex`, `paper_details_s2` |
-| B    | `b_arxiv.py`     | Fill in arXiv IDs                                       | `archive/dblp.xml`, `paper_summary`          | `paper_field_arxiv` |
-| C    | `c_fetch.py`     | Enrich papers from external APIs                        | `paper_summary`, `paper_absent_abstract`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_details_arxiv`, `paper_details_openalex`, `paper_details_s2` |
-| D    | `d_abstract.md`  | Find remaining missing abstracts                        | `paper_absent_abstract`, web search          | `paper_field_abstract` |
-| E    | `e_embedding.py` | Generate embeddings                                     | `paper_summary`                              | `paper_semantic_model`, `paper_semantic_vector` |
-| F    | `f_semantic.py`  | Build the semantic shortlist                            | `paper_semantic_vector`, `paper_semantic_model`, `paper_semantic_query`, `paper_semantic_seed`, `paper_semantic_keyword`, `paper_summary` | `paper_semantic_threshold`, `paper_semantic_shortlist` |
-| G    | `g_search.md`    | Build the final AI-reviewed shortlist                   | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist` |
+### 3.2 Status Rules
 
-### 3.2 Step Details
+Every paper moves through every status from `A` to `G`, whether or not a step changes its data. Because of this, any file can be run at any time and any number of times: it always starts from the latest state, and no work is repeated.
+
+1. **One status per paper.** `status` is the last step that has finished with the paper.
+2. **Each step takes only papers at the previous status** (B takes `A`, C takes `B`, …, G takes `F`) and moves each one forward when it is done. Papers at any other status are ignored.
+3. **Every paper moves forward**, including papers the step has nothing to do for. For example, B moves a paper that already has an arXiv ID from `A` to `B` without changing it, and G moves a paper that is not in `paper_semantic_shortlist` from `F` to `G` without an AI review.
+4. **Status moves only on a finished outcome.** "Not found anywhere" is a finished outcome. A failed attempt (timeout, 429, 5xx, crash) is not: the paper keeps its status and the next run retries it.
+5. **Data and status are written together** in one transaction per paper or batch, so a crash never leaves them out of step.
+6. **Rerunning step A** adds new papers with status `A` and updates the DBLP fields of existing papers. Existing papers keep their status.
+7. **The pipeline never moves a paper backward.** To redo a step for some papers (for example, after changing the seeds, queries or keywords), set their status back by hand.
+
+### 3.3 Step Details
 
 #### A. `a_extract.py` — Extract Papers
 
 - **Inputs:** `archive/dblp.xml`, `conf_list`, `journal_list`
 - **Output:**
   - Complete `paper_dblp`, including `record_type` and `ee`.
-  - Populate `paper_id` in `paper_field_arxiv`, `paper_field_abstract`, `paper_details_arxiv`, `paper_details_openalex` and `paper_details_s2`.
+  - Populate `paper_id` in `paper_field_arxiv` and `paper_field_abstract`.
+  - Add each new paper to `paper_status` with status `A`.
 
 #### B. `b_arxiv.py` — Collect arXiv IDs
 
 - **Inputs:** `archive/dblp.xml`, `paper_summary`
-- **Output:** Fill in every available value in `paper_field_arxiv`.
+- **Takes:** papers at status `A`
+- **Output:** Fill in every available value in `paper_field_arxiv`. Move every processed paper to `B`.
 
-DBLP stores arXiv preprints as separate `journals/corr/` records and never links them to the published paper. Match each paper to its preprint as precisely as possible, by normalized title and DBLP's disambiguated author names. Write only matches that are certain. Leave ambiguous papers without an arXiv ID.
+DBLP stores arXiv preprints as separate `journals/corr/` records and never links them to the published paper. Match each paper without an arXiv ID to its preprint as precisely as possible, by normalized title and DBLP's disambiguated author names. Write only matches that are certain. Leave ambiguous papers without an arXiv ID.
 
-#### C. `c_fetch.py` — Fetch Details from External APIs
+#### C. `c_fetch.py` — Fetch Abstracts from External APIs
 
-- **Inputs:** `paper_summary`, `paper_absent_abstract`
-- **Output:** Fill in every available value in `paper_field_arxiv`, `paper_field_abstract`, `paper_details_arxiv`, `paper_details_openalex` and `paper_details_s2`.
+- **Input:** `paper_summary`
+- **Takes:** papers at status `B`
+- **Output:** Fill in every available value in `paper_field_abstract` and `paper_field_arxiv`. Move every finished paper to `C`.
 
-**Work queue.** Every run starts from the current state of the database:
+**API order.** For each paper without an abstract, try the sources in this order and **stop as soon as one returns an abstract**:
 
-- A paper is queued for a source when that source's `request` is NULL in `paper_summary` (for arXiv, only when the paper has an arXiv ID).
-- A source that already has a stored request for a paper is never called again for it.
-- Rerunning `c_fetch.py` any number of times only processes what is still missing.
-
-**API calls.** Every paper is sent to all three APIs. None may be skipped, even if another source has already returned an abstract.
-
-| API              | Lookup                                                     |
-|------------------|------------------------------------------------------------|
-| arXiv            | By arXiv ID (if the paper has one)                         |
-| OpenAlex         | By DOI (if the paper has one); if the DOI lookup gives no abstract, by title |
-| Semantic Scholar | By DOI (if the paper has one); if the DOI lookup gives no abstract, by title |
+| Order | API              | Lookup |
+|-------|------------------|--------|
+| 1     | arXiv            | By arXiv ID (if the paper has one) |
+| 2     | OpenAlex         | By DOI (if the paper has one); if the DOI lookup gives no abstract, by title |
+| 3     | Semantic Scholar | By DOI (if the paper has one); if the DOI lookup gives no abstract, by title |
 
 - "DOI lookup gives no abstract" means the paper was not found by its DOI, or was found without an abstract.
 - Papers without a DOI are looked up by title directly.
+- A paper that already has an abstract is moved to `C` without any API call.
+- A paper is moved to `C` when it has an abstract, or when every applicable lookup has given a finished "no abstract" answer.
 
 **Title match check.** A title lookup result is accepted only if all three hold:
 
@@ -263,12 +256,10 @@ DBLP stores arXiv preprints as separate `journals/corr/` records and never links
 2. Publication year within ±1 of `paper_dblp.year`.
 3. At least one shared author surname.
 
-**Abstract.** Write `paper_field_abstract` only when it is still empty. The first valid abstract found is kept.
-
-**arXiv ID discovery.** If a response contains an arXiv ID and the paper has none in `paper_field_arxiv`:
+**arXiv ID discovery.** If an OpenAlex or Semantic Scholar response contains an arXiv ID and the paper has none in `paper_field_arxiv`:
 
 1. Update `paper_field_arxiv` with that ID.
-2. Call the arXiv API with that ID.
+2. If the paper still has no abstract, call the arXiv API with that ID before trying the next source.
 
 Each source is read in its own way:
 
@@ -286,28 +277,33 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 **Performance.**
 
+- Work in rounds. In each round, take a block of papers at status `B` and run the API order as batch stages: every paper still without an abstract goes on to the next stage.
 - Put as many papers as each API allows into a single batch call:
+  - arXiv: many IDs per `id_list` call.
   - OpenAlex: up to 100 DOIs per call, keeping the URL within the length limit.
   - Semantic Scholar: up to 500 IDs per batch call.
-  - arXiv: many IDs per `id_list` call.
 - Run multiple batches concurrently, while staying within each source's rate limit.
 - Handle throttling with proper engineering: retry 429 and 5xx responses with backoff, and honor `Retry-After`.
 
 #### D. `d_abstract.md` — Find Missing Abstracts
 
-- **Input:** `paper_absent_abstract`
-- **Output:** Fill in every available value in `paper_field_abstract`.
+- **Inputs:** `paper_summary`, `paper_absent_abstract`
+- **Takes:** papers at status `C`
+- **Output:** Fill in every available value in `paper_field_abstract`. Move every paper to `D`.
 
-**Process.** Go through `paper_absent_abstract` row by row. For each paper:
+**Process.**
 
-1. Search online, **excluding** OpenAlex, Semantic Scholar and arXiv.
-2. Retrieve the abstract from any available source.
-3. Update `paper_field_abstract`.
+1. Move every paper at status `C` that already has an abstract to `D` in one SQL update, with no web search.
+2. Go through the remaining papers at status `C` one by one. For each paper:
+   1. Search online, **excluding** OpenAlex, Semantic Scholar and arXiv.
+   2. Retrieve the abstract from any available source.
+   3. Update `paper_field_abstract` if found, and move the paper to `D` either way.
 
 #### E. `e_embedding.py` — Generate Embeddings
 
 - **Input:** `paper_summary`
-- **Output:** Record the model in `paper_semantic_model`, and complete `paper_semantic_vector`.
+- **Takes:** papers at status `D`
+- **Output:** Record the model in `paper_semantic_model`, complete `paper_semantic_vector`, and move every embedded paper to `E`.
 
 **Process.** For each paper, embed **title + abstract only**: the same text form used for seeds and queries in step F. No other column of `paper_summary` is embedded.
 
@@ -317,7 +313,8 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 #### F. `f_semantic.py` — Semantic Shortlist
 
 - **Inputs:** `paper_semantic_vector`, `paper_semantic_model`, `paper_semantic_query`, `paper_semantic_seed`, `paper_semantic_keyword`, and title and abstract from `paper_summary`
-- **Output:** Complete `paper_semantic_threshold` and `paper_semantic_shortlist`.
+- **Takes:** papers at status `E`
+- **Output:** Complete `paper_semantic_threshold` and `paper_semantic_shortlist`. Move every screened paper to `F`.
 
 **Process.**
 
@@ -326,12 +323,19 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 3. **Shortlist.** A paper's score is its highest similarity to any query. Add the paper to `paper_semantic_shortlist` if either holds:
    - its score is at or above the threshold for its `embed_basis`, or
    - its title or abstract contains a keyword from `paper_semantic_keyword` (whole-word match).
+4. Move every screened paper to `F`, shortlisted or not.
 
 #### G. `g_search.md` — AI Review
 
 - **Inputs:**
   - Paper IDs from `paper_semantic_shortlist`
   - Paper information from the `paper_summary` view
-- **Output:** Complete `paper_ai_shortlist`.
+- **Takes:** papers at status `F`
+- **Output:** Complete `paper_ai_shortlist`. Move every paper to `G`.
 
-**Process.** Use AI to review every shortlisted paper that has no row in `paper_ai_shortlist` yet. Record each decision as a category, or `reject`. An interrupted review resumes where it stopped.
+**Process.**
+
+1. Move every paper at status `F` that is not in `paper_semantic_shortlist` to `G` in one SQL update, with no AI review.
+2. Go through the shortlisted papers at status `F` one by one. For each paper, use AI to decide whether it belongs to the research topic:
+   - If accepted, add it to `paper_ai_shortlist` with its category.
+   - Move the paper to `G` either way, so an interrupted review resumes where it stopped.
