@@ -2,10 +2,10 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Fill and audit the table `journal_candidate_ai` in `archive/paperhunter.db` so that the view `journal_list` contains **every** DBLP journal key (`journals/<name>`) that is a journal of the Scopus 2025 computer-science ranking (quartile Q1–Q4), and **nothing else**. Zero false positives, zero false negatives.
+**Goal.** Fill and audit the table `journal_candidate_ai` in `b-config/paperhunter.db` so that the view `journal_list` contains **every** DBLP journal key (`journals/<name>`) that is a journal of the Scopus 2025 computer-science ranking (quartile Q1–Q4), and **nothing else**. Zero false positives, zero false negatives.
 
 **Ground rules.**
-- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
+- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 b-config/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
 - Change only `journal_candidate_ai`. Never alter the schema or any other table.
 - Trust nothing in the database blindly. `journal_candidate_rule` is a wide machine proposal: most name-only pairs are namesakes, and a true pair can still be missing. Existing `journal_candidate_ai` rows may be wrong or incomplete. You audit both.
 - You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by a method or a pattern alone.
@@ -50,14 +50,14 @@ SELECT * FROM journal_dblp_venue WHERE dblp_key = 'journals/x';
 
 Web sources, authoritative when the data above leaves doubt:
 - **Crossref journal record** `https://api.crossref.org/journals/<ISSN>`: title, publisher and **all** ISSNs of a journal. Settles whether two ISSNs are the print and electronic editions of one journal.
-- **Crossref recent works** `https://api.crossref.org/journals/<ISSN>/works?rows=5&sort=published&order=desc&select=DOI,container-title,published`: recent DOIs of a Scopus journal. Find their DBLP key in the dump: `grep -i -F -m1 'doi.org/<DOI></ee>' -B15 archive/dblp.xml | grep 'key="journals/'`. Many DOIs at once: write them, one per line as `doi.org/<DOI><`, to a file and run `grep -i -F -f <file> archive/dblp.xml` in one pass (≈1 minute).
+- **Crossref recent works** `https://api.crossref.org/journals/<ISSN>/works?rows=5&sort=published&order=desc&select=DOI,container-title,published`: recent DOIs of a Scopus journal. Find their DBLP key in the dump: `grep -i -F -m1 'doi.org/<DOI></ee>' -B15 d-download/dblp.xml | grep 'key="journals/'`. Many DOIs at once: write them, one per line as `doi.org/<DOI><`, to a file and run `grep -i -F -f <file> d-download/dblp.xml` in one pass (≈1 minute).
 - **Scopus/SJR page** `https://www.scimagojr.com/journalsearch.php?q=<Sourceid>&tip=sid`: title history, ISSNs and coverage.
 - The publisher's journal page, for renames ("formerly …") and mergers.
 - Send at most one request per second to any one API.
 
-**Do not use the dblp.org web pages** or their mirrors (they sit behind a bot wall). All DBLP evidence comes from the tables above and the dump `archive/dblp.xml` (`grep 'key="journals/x/'` for a key's articles); titles, ISSNs and renames come from Crossref, Scopus and the publishers.
+**Do not use the dblp.org web pages** or their mirrors (they sit behind a bot wall). All DBLP evidence comes from the tables above and the dump `d-download/dblp.xml` (`grep 'key="journals/x/'` for a key's articles); titles, ISSNs and renames come from Crossref, Scopus and the publishers.
 
-If `journal_crossref`, `journal_dblp_issn` or `journal_dblp_lineage` does not exist, `journal_dblp_issn` or `journal_dblp_lineage` is empty, or `SELECT count(*) FROM journal_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `circumstance/b_schema.py`, then `journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `journal-hunter/b_match.py`.
+If `journal_crossref`, `journal_dblp_issn` or `journal_dblp_lineage` does not exist, `journal_dblp_issn` or `journal_dblp_lineage` is empty, or `SELECT count(*) FROM journal_crossref WHERE status IS NULL` is not 0, stop and tell the humans to run `c-context/b_schema.py`, then `f-journal-hunter/a_extract.py` (a rerun also retries failed Crossref lookups), then `f-journal-hunter/b_match.py`.
 
 ---
 

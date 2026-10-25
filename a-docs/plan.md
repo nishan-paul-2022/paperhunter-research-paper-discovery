@@ -14,7 +14,7 @@
 
 ### 1.1 `paper_semantic_threshold`
 
-Filled by `circumstance/c_threshold.py`, before the pipeline runs (see section 3).
+Filled by `c-context/c_threshold.py`, before the pipeline runs (see section 3).
 
 `basis` is `title` or `title_abstract`.
 
@@ -153,7 +153,7 @@ Every paper from `paper_ai_shortlist` only.
 
 ## 3. Semantic Settings
 
-The search settings live in `archive/semantic.json`, tracked in git, so every run uses exactly the same inputs.
+The search settings live in `b-config/semantic.json`, tracked in git, so every run uses exactly the same inputs.
 
 ```json
 {
@@ -177,9 +177,9 @@ The search settings live in `archive/semantic.json`, tracked in git, so every ru
 | `keywords` | Words or phrases. A paper containing one (whole-word match) is shortlisted regardless of its score. |
 | `seeds`    | Known relevant papers, with their title and abstract copied exactly from one trusted source. They set the thresholds. `category` (`baseline`, `survey`, `benchmark` or `evaluation`) is for our reference only and is not used by the code. |
 
-### `circumstance/c_threshold.py`
+### `c-context/c_threshold.py`
 
-The thresholds depend only on `semantic.json` (queries and seeds), the model and the margin, so they are computed once, before the pipeline, by `circumstance/c_threshold.py`. Run it after `circumstance/b_schema.py`, and again whenever `semantic.json` changes.
+The thresholds depend only on `semantic.json` (queries and seeds), the model and the margin, so they are computed once, before the pipeline, by `c-context/c_threshold.py`. Run it after `c-context/b_schema.py`, and again whenever `semantic.json` changes.
 
 - **Constants** (imported by `e_embed.py` and `f_semantic.py`, so all three use the same values):
   - Model: `BAAI/bge-small-en-v1.5`, pinned to revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a` (already downloaded to the local Hugging Face cache).
@@ -198,12 +198,12 @@ The thresholds depend only on `semantic.json` (queries and seeds), the model and
 
 | Step | File             | Goal                                  | Takes papers at status | Sets status | Inputs                                       | Writes To |
 |------|------------------|---------------------------------------|------------------------|-------------|----------------------------------------------|-----------|
-| A    | `a_extract.py`   | Build the base paper list             | new papers             | `A`         | `archive/dblp.xml`, `conf_list`, `journal_list` | `paper_dblp`, `paper_status`; `paper_id` in `paper_field_arxiv`, `paper_field_abstract` |
-| B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `archive/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
+| A    | `a_extract.py`   | Build the base paper list             | new papers             | `A`         | `d-download/dblp.xml`, `conf_list`, `journal_list` | `paper_dblp`, `paper_status`; `paper_id` in `paper_field_arxiv`, `paper_field_abstract` |
+| B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `d-download/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
 | C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
 | D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_review`, web search | `paper_field_abstract`, `paper_status` |
 | E    | `e_embed.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_vector`, `paper_status` |
-| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_threshold`, `paper_summary`, `archive/semantic.json` | `paper_semantic_shortlist`, `paper_status` |
+| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_threshold`, `paper_summary`, `b-config/semantic.json` | `paper_semantic_shortlist`, `paper_status` |
 | G    | `g_search.md`    | Build the final AI-reviewed shortlist | `F`                    | `G`         | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist`, `paper_status` |
 
 ### 4.2 Status Rules
@@ -222,7 +222,7 @@ Every paper moves through every status from `A` to `G`, whether or not a step ch
 
 #### A. `a_extract.py` — Extract Papers
 
-- **Inputs:** `archive/dblp.xml`, `conf_list`, `journal_list`
+- **Inputs:** `d-download/dblp.xml`, `conf_list`, `journal_list`
 - **Output:**
   - Complete `paper_dblp`, including `record_type` and `ee`.
   - Populate `paper_id` in `paper_field_arxiv` and `paper_field_abstract`.
@@ -230,7 +230,7 @@ Every paper moves through every status from `A` to `G`, whether or not a step ch
 
 #### B. `b_arxiv.py` — Collect arXiv IDs
 
-- **Inputs:** `archive/dblp.xml`, `paper_summary`
+- **Inputs:** `d-download/dblp.xml`, `paper_summary`
 - **Takes:** papers at status `A`
 - **Output:** Fill in every available value in `paper_field_arxiv`. Move every processed paper to `B`.
 
@@ -312,13 +312,13 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 #### F. `f_semantic.py` — Semantic Shortlist
 
-- **Inputs:** `paper_semantic_vector`, `paper_semantic_threshold`, title and abstract from `paper_summary`, and queries and keywords from `archive/semantic.json`
+- **Inputs:** `paper_semantic_vector`, `paper_semantic_threshold`, title and abstract from `paper_summary`, and queries and keywords from `b-config/semantic.json`
 - **Takes:** papers at status `E`
 - **Output:** Complete `paper_semantic_shortlist`. Move every screened paper to `F`.
 
 **Process.**
 
-1. Load the model from `c_threshold.py`'s constants and embed every query from `semantic.json`. Read both thresholds from `paper_semantic_threshold`; stop if the table is empty (run `circumstance/c_threshold.py` first).
+1. Load the model from `c_threshold.py`'s constants and embed every query from `semantic.json`. Read both thresholds from `paper_semantic_threshold`; stop if the table is empty (run `c-context/c_threshold.py` first).
 2. **Shortlist.** A paper's score is its highest similarity to any query. Add the paper to `paper_semantic_shortlist` if either holds:
    - its score is at or above the threshold for its `basis`, or
    - its title or abstract contains a keyword from `semantic.json` (whole-word match).
@@ -343,10 +343,10 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 ## 5. Cleanup
 
-When this plan is implemented, the AI removes everything the project no longer needs, across the whole repository: `archive/`, `circumstance/`, `conference-hunter/`, `journal-hunter/`, `paper-hunter/`, `README.md`, `requirements.txt` and any other file.
+When this plan is implemented, the AI removes everything the project no longer needs, across the whole repository: `b-config/`, `c-context/`, `e-conference-hunter/`, `f-journal-hunter/`, `g-paper-hunter/`, `README.md`, `requirements.txt` and any other file.
 
-- **Files:** old paper-hunter scripts and prompts replaced by this plan, and any other file no step uses.
-- **Database:** paper tables and views in `archive/paperhunter.db` that are not in this plan.
+- **Files:** old g-paper-hunter scripts and prompts replaced by this plan, and any other file no step uses.
+- **Database:** paper tables and views in `b-config/paperhunter.db` that are not in this plan.
 - **Code:** functions, constants and imports that nothing calls.
 - **Dependencies:** packages in `requirements.txt` that no script imports.
 - **Docs:** `README.md` updated to the new run order, with no references to removed files.

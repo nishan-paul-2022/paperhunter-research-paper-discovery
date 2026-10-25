@@ -6,11 +6,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ARCHIVE_DIR = Path(__file__).resolve().parent.parent / "archive"
-GZ_PATH = ARCHIVE_DIR / "dblp.xml.gz"
-XML_PATH = ARCHIVE_DIR / "dblp.xml"
-DTD_PATH = ARCHIVE_DIR / "dblp.dtd"
-MD5_PATH = ARCHIVE_DIR / "dblp.xml.gz.md5"
+DOWNLOAD_DIR = Path(__file__).resolve().parent.parent / "d-download"
+GZ_PATH = DOWNLOAD_DIR / "dblp.xml.gz"
+XML_PATH = DOWNLOAD_DIR / "dblp.xml"
+DTD_PATH = DOWNLOAD_DIR / "dblp.dtd"
+MD5_PATH = DOWNLOAD_DIR / "dblp.xml.gz.md5"
 
 BASE = "https://dblp.org/xml"
 URL_GZ = f"{BASE}/dblp.xml.gz"
@@ -131,7 +131,7 @@ def _extract(gz_path: Path, xml_path: Path) -> None:
 
 
 def main() -> None:
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
     remote_md5 = _fetch_remote_md5()
 

@@ -20,7 +20,7 @@ from pathlib import Path
 import requests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 AGENT = "paperhunter/1.0"
 TIMEOUT = 60
@@ -65,7 +65,7 @@ def load_env() -> None:
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run circumstance/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
     conn = sqlite3.connect(path, timeout=120)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

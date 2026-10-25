@@ -2,10 +2,10 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Fill and audit the table `conf_candidate_ai` in `archive/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
+**Goal.** Fill and audit the table `conf_candidate_ai` in `b-config/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
 
 **Ground rules.**
-- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 archive/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
+- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 b-config/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
 - Change only `conf_candidate_ai`. Never alter the schema or any other table.
 - Trust nothing in the database blindly. `conf_candidate_rule` is a wide machine proposal: most pairs that share an acronym are namesakes, and some true pairs are still never proposed. Existing `conf_candidate_ai` rows may be wrong or incomplete. You audit both.
 - You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by the candidate method, a pattern or a rule alone.
@@ -52,12 +52,12 @@ Then check these sources:
     FILTER(STRSTARTS(?dblp, "conf/") && LANG(?label) = "en" && CONTAINS(LCASE(?label), "multimedia")) }
   ```
 - **The conference's own website**, its "previous editions" or history page, and the proceedings front matter (web search), for renames and mergers that `conf_dblp_lineage` lacks (SAIG and GCSE → GPCE).
-- **The local dump** `archive/dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
+- **The local dump** `d-download/dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
 - The CORE portal.
 
 **Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.
 
-If `conf_dblp_venue` has no `dblp_acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `circumstance/b_schema.py`, then `conference-hunter/a_extract.py`, then `conference-hunter/b_match.py`.
+If `conf_dblp_venue` has no `dblp_acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `c-context/b_schema.py`, then `e-conference-hunter/a_extract.py`, then `e-conference-hunter/b_match.py`.
 
 ---
 

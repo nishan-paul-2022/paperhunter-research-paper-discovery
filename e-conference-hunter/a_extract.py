@@ -14,10 +14,10 @@ from pathlib import Path
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
-ARCHIVE_DIR = REPO_ROOT / "archive"
-CORE_SRC = ARCHIVE_DIR / "venue-core-2026.csv"
-XML_PATH = ARCHIVE_DIR / "dblp.xml"
-DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
+CONFIG_DIR = REPO_ROOT / "b-config"
+CORE_SRC = CONFIG_DIR / "venue-core-2026.csv"
+XML_PATH = REPO_ROOT / "d-download" / "dblp.xml"
+DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 VALID_RANKS = ("A*", "A", "B", "C")
 DBLP_SPARQL = "https://sparql.dblp.org/sparql"
@@ -38,7 +38,7 @@ def load_env() -> None:
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run circumstance/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

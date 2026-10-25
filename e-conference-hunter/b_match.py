@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
 MIN_BOOK_TITLE_SHARE = 0.15
 MIN_SHARED_BOOK_TITLE_PAPERS = 20
 MIN_FULL_TITLE_LEN = 20
@@ -173,7 +173,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
 
 def main() -> None:
     if not DB_PATH.exists():
-        sys.exit(f"Database not found: {DB_PATH}  (run circumstance/b_schema.py first)")
+        sys.exit(f"Database not found: {DB_PATH}  (run c-context/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
     if not conn.execute("SELECT count(*) FROM conf_dblp_venue").fetchone()[0]:
@@ -197,7 +197,7 @@ def main() -> None:
     print(f"  └─ final list:  {final} keys")
     print()
     if issues:
-        print("  ✗ Review needed → give conference-hunter/c_search.md to the AI")
+        print("  ✗ Review needed → give e-conference-hunter/c_search.md to the AI")
     else:
         print("  ✓ Review complete → conf_list is final")
     print()
