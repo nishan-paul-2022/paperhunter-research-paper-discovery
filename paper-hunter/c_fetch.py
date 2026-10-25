@@ -320,6 +320,9 @@ class OpenAlex:
 class SemanticScholar:
     def __init__(self):
         self.http = Http(S2_INTERVAL, attempts=8, first_delay=5.0)
+        key = os.environ.get("S2_API_KEY", "").strip()
+        if key:
+            self.http.session.headers["x-api-key"] = key
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         r = self.http.request(method, url, **kwargs)

@@ -181,7 +181,7 @@ The search settings live in `archive/semantic.json`, tracked in git, so every ru
 
 The thresholds depend only on `semantic.json` (queries and seeds), the model and the margin, so they are computed once, before the pipeline, by `circumstance/c_threshold.py`. Run it after `circumstance/b_schema.py`, and again whenever `semantic.json` changes.
 
-- **Constants** (imported by `e_embedding.py` and `f_semantic.py`, so all three use the same values):
+- **Constants** (imported by `e_embed.py` and `f_semantic.py`, so all three use the same values):
   - Model: `BAAI/bge-small-en-v1.5`, pinned to revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a` (already downloaded to the local Hugging Face cache).
   - Margin: `0.05`. It lowers each threshold slightly below the weakest seed, so relevant papers that score a little lower than every seed are not missed.
 - **Process:**
@@ -202,7 +202,7 @@ The thresholds depend only on `semantic.json` (queries and seeds), the model and
 | B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `archive/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
 | C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
 | D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_review`, web search | `paper_field_abstract`, `paper_status` |
-| E    | `e_embedding.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_vector`, `paper_status` |
+| E    | `e_embed.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_vector`, `paper_status` |
 | F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_threshold`, `paper_summary`, `archive/semantic.json` | `paper_semantic_shortlist`, `paper_status` |
 | G    | `g_search.md`    | Build the final AI-reviewed shortlist | `F`                    | `G`         | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist`, `paper_status` |
 
@@ -275,6 +275,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 - Load API keys from the `.env` file.
 - OpenAlex: when a key hits its free-tier limit, switch to the next OpenAlex key in `.env`.
+- Semantic Scholar: send `S2_API_KEY` from `.env` in the `x-api-key` header.
 
 **Performance.**
 
@@ -298,7 +299,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
    3. If found, write it to `paper_field_abstract`.
    4. Move the paper to `D`, found or not.
 
-#### E. `e_embedding.py` — Generate Embeddings
+#### E. `e_embed.py` — Generate Embeddings
 
 - **Input:** `paper_summary`
 - **Takes:** papers at status `D`

@@ -64,7 +64,7 @@ def main() -> None:
             "JOIN paper_summary s ON s.paper_id = v.paper_id WHERE v.paper_id IN (SELECT value FROM json_each(?))",
             (str(chunk),)).fetchall()
         if len(rows) != len(chunk):
-            sys.exit(f"{len(chunk) - len(rows)} papers at status E have no vector (run e_embedding.py)")
+            sys.exit(f"{len(chunk) - len(rows)} papers at status E have no vector (run e_embed.py)")
         vectors = np.frombuffer(b"".join(r[2] for r in rows), dtype=np.float32).reshape(len(rows), dim)
         scores = sem.best_similarity(vectors, queries)
         shortlist = []
