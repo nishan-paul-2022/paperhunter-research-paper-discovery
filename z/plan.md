@@ -12,10 +12,11 @@ Database schema and processing pipeline for collecting, enriching, embedding and
    - [Semantic Search](#13-semantic-search)
    - [AI Shortlist](#14-ai-shortlist)
 2. [Views](#2-views)
-3. [Pipeline](#3-pipeline)
-   - [Overview](#31-overview)
-   - [Status Rules](#32-status-rules)
-   - [Step Details](#33-step-details)
+3. [Semantic Settings](#3-semantic-settings)
+4. [Pipeline](#4-pipeline)
+   - [Overview](#41-overview)
+   - [Status Rules](#42-status-rules)
+   - [Step Details](#43-step-details)
 
 ---
 
@@ -66,33 +67,6 @@ One row per paper. `status` is the last step that has finished with the paper: `
 | `status`   | TEXT    |
 
 ### 1.3 Semantic Search
-
-#### `paper_semantic_model`
-
-| Column  | Type    |
-|---------|---------|
-| `id`    | INTEGER |
-| `model` | TEXT    |
-| `dim`   | INTEGER |
-
-#### `paper_semantic_keyword`
-
-| Column    | Type |
-|-----------|------|
-| `keyword` | TEXT |
-
-#### `paper_semantic_query`
-
-| Column  | Type |
-|---------|------|
-| `query` | TEXT |
-
-#### `paper_semantic_seed`
-
-| Column     | Type    |
-|------------|---------|
-| `paper_id` | INTEGER |
-| `evidence` | TEXT    |
 
 #### `paper_semantic_vector`
 
@@ -193,9 +167,41 @@ Every paper with all its fields, pipeline status, venue rank and category: one r
 
 ---
 
-## 3. Pipeline
+## 3. Semantic Settings
 
-### 3.1 Overview
+The search settings live in `archive/semantic.json`, tracked in git, so every run uses exactly the same inputs.
+
+```json
+{
+  "topic": "LLM-based agents for automated penetration testing",
+  "queries": ["large language model agents for automated penetration testing", "..."],
+  "keywords": ["penetration test", "pentest", "capture the flag", "..."],
+  "seeds": [
+    {
+      "title": "PentestGPT: Evaluating and Harnessing Large Language Models for Automated Penetration Testing",
+      "abstract": "Penetration testing, a crucial industrial practice ...",
+      "category": "baseline"
+    }
+  ]
+}
+```
+
+| Key        | Meaning |
+|------------|---------|
+| `topic`    | The research topic, in one line. |
+| `queries`  | Sentences describing the topic. A paper's score is its highest similarity to any query. |
+| `keywords` | Words or phrases. A paper containing one (whole-word match) is shortlisted regardless of its score. |
+| `seeds`    | Known relevant papers, with their title and abstract copied exactly from one trusted source. They set the thresholds. `category` (`baseline`, `survey`, `benchmark` or `evaluation`) is for our reference only and is not used by the code. |
+
+The embedding model is a code constant: `BAAI/bge-small-en-v1.5`, pinned to revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a` (already downloaded to the local Hugging Face cache).
+
+The threshold margin is also a code constant: `0.05`. It lowers each threshold slightly below the weakest seed, so relevant papers that score a little lower than every seed are not missed.
+
+---
+
+## 4. Pipeline
+
+### 4.1 Overview
 
 | Step | File             | Goal                                  | Takes papers at status | Sets status | Inputs                                       | Writes To |
 |------|------------------|---------------------------------------|------------------------|-------------|----------------------------------------------|-----------|
@@ -203,11 +209,11 @@ Every paper with all its fields, pipeline status, venue rank and category: one r
 | B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `archive/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
 | C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
 | D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_review`, web search | `paper_field_abstract`, `paper_status` |
-| E    | `e_embedding.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_model`, `paper_semantic_vector`, `paper_status` |
-| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_model`, `paper_semantic_query`, `paper_semantic_seed`, `paper_semantic_keyword`, `paper_summary` | `paper_semantic_threshold`, `paper_semantic_shortlist`, `paper_status` |
+| E    | `e_embedding.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_vector`, `paper_status` |
+| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_summary`, `archive/semantic.json` | `paper_semantic_threshold`, `paper_semantic_shortlist`, `paper_status` |
 | G    | `g_search.md`    | Build the final AI-reviewed shortlist | `F`                    | `G`         | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist`, `paper_status` |
 
-### 3.2 Status Rules
+### 4.2 Status Rules
 
 Every paper moves through every status from `A` to `G`, whether or not a step changes its data. Because of this, any file can be run at any time and any number of times: it always starts from the latest state, and no work is repeated.
 
@@ -219,7 +225,7 @@ Every paper moves through every status from `A` to `G`, whether or not a step ch
 6. **Rerunning step A** adds new papers with status `A` and updates the DBLP fields of existing papers. Existing papers keep their status.
 7. **The pipeline never moves a paper backward.** To redo a step for some papers (for example, after changing the seeds, queries or keywords), set their status back by hand.
 
-### 3.3 Step Details
+### 4.3 Step Details
 
 #### A. `a_extract.py` — Extract Papers
 
@@ -303,7 +309,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 - **Input:** `paper_summary`
 - **Takes:** papers at status `D`
-- **Output:** Record the model in `paper_semantic_model`, complete `paper_semantic_vector`, and move every embedded paper to `E`.
+- **Output:** Complete `paper_semantic_vector`, and move every embedded paper to `E`.
 
 **Process.** For each paper, embed **title + abstract only**: the same text form used for seeds and queries in step F. No other column of `paper_summary` is embedded.
 
@@ -312,17 +318,17 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 #### F. `f_semantic.py` — Semantic Shortlist
 
-- **Inputs:** `paper_semantic_vector`, `paper_semantic_model`, `paper_semantic_query`, `paper_semantic_seed`, `paper_semantic_keyword`, and title and abstract from `paper_summary`
+- **Inputs:** `paper_semantic_vector`, title and abstract from `paper_summary`, and `archive/semantic.json`
 - **Takes:** papers at status `E`
 - **Output:** Complete `paper_semantic_threshold` and `paper_semantic_shortlist`. Move every screened paper to `F`.
 
 **Process.**
 
-1. Load the model recorded in `paper_semantic_model`. Embed every query in `paper_semantic_query`.
-2. **Thresholds.** Embed each seed in `paper_semantic_seed` in both forms: title alone, and title + abstract. A seed's score is its highest similarity to any query. For each `embed_basis`, the threshold is the lowest seed score minus a small margin. Store both thresholds in `paper_semantic_threshold`.
+1. Load the model (the code constant) and embed every query from `semantic.json`.
+2. **Thresholds.** Embed each seed from `semantic.json` in both forms: title alone, and title + abstract. A seed's score is its highest similarity to any query. For each `embed_basis`, the threshold is the lowest seed score minus the margin. Store both thresholds in `paper_semantic_threshold`.
 3. **Shortlist.** A paper's score is its highest similarity to any query. Add the paper to `paper_semantic_shortlist` if either holds:
    - its score is at or above the threshold for its `embed_basis`, or
-   - its title or abstract contains a keyword from `paper_semantic_keyword` (whole-word match).
+   - its title or abstract contains a keyword from `semantic.json` (whole-word match).
 4. Move every screened paper to `F`, shortlisted or not.
 
 #### G. `g_search.md` — AI Review
