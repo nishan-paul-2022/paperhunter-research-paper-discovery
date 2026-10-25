@@ -1,30 +1,31 @@
-# Paper Hunter
-
-Database schema and processing pipeline for collecting, enriching, embedding and shortlisting research papers.
-
----
+# PaperHunter - Plan
 
 ## Contents
 
 1. [Tables](#1-tables)
-   - [Core Paper Data](#11-core-paper-data)
-   - [Progress](#12-progress)
-   - [Semantic Search](#13-semantic-search)
-   - [AI Shortlist](#14-ai-shortlist)
 2. [Views](#2-views)
 3. [Semantic Settings](#3-semantic-settings)
 4. [Pipeline](#4-pipeline)
-   - [Overview](#41-overview)
-   - [Status Rules](#42-status-rules)
-   - [Step Details](#43-step-details)
+5. [Cleanup](#5-cleanup)
 
 ---
 
 ## 1. Tables
 
-### 1.1 Core Paper Data
+In the order they are populated.
 
-#### `paper_dblp`
+### 1.1 `paper_semantic_threshold`
+
+Filled by `circumstance/c_threshold.py`, before the pipeline runs (see section 3).
+
+`basis` is `title` or `title_abstract`.
+
+| Column        | Type |
+|---------------|------|
+| `basis` | TEXT |
+| `threshold`   | REAL |
+
+### 1.2 `paper_dblp`
 
 `dblp_key` is UNIQUE, so rerunning step A updates existing papers instead of duplicating them.
 
@@ -41,23 +42,7 @@ Database schema and processing pipeline for collecting, enriching, embedding and
 | `doi`         | TEXT    |
 | `ee`          | TEXT    |
 
-#### `paper_field_arxiv`
-
-| Column     | Type    |
-|------------|---------|
-| `paper_id` | INTEGER |
-| `arxiv_id` | TEXT    |
-
-#### `paper_field_abstract`
-
-| Column     | Type    |
-|------------|---------|
-| `paper_id` | INTEGER |
-| `abstract` | TEXT    |
-
-### 1.2 Progress
-
-#### `paper_status`
+### 1.3 `paper_status`
 
 One row per paper. `status` is the last step that has finished with the paper: `A`, `B`, `C`, `D`, `E`, `F` or `G`.
 
@@ -66,36 +51,37 @@ One row per paper. `status` is the last step that has finished with the paper: `
 | `paper_id` | INTEGER |
 | `status`   | TEXT    |
 
-### 1.3 Semantic Search
+### 1.4 `paper_field_arxiv`
 
-#### `paper_semantic_vector`
+| Column     | Type    |
+|------------|---------|
+| `paper_id` | INTEGER |
+| `arxiv_id` | TEXT    |
 
-`embed_basis` is `title` or `title_abstract`: the text the vector was made from.
+### 1.5 `paper_field_abstract`
+
+| Column     | Type    |
+|------------|---------|
+| `paper_id` | INTEGER |
+| `abstract` | TEXT    |
+
+### 1.6 `paper_semantic_vector`
+
+`basis` is `title` or `title_abstract`: the text the vector was made from.
 
 | Column        | Type    |
 |---------------|---------|
 | `paper_id`    | INTEGER |
-| `embed_basis` | TEXT    |
+| `basis` | TEXT    |
 | `vector`      | BLOB    |
 
-#### `paper_semantic_shortlist`
+### 1.7 `paper_semantic_shortlist`
 
 | Column     | Type    |
 |------------|---------|
 | `paper_id` | INTEGER |
 
-#### `paper_semantic_threshold`
-
-`embed_basis` is `title` or `title_abstract`.
-
-| Column        | Type |
-|---------------|------|
-| `embed_basis` | TEXT |
-| `threshold`   | REAL |
-
-### 1.4 AI Shortlist
-
-#### `paper_ai_shortlist`
+### 1.8 `paper_ai_shortlist`
 
 Accepted papers only.
 
@@ -108,39 +94,9 @@ Accepted papers only.
 
 ## 2. Views
 
-### `paper_review`
+In the order the pipeline first uses them.
 
-Every paper that still has no abstract, waiting for a web search.
-
-**Depends on:** `paper_field_abstract`
-
-| Column     | Type    |
-|------------|---------|
-| `paper_id` | INTEGER |
-
-### `paper_list`
-
-Every accepted paper, with its arXiv ID, abstract, category and venue rank: the final result.
-
-**Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_ai_shortlist`, `conf_list`, `journal_list`
-
-| Column       | Type    |
-|--------------|---------|
-| `paper_id`   | INTEGER |
-| `dblp_key`   | TEXT    |
-| `venue_key`  | TEXT    |
-| `title`      | TEXT    |
-| `authors`    | TEXT    |
-| `year`       | INTEGER |
-| `venue`      | TEXT    |
-| `doi`        | TEXT    |
-| `arxiv_id`   | TEXT    |
-| `abstract`   | TEXT    |
-| `category`   | TEXT    |
-| `venue_name` | TEXT    |
-| `venue_rank` | TEXT    |
-
-### `paper_summary`
+### 2.1 `paper_summary`
 
 Every paper with all its fields, pipeline status, venue rank and category: one row per paper.
 
@@ -164,6 +120,38 @@ Every paper with all its fields, pipeline status, venue rank and category: one r
 | `venue_name`  | TEXT    |
 | `venue_rank`  | TEXT    |
 | `category`    | TEXT    |
+
+### 2.2 `paper_review`
+
+Every paper that still has no abstract, waiting for a web search.
+
+**Depends on:** `paper_field_abstract`
+
+| Column     | Type    |
+|------------|---------|
+| `paper_id` | INTEGER |
+
+### 2.3 `paper_list`
+
+Every accepted paper, with its arXiv ID, abstract, category and venue rank: the final result.
+
+**Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_ai_shortlist`, `conf_list`, `journal_list`
+
+| Column       | Type    |
+|--------------|---------|
+| `paper_id`   | INTEGER |
+| `dblp_key`   | TEXT    |
+| `venue_key`  | TEXT    |
+| `title`      | TEXT    |
+| `authors`    | TEXT    |
+| `year`       | INTEGER |
+| `venue`      | TEXT    |
+| `doi`        | TEXT    |
+| `arxiv_id`   | TEXT    |
+| `abstract`   | TEXT    |
+| `category`   | TEXT    |
+| `venue_name` | TEXT    |
+| `venue_rank` | TEXT    |
 
 ---
 
@@ -193,9 +181,18 @@ The search settings live in `archive/semantic.json`, tracked in git, so every ru
 | `keywords` | Words or phrases. A paper containing one (whole-word match) is shortlisted regardless of its score. |
 | `seeds`    | Known relevant papers, with their title and abstract copied exactly from one trusted source. They set the thresholds. `category` (`baseline`, `survey`, `benchmark` or `evaluation`) is for our reference only and is not used by the code. |
 
-The embedding model is a code constant: `BAAI/bge-small-en-v1.5`, pinned to revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a` (already downloaded to the local Hugging Face cache).
+### `circumstance/c_threshold.py`
 
-The threshold margin is also a code constant: `0.05`. It lowers each threshold slightly below the weakest seed, so relevant papers that score a little lower than every seed are not missed.
+The thresholds depend only on `semantic.json` (queries and seeds), the model and the margin, so they are computed once, before the pipeline, by `circumstance/c_threshold.py`. Run it after `circumstance/b_schema.py`, and again whenever `semantic.json` changes.
+
+- **Constants** (imported by `e_embedding.py` and `f_semantic.py`, so all three use the same values):
+  - Model: `BAAI/bge-small-en-v1.5`, pinned to revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a` (already downloaded to the local Hugging Face cache).
+  - Margin: `0.05`. It lowers each threshold slightly below the weakest seed, so relevant papers that score a little lower than every seed are not missed.
+- **Process:**
+  1. Embed every query from `semantic.json`.
+  2. Embed each seed in both forms: title alone, and title + abstract. A seed's score is its highest similarity to any query.
+  3. For each `basis`, the threshold is the lowest seed score minus the margin.
+  4. Store both thresholds in `paper_semantic_threshold`.
 
 ---
 
@@ -210,7 +207,7 @@ The threshold margin is also a code constant: `0.05`. It lowers each threshold s
 | C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
 | D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_review`, web search | `paper_field_abstract`, `paper_status` |
 | E    | `e_embedding.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_vector`, `paper_status` |
-| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_summary`, `archive/semantic.json` | `paper_semantic_threshold`, `paper_semantic_shortlist`, `paper_status` |
+| F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_threshold`, `paper_summary`, `archive/semantic.json` | `paper_semantic_shortlist`, `paper_status` |
 | G    | `g_search.md`    | Build the final AI-reviewed shortlist | `F`                    | `G`         | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist`, `paper_status` |
 
 ### 4.2 Status Rules
@@ -313,23 +310,22 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 **Process.** For each paper, embed **title + abstract only**: the same text form used for seeds and queries in step F. No other column of `paper_summary` is embedded.
 
-- If the paper has an abstract, embed title + abstract and set `embed_basis` to `title_abstract`.
-- Otherwise, embed the title alone and set `embed_basis` to `title`.
+- If the paper has an abstract, embed title + abstract and set `basis` to `title_abstract`.
+- Otherwise, embed the title alone and set `basis` to `title`.
 
 #### F. `f_semantic.py` — Semantic Shortlist
 
-- **Inputs:** `paper_semantic_vector`, title and abstract from `paper_summary`, and `archive/semantic.json`
+- **Inputs:** `paper_semantic_vector`, `paper_semantic_threshold`, title and abstract from `paper_summary`, and queries and keywords from `archive/semantic.json`
 - **Takes:** papers at status `E`
-- **Output:** Complete `paper_semantic_threshold` and `paper_semantic_shortlist`. Move every screened paper to `F`.
+- **Output:** Complete `paper_semantic_shortlist`. Move every screened paper to `F`.
 
 **Process.**
 
-1. Load the model (the code constant) and embed every query from `semantic.json`.
-2. **Thresholds.** Embed each seed from `semantic.json` in both forms: title alone, and title + abstract. A seed's score is its highest similarity to any query. For each `embed_basis`, the threshold is the lowest seed score minus the margin. Store both thresholds in `paper_semantic_threshold`.
-3. **Shortlist.** A paper's score is its highest similarity to any query. Add the paper to `paper_semantic_shortlist` if either holds:
-   - its score is at or above the threshold for its `embed_basis`, or
+1. Load the model from `c_threshold.py`'s constants and embed every query from `semantic.json`. Read both thresholds from `paper_semantic_threshold`; stop if the table is empty (run `circumstance/c_threshold.py` first).
+2. **Shortlist.** A paper's score is its highest similarity to any query. Add the paper to `paper_semantic_shortlist` if either holds:
+   - its score is at or above the threshold for its `basis`, or
    - its title or abstract contains a keyword from `semantic.json` (whole-word match).
-4. Move every screened paper to `F`, shortlisted or not.
+3. Move every screened paper to `F`, shortlisted or not.
 
 #### G. `g_search.md` — AI Review
 
@@ -345,3 +341,18 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 2. Go through the shortlisted papers at status `F` one by one. For each paper, use AI to decide whether it belongs to the research topic:
    - If accepted, add it to `paper_ai_shortlist` with its category.
    - Move the paper to `G` either way, so an interrupted review resumes where it stopped.
+
+---
+
+## 5. Cleanup
+
+When this plan is implemented, the AI removes everything the project no longer needs, across the whole repository: `archive/`, `circumstance/`, `conference-hunter/`, `journal-hunter/`, `paper-hunter/`, `README.md`, `requirements.txt` and any other file.
+
+- **Files:** old paper-hunter scripts and prompts replaced by this plan, and any other file no step uses.
+- **Database:** paper tables and views in `archive/paperhunter.db` that are not in this plan.
+- **Code:** functions, constants and imports that nothing calls.
+- **Dependencies:** packages in `requirements.txt` that no script imports.
+- **Docs:** `README.md` updated to the new run order, with no references to removed files.
+
+The conference and journal hunters stay, because step A needs `conf_list` and `journal_list`. Only their unused parts are removed.
+

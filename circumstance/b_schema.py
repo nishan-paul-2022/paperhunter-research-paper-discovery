@@ -306,6 +306,11 @@ ORDER BY s.quartile, lower(s.scopus_title), d.dblp_key;
 """
 
 PAPER_SCHEMA = """
+CREATE TABLE IF NOT EXISTS paper_semantic_threshold (
+    basis     TEXT PRIMARY KEY CHECK (basis IN ('title', 'title_abstract')),
+    threshold REAL NOT NULL
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS paper_dblp (
     paper_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     dblp_key    TEXT NOT NULL UNIQUE,
@@ -315,157 +320,79 @@ CREATE TABLE IF NOT EXISTS paper_dblp (
     authors     TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(authors) AND json_type(authors) = 'array'),
     year        INTEGER NOT NULL,
     venue       TEXT,
-    volume      TEXT,
-    number      TEXT,
-    pages       TEXT,
     doi         TEXT,
-    arxiv_id    TEXT,
-    ee          TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(ee) AND json_type(ee) = 'array'),
-    url         TEXT,
-    crossref    TEXT,
-    mdate       TEXT
+    ee          TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(ee) AND json_type(ee) = 'array')
 );
 CREATE INDEX IF NOT EXISTS paper_dblp_venue_key ON paper_dblp (venue_key);
-CREATE INDEX IF NOT EXISTS paper_dblp_year ON paper_dblp (year);
 CREATE INDEX IF NOT EXISTS paper_dblp_doi ON paper_dblp (doi);
-CREATE INDEX IF NOT EXISTS paper_dblp_arxiv_id ON paper_dblp (arxiv_id);
 
-CREATE TABLE IF NOT EXISTS paper_abstract_status (
-    paper_id     INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    has_abstract INTEGER NOT NULL DEFAULT 0 CHECK (has_abstract IN (0, 1)),
-    hit_count    INTEGER NOT NULL DEFAULT 0 CHECK (hit_count >= 0),
-    miss_count   INTEGER NOT NULL DEFAULT 0 CHECK (miss_count >= 0)
-);
-CREATE INDEX IF NOT EXISTS paper_abstract_status_has_abstract ON paper_abstract_status (has_abstract);
-
-CREATE TABLE IF NOT EXISTS paper_abstract (
+CREATE TABLE IF NOT EXISTS paper_status (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    abstract TEXT NOT NULL CHECK (length(trim(abstract)) > 0),
-    source   TEXT NOT NULL CHECK (length(trim(source)) > 0)
+    status   TEXT NOT NULL DEFAULT 'A' CHECK (status IN ('A', 'B', 'C', 'D', 'E', 'F', 'G'))
 );
+CREATE INDEX IF NOT EXISTS paper_status_status ON paper_status (status);
 
-CREATE TABLE IF NOT EXISTS paper_abstract_hit (
-    paper_id  INTEGER NOT NULL REFERENCES paper_dblp (paper_id),
-    source    TEXT NOT NULL CHECK (length(trim(source)) > 0),
-    lookup_by TEXT NOT NULL CHECK (lookup_by IN ('doi', 'arxiv', 'title', 'web')),
-    request   TEXT NOT NULL,
-    response  TEXT NOT NULL DEFAULT '',
-    called_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE UNIQUE INDEX IF NOT EXISTS paper_abstract_hit_lookup ON paper_abstract_hit (paper_id, source, lookup_by);
-
-CREATE TABLE IF NOT EXISTS paper_abstract_miss (
-    paper_id  INTEGER NOT NULL REFERENCES paper_dblp (paper_id),
-    source    TEXT NOT NULL CHECK (length(trim(source)) > 0),
-    lookup_by TEXT NOT NULL CHECK (lookup_by IN ('doi', 'arxiv', 'title', 'web')),
-    request   TEXT NOT NULL,
-    response  TEXT NOT NULL DEFAULT '',
-    called_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE UNIQUE INDEX IF NOT EXISTS paper_abstract_miss_lookup ON paper_abstract_miss (paper_id, source, lookup_by);
-
-CREATE TABLE IF NOT EXISTS paper_seed (
+CREATE TABLE IF NOT EXISTS paper_field_arxiv (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    category TEXT NOT NULL CHECK (category IN ('baseline', 'benchmark', 'survey', 'evaluation')),
-    evidence TEXT NOT NULL CHECK (length(trim(evidence)) > 0)
+    arxiv_id TEXT CHECK (arxiv_id IS NULL OR length(trim(arxiv_id)) > 0)
 );
+CREATE INDEX IF NOT EXISTS paper_field_arxiv_arxiv_id ON paper_field_arxiv (arxiv_id);
 
-CREATE TABLE IF NOT EXISTS paper_screen (
-    paper_id    INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    embed_basis TEXT NOT NULL CHECK (embed_basis IN ('abstract', 'title')),
-    embed_hash  TEXT NOT NULL,
-    similarity  REAL,
-    passed_by   TEXT CHECK (passed_by IN ('semantic', 'keyword', 'both')),
-    screened    INTEGER NOT NULL DEFAULT 0 CHECK (screened IN (0, 1)),
-    passed      INTEGER CHECK (passed IN (0, 1))
-);
-CREATE INDEX IF NOT EXISTS paper_screen_screened ON paper_screen (screened);
-CREATE INDEX IF NOT EXISTS paper_screen_passed ON paper_screen (passed);
-
-CREATE TABLE IF NOT EXISTS paper_verdict_with_abstract (
+CREATE TABLE IF NOT EXISTS paper_field_abstract (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    reviewed INTEGER NOT NULL DEFAULT 0 CHECK (reviewed IN (0, 1)),
-    verdict  TEXT CHECK (verdict IN ('baseline', 'benchmark', 'survey', 'evaluation', 'reject')),
-    reason   TEXT
+    abstract TEXT CHECK (abstract IS NULL OR length(trim(abstract)) > 0)
 );
-CREATE INDEX IF NOT EXISTS paper_verdict_with_abstract_reviewed ON paper_verdict_with_abstract (reviewed);
 
-CREATE TABLE IF NOT EXISTS paper_verdict_without_abstract (
+CREATE TABLE IF NOT EXISTS paper_semantic_vector (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    reviewed INTEGER NOT NULL DEFAULT 0 CHECK (reviewed IN (0, 1)),
-    verdict  TEXT CHECK (verdict IN ('baseline', 'benchmark', 'survey', 'evaluation', 'reject')),
-    reason   TEXT
-);
-CREATE INDEX IF NOT EXISTS paper_verdict_without_abstract_reviewed ON paper_verdict_without_abstract (reviewed);
-
-CREATE TABLE IF NOT EXISTS paper_embedding_model (
-    id    INTEGER PRIMARY KEY CHECK (id = 1),
-    model TEXT NOT NULL CHECK (length(trim(model)) > 0),
-    dim   INTEGER NOT NULL CHECK (dim > 0)
-);
-
-CREATE TABLE IF NOT EXISTS paper_screen_threshold (
-    embed_basis TEXT PRIMARY KEY CHECK (embed_basis IN ('abstract', 'title')),
-    threshold   REAL NOT NULL,
-    computed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS paper_embedding (
-    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    basis    TEXT NOT NULL CHECK (basis IN ('title', 'title_abstract')),
     vector   BLOB NOT NULL CHECK (length(vector) > 0 AND length(vector) % 4 = 0)
 );
 
-CREATE TABLE IF NOT EXISTS paper_corr (
-    dblp_key TEXT PRIMARY KEY CHECK (dblp_key LIKE 'journals/corr/%'),
-    arxiv_id TEXT NOT NULL,
-    title    TEXT NOT NULL,
-    year     INTEGER NOT NULL,
-    authors  TEXT NOT NULL CHECK (json_valid(authors) AND json_type(authors) = 'array')
-) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS paper_corr_arxiv_id ON paper_corr (arxiv_id);
-
-CREATE TABLE IF NOT EXISTS paper_arxiv_candidate (
-    paper_id       INTEGER NOT NULL REFERENCES paper_dblp (paper_id),
-    dblp_key       TEXT NOT NULL REFERENCES paper_corr (dblp_key),
-    title_sim      REAL NOT NULL CHECK (title_sim BETWEEN 0 AND 1),
-    author_jaccard REAL NOT NULL CHECK (author_jaccard BETWEEN 0 AND 1),
-    PRIMARY KEY (paper_id, dblp_key)
-) WITHOUT ROWID;
-
-CREATE TABLE IF NOT EXISTS paper_arxiv_match (
-    paper_id   INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    arxiv_id   TEXT,
-    method     TEXT NOT NULL CHECK (method IN ('exact', 'close', 'ai', 'arxiv_api', 'web', 'none')),
-    source     TEXT,
-    reason     TEXT,
-    decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CHECK ((method = 'none') = (arxiv_id IS NULL))
+CREATE TABLE IF NOT EXISTS paper_semantic_shortlist (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id)
 );
-CREATE INDEX IF NOT EXISTS paper_arxiv_match_method ON paper_arxiv_match (method);
 
-DROP VIEW IF EXISTS paper_lookup_queue;
-CREATE VIEW paper_lookup_queue AS
-SELECT s.paper_id, sc.similarity, s.miss_count
-FROM paper_abstract_status s
-JOIN paper_screen sc ON sc.paper_id = s.paper_id
-WHERE s.has_abstract = 0 AND sc.passed = 1
-ORDER BY sc.similarity DESC, s.miss_count, s.paper_id;
+CREATE TABLE IF NOT EXISTS paper_ai_shortlist (
+    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
+    category TEXT NOT NULL CHECK (category IN ('baseline', 'benchmark', 'survey', 'evaluation'))
+);
+
+DROP VIEW IF EXISTS paper_summary;
+CREATE VIEW paper_summary AS
+SELECT p.paper_id, p.dblp_key, p.venue_key, p.record_type, p.title, p.authors, p.year, p.venue, p.doi, p.ee,
+       x.arxiv_id,
+       a.abstract,
+       st.status,
+       CASE WHEN c.dblp_key IS NOT NULL THEN c.core_title ELSE j.scopus_title END AS venue_name,
+       CASE WHEN c.dblp_key IS NOT NULL THEN c.ranking ELSE j.quartile END AS venue_rank,
+       ai.category
+FROM paper_dblp p
+LEFT JOIN paper_field_arxiv x ON x.paper_id = p.paper_id
+LEFT JOIN paper_field_abstract a ON a.paper_id = p.paper_id
+LEFT JOIN paper_status st ON st.paper_id = p.paper_id
+LEFT JOIN conf_list c ON c.dblp_key = p.venue_key
+LEFT JOIN journal_list j ON j.dblp_key = p.venue_key
+LEFT JOIN paper_ai_shortlist ai ON ai.paper_id = p.paper_id;
+
+DROP VIEW IF EXISTS paper_review;
+CREATE VIEW paper_review AS
+SELECT paper_id FROM paper_field_abstract WHERE abstract IS NULL;
 
 DROP VIEW IF EXISTS paper_list;
 CREATE VIEW paper_list AS
-SELECT p.*,
-       v.verdict AS category,
-       v.reason,
-       v.decided_from,
+SELECT p.paper_id, p.dblp_key, p.venue_key, p.title, p.authors, p.year, p.venue, p.doi,
+       x.arxiv_id,
+       a.abstract,
+       ai.category,
        CASE WHEN c.dblp_key IS NOT NULL THEN c.core_title ELSE j.scopus_title END AS venue_name,
        CASE WHEN c.dblp_key IS NOT NULL THEN c.ranking ELSE j.quartile END AS venue_rank
-FROM (SELECT paper_id, reviewed, verdict, reason, 'abstract' AS decided_from FROM paper_verdict_with_abstract
-      UNION ALL
-      SELECT paper_id, reviewed, verdict, reason, 'metadata' AS decided_from FROM paper_verdict_without_abstract) v
-JOIN paper_dblp p ON p.paper_id = v.paper_id
+FROM paper_ai_shortlist ai
+JOIN paper_dblp p ON p.paper_id = ai.paper_id
+LEFT JOIN paper_field_arxiv x ON x.paper_id = p.paper_id
+LEFT JOIN paper_field_abstract a ON a.paper_id = p.paper_id
 LEFT JOIN conf_list c ON c.dblp_key = p.venue_key
-LEFT JOIN journal_list j ON j.dblp_key = p.venue_key
-WHERE v.reviewed = 1 AND v.verdict IS NOT NULL AND v.verdict <> 'reject';
+LEFT JOIN journal_list j ON j.dblp_key = p.venue_key;
 """
 
 
