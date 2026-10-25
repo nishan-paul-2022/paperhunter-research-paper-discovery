@@ -115,7 +115,8 @@ def main() -> None:
     conn = connect()
     papers = conn.execute("SELECT paper_id, title, authors, year FROM paper_summary "
                           "WHERE status = 'A' AND arxiv_id IS NULL").fetchall()
-    waiting = conn.execute("SELECT count(*) FROM paper_status WHERE status = 'A'").fetchone()[0]
+    queue = conn.execute("SELECT paper_id FROM paper_status WHERE status = 'A'").fetchall()
+    waiting = len(queue)
     if waiting == 0:
         print("  No papers at status A.\n")
         return
@@ -128,7 +129,7 @@ def main() -> None:
         corr = scan_corr(XML_PATH, first_year)
         print(f"  {len(corr):,} arXiv records loaded  |  {time.time() - started:,.0f}s")
         found = match(papers, corr)
-    save(conn, conn.execute("SELECT paper_id FROM paper_status WHERE status = 'A'").fetchall(), found)
+    save(conn, queue, found)
     exact = sum(m == "exact" for _, m in found.values())
     print(f"\n  ✓  {len(found):,} arXiv IDs set (exact {exact:,}, close {len(found) - exact:,})  |  "
           f"{waiting:,} papers moved A → B  |  {time.time() - started:,.0f}s\n")
