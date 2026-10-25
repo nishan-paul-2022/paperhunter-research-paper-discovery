@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="a-docs/logo.svg" width="400" height="200" />
+  <img src="a-docs/logo-brand.svg" width="400" height="200" />
 </p>
 
 # PaperHunter: Evidence-Grounded Research Paper Discovery and Categorization at Scale
@@ -83,3 +83,10 @@ python g-paper-hunter/f_semantic.py
 Give `g-paper-hunter/g_search.md` to the AI.
 
 **Output:** view `paper_list`
+
+---
+
+<div align="center">
+  <img src="a-docs/logo-company.svg" alt="Author Logo" width="80" height="80" />
+  <p>Built with ❤️ by <b><a href="https://kaiofficial.xyz/">KAI</a></b></p>
+</div>
