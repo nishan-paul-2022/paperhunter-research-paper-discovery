@@ -1,4 +1,8 @@
-# 🏹 PaperHunter: Evidence-Grounded Research Paper Discovery and Categorization at Scale
+<p align="center">
+  <img src="abstract/logo.svg" width="400" height="200" />
+</p>
+
+# PaperHunter: Evidence-Grounded Research Paper Discovery and Categorization at Scale
 
 All data lives in `archive/paperhunter.db`.
 

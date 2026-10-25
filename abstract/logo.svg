@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Bow and arrow</title>
+  <desc id="desc">Golden-orange bow with brown grip, pale gray string, and a diagonal arrow with a silver arrowhead and red fletching.</desc>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <!-- Bow string -->
+    <path d="M40 47 L70 397 L455 432" fill="none" stroke="#D5DDDF" stroke-width="8"/>
+    <!-- Bow limbs -->
+    <path d="M32 33 C73 68 120 83 184 87 C239 91 285 78 335 94 C379 108 404 139 416 181 C429 228 414 286 428 354 C437 402 453 452 480 480"
+      fill="none" stroke="#D88900" stroke-width="35"/>
+    <path d="M32 33 C73 68 120 83 184 87 C239 91 285 78 335 94 C379 108 404 139 416 181 C429 228 414 286 428 354 C437 402 453 452 480 480"
+      fill="none" stroke="#FFA500" stroke-width="22"/>
+    <!-- Grip wraps over the bow at its bend -->
+    <path d="M335 94 C379 108 404 139 416 181" fill="none" stroke="#57372F" stroke-width="37"/>
+    <path d="M335 94 C379 108 404 139 416 181" fill="none" stroke="#68463C" stroke-width="27"/>
+    <!-- Arrow shaft -->
+    <path d="M67 445 L466 47" fill="none" stroke="#76564C" stroke-width="13"/>
+    <path d="M67 445 L466 47" fill="none" stroke="#8C6A5D" stroke-width="5"/>
+    <!-- Arrowhead -->
+    <path d="M431 44 L493 18 L467 80 Z" fill="#C8C8C8" stroke="#A7A7A7" stroke-width="4"/>
+    <path d="M437 44 L484 25 L465 70 Z" fill="#E0E0E0"/>
+    <!-- Red fletching -->
+    <path d="M67 445 L18 449 L70 395 L119 391 L116 440 L62 494 Z" fill="#B93212" stroke="#A92A0D" stroke-width="4"/>
+    <path d="M67 445 L18 449 L70 395 L119 391 Z" fill="#C83B16"/>
+    <path d="M67 445 L116 440 L62 494 Z" fill="#B93212"/>
+  </g>
+</svg>
