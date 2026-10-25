@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import importlib.util
 import json
 import os
 import re
@@ -11,90 +10,42 @@ import urllib.parse
 from collections import Counter
 from pathlib import Path
 
-HUNTER_DIR = Path(__file__).resolve().parent
-REPO_ROOT = HUNTER_DIR.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 XML_PATH = REPO_ROOT / "archive" / "dblp.xml"
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
-SCHEMA_PATH = REPO_ROOT / "circumstance" / "b_schema.py"
 BATCH_SIZE = 5_000
 PAPER_TAGS = ("article", "inproceedings")
 RECORD_TAGS = PAPER_TAGS + ("proceedings", "book", "incollection", "phdthesis", "mastersthesis",
                             "www", "person", "data")
 DOI_RE = re.compile(r"^https?://(?:dx\.)?doi\.org/(10\.\S+)$", re.I)
-ARXIV_RE = re.compile(
-    r"^https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/([a-z.-]+/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?/?$", re.I)
-ARXIV_DOI_RE = re.compile(r"^10\.48550/arxiv\.(.+?)(?:v\d+)?$", re.I)
-COLUMNS = ("dblp_key", "venue_key", "record_type", "title", "authors", "year", "venue", "volume", "number",
-           "pages", "doi", "arxiv_id", "ee", "url", "crossref", "mdate")
-KEEP_IF_NULL = {"arxiv_id"}
-NEW_VALUE = {c: (f"coalesce(excluded.{c}, paper_dblp.{c})" if c in KEEP_IF_NULL else f"excluded.{c}") for c in COLUMNS}
+COLUMNS = ("dblp_key", "venue_key", "record_type", "title", "authors", "year", "venue", "doi", "ee")
 UPSERT = (
     f"INSERT INTO paper_dblp ({', '.join(COLUMNS)}) VALUES ({', '.join('?' * len(COLUMNS))}) "
-    f"ON CONFLICT (dblp_key) DO UPDATE SET {', '.join(f'{c} = {NEW_VALUE[c]}' for c in COLUMNS[1:])} "
+    f"ON CONFLICT (dblp_key) DO UPDATE SET {', '.join(f'{c} = excluded.{c}' for c in COLUMNS[1:])} "
     f"WHERE ({', '.join(f'paper_dblp.{c}' for c in COLUMNS[1:])}) "
-    f"IS NOT ({', '.join(NEW_VALUE[c] for c in COLUMNS[1:])})"
+    f"IS NOT ({', '.join(f'excluded.{c}' for c in COLUMNS[1:])})"
 )
-
-OLD_OBJECTS = (
-    "paper_review", "paper_list", "paper_summary",
-    "paper_candidate_ai", "paper_openalex", "paper_s2", "paper_dblp",
-)
-NEW_SCHEMA_MARKER = "paper_abstract_status"
-
-
-def paper_schema() -> str:
-    spec = importlib.util.spec_from_file_location("b_schema", SCHEMA_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.PAPER_SCHEMA
+NEW_PAPER_ROWS = [
+    f"INSERT OR IGNORE INTO {table} (paper_id) SELECT paper_id FROM paper_dblp WHERE dblp_key = ?"
+    for table in ("paper_status", "paper_field_arxiv", "paper_field_abstract")
+]
 
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
         sys.exit(f"Database not found: {path}  (run circumstance/b_schema.py first)")
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=120)
     conn.execute("PRAGMA foreign_keys = ON")
+    if conn.execute("SELECT count(*) FROM sqlite_master WHERE name = 'paper_status'").fetchone()[0] == 0:
+        sys.exit("paper_status not found (run circumstance/b_schema.py first)")
     return conn
-
-
-def object_type(conn: sqlite3.Connection, name: str) -> str | None:
-    row = conn.execute("SELECT type FROM sqlite_master WHERE name = ?", (name,)).fetchone()
-    return row[0] if row else None
-
-
-def prepare_schema(conn: sqlite3.Connection) -> None:
-    print("━" * 70)
-    print("  Phase 1 – Schema")
-    print("━" * 70)
-    for view in ("conf_list", "journal_list"):
-        if conn.execute(f"SELECT count(*) FROM {view}").fetchone()[0] == 0:
-            sys.exit(f"{view} is empty (pending venue review?). Finish it before extracting papers.")
-    statements = []
-    if object_type(conn, NEW_SCHEMA_MARKER) is None:
-        for name in OLD_OBJECTS:
-            kind = object_type(conn, name)
-            if kind in ("table", "view"):
-                statements.append(f"DROP {kind.upper()} {name}")
-    dropped = len(statements)
-    statements += [s.strip() for s in paper_schema().split(";") if s.strip()]
-    try:
-        conn.execute("BEGIN")
-        for statement in statements:
-            conn.execute(statement)
-        conn.commit()
-    except sqlite3.Error:
-        conn.rollback()
-        raise
-    tables = conn.execute(
-        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'paper%'").fetchone()[0]
-    views = conn.execute(
-        "SELECT count(*) FROM sqlite_master WHERE type = 'view' AND name LIKE 'paper%'").fetchone()[0]
-    print(f"  ✓  {dropped} old objects dropped  |  {tables} paper tables, {views} paper views present\n")
 
 
 def venue_keys(conn: sqlite3.Connection) -> tuple[set[str], set[str]]:
     conf = {k for (k,) in conn.execute("SELECT dblp_key FROM conf_list")}
     journal = {k for (k,) in conn.execute("SELECT dblp_key FROM journal_list")}
+    if not conf or not journal:
+        sys.exit("conf_list or journal_list is empty (pending venue review?). Finish it before extracting papers.")
     return conf, journal
 
 
@@ -123,31 +74,20 @@ def text(el, tag: str) -> str | None:
     return value or None
 
 
-def ids_from_ee(ee: list[str]) -> tuple[str | None, str | None]:
-    doi = arxiv_id = None
+def doi_from_ee(ee: list[str]) -> str | None:
     for link in ee:
         m = DOI_RE.match(link)
         if m:
-            value = urllib.parse.unquote(m.group(1)).lower()
-            a = ARXIV_DOI_RE.match(value)
-            if a:
-                arxiv_id = arxiv_id or a.group(1)
-            doi = doi or value
-            continue
-        m = ARXIV_RE.match(link)
-        if m:
-            arxiv_id = arxiv_id or m.group(1).lower()
-    return doi, arxiv_id
+            return urllib.parse.unquote(m.group(1)).lower()
+    return None
 
 
 def record_row(el, venue_key: str, year: int) -> tuple:
     ee = [v for v in ("".join(e.itertext()).strip() for e in el.findall("ee")) if v]
-    doi, arxiv_id = ids_from_ee(ee)
     authors = [" ".join("".join(a.itertext()).split()) for a in el.findall("author")]
     venue = text(el, "booktitle" if el.tag == "inproceedings" else "journal")
     return (el.get("key"), venue_key, el.tag, text(el, "title"), json.dumps(authors, ensure_ascii=False), year,
-            venue, text(el, "volume"), text(el, "number"), text(el, "pages"), doi, arxiv_id,
-            json.dumps(ee, ensure_ascii=False), text(el, "url"), text(el, "crossref"), el.get("mdate"))
+            venue, doi_from_ee(ee), json.dumps(ee, ensure_ascii=False))
 
 
 def write_batch(conn: sqlite3.Connection, rows: list[tuple]) -> tuple[int, int]:
@@ -156,34 +96,28 @@ def write_batch(conn: sqlite3.Connection, rows: list[tuple]) -> tuple[int, int]:
         conn.executemany(UPSERT, rows)
         changed = conn.total_changes - before
         before = conn.total_changes
-        conn.executemany(
-            "INSERT OR IGNORE INTO paper_abstract_status (paper_id) SELECT paper_id FROM paper_dblp WHERE dblp_key = ?",
-            [(r[0],) for r in rows],
-        )
+        conn.executemany(NEW_PAPER_ROWS[0], [(r[0],) for r in rows])
         new = conn.total_changes - before
+        for sql in NEW_PAPER_ROWS[1:]:
+            conn.executemany(sql, [(r[0],) for r in rows])
     return new, changed - new
 
 
 def extract(conn: sqlite3.Connection, xml_path: Path, from_year: int, to_year: int) -> None:
     from lxml import etree
 
-    print("━" * 70)
-    print(f"  Phase 2 – DBLP papers {from_year}–{to_year} → paper_dblp, paper_abstract_status")
-    print("━" * 70)
     conf, journal = venue_keys(conn)
     keys = conf | journal
     print(f"  {len(conf):,} conference keys + {len(journal):,} journal keys  |  "
           f"scanning {xml_path.name} ({xml_path.stat().st_size // 1_000_000:,} MB)\n")
     size = os.path.getsize(xml_path)
     started = time.time()
-    seen = 0
+    seen = kept = inserted = updated = 0
     skipped: Counter = Counter()
-    kept = inserted = updated = 0
     rows: list[tuple] = []
     with open(xml_path, "rb") as f:
-        ctx = etree.iterparse(f, events=("end",), tag=RECORD_TAGS,
-                              load_dtd=True, resolve_entities=True, huge_tree=True)
-        for _, el in ctx:
+        for _, el in etree.iterparse(f, events=("end",), tag=RECORD_TAGS,
+                                     load_dtd=True, resolve_entities=True, huge_tree=True):
             seen += 1
             year_text = (el.findtext("year") or "").strip()
             venue_key = match_venue(el, keys) if el.tag in PAPER_TAGS else None
@@ -211,10 +145,9 @@ def extract(conn: sqlite3.Connection, xml_path: Path, from_year: int, to_year: i
         new, changed = write_batch(conn, rows)
         inserted, updated = inserted + new, updated + changed
     print(f"  100%  |  records scanned: {seen:,}  |  kept: {kept:,}  |  {time.time() - started:,.0f}s")
-    print(f"\n  ✓  {inserted:,} inserted  |  {updated:,} updated  |  {kept - inserted - updated:,} unchanged  |  "
-          f"skipped: {skipped['type']:,} not article/inproceedings, "
-          f"{skipped['venue']:,} unlisted venue, {skipped['year']:,} out of range, "
-          f"{skipped['withdrawn']:,} withdrawn\n")
+    print(f"\n  ✓  {inserted:,} new (status A)  |  {updated:,} updated  |  {kept - inserted - updated:,} unchanged  |  "
+          f"skipped: {skipped['type']:,} not article/inproceedings, {skipped['venue']:,} unlisted venue, "
+          f"{skipped['year']:,} out of range, {skipped['withdrawn']:,} withdrawn\n")
     report(conn, conf, from_year, to_year)
 
 
@@ -237,29 +170,23 @@ def report(conn: sqlite3.Connection, conf: set[str], from_year: int, to_year: in
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract papers from DBLP into paper_dblp.")
-    parser.add_argument("--from-year", type=int, help="first publication year to keep (required)")
-    parser.add_argument("--to-year", type=int, help="last publication year to keep (required)")
-    parser.add_argument("--schema-only", action="store_true", help="create the schema and stop")
+    parser.add_argument("--from-year", type=int, required=True, help="first publication year to keep")
+    parser.add_argument("--to-year", type=int, required=True, help="last publication year to keep")
     args = parser.parse_args()
-    if not args.schema_only:
-        if args.from_year is None or args.to_year is None:
-            parser.error("the following arguments are required: --from-year, --to-year")
-        if args.from_year > args.to_year:
-            parser.error("--from-year must not be after --to-year")
-        if not XML_PATH.exists():
-            sys.exit(f"dblp.xml not found: {XML_PATH}")
+    if args.from_year > args.to_year:
+        parser.error("--from-year must not be after --to-year")
+    if not XML_PATH.exists():
+        sys.exit(f"dblp.xml not found: {XML_PATH}")
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Paper Extractor                              ║")
+    print("║         paperhunter  ·  A · Paper Extractor                          ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {DB_PATH}\n")
     conn = connect()
-    prepare_schema(conn)
-    if not args.schema_only:
-        extract(conn, XML_PATH, args.from_year, args.to_year)
+    extract(conn, XML_PATH, args.from_year, args.to_year)
     conn.close()
     print("━" * 70)
-    print("  Done.  → Run b_arxiv.py next" if not args.schema_only else "  Done (schema only).")
+    print("  Done.  → Run b_arxiv.py next")
     print("━" * 70)
     print()
 
