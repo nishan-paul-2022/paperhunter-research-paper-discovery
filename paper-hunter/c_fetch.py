@@ -10,45 +10,49 @@ import threading
 import time
 import unicodedata
 import urllib.parse
+import xml.etree.ElementTree as ET
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
 import requests
 
-HUNTER_DIR = Path(__file__).resolve().parent
-REPO_ROOT = HUNTER_DIR.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = REPO_ROOT / "archive" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
-AGENT = "paperhunter-paper-hunter/1.0"
+AGENT = "paperhunter/1.0"
+TIMEOUT = 60
+TRANSIENT_STATUS = {429, 500, 502, 503, 504}
+ROUND_PAPERS = 2_000
+
+ARXIV = "https://export.arxiv.org/api/query"
+ARXIV_BATCH = 100
+ARXIV_INTERVAL = 3.1
 
 OPENALEX = "https://api.openalex.org"
-OPENALEX_BATCH = 50
 OPENALEX_RPS = 10
-OPENALEX_SELECT = "id,doi,display_name,publication_year,type,keywords,primary_topic,abstract_inverted_index"
-OPENALEX_TITLE_SELECT = OPENALEX_SELECT + ",authorships"
+OPENALEX_WORKERS = 8
+OPENALEX_URL_LIMIT = 3_800
+OPENALEX_SELECT = "id,doi,ids,display_name,publication_year,abstract_inverted_index,locations,authorships"
 OPENALEX_TITLE_RESULTS = 5
-OPENALEX_SEARCH_CREDITS = 10
+OPENALEX_TITLE_CREDITS = 10
 
 S2 = "https://api.semanticscholar.org/graph/v1"
 S2_BATCH = 500
-S2_RPS = 1.0
-S2_FIELDS = "paperId,externalIds,title,year,authors,venue,publicationTypes,s2FieldsOfStudy,abstract,tldr"
-
-TIMEOUT = 60
-SECRET_PARAMS = {"api_key", "apikey", "key", "token"}
-TRANSIENT_STATUS = {429, 500, 502, 503, 504}
-STEPS = ("doi", "arxiv", "title")
-ROUND_ROWS = 5_000
-POLL_SECONDS = 15
+S2_INTERVAL = 1.0
+S2_FIELDS = "title,year,authors,externalIds,abstract"
 
 TITLE_SIMILARITY = 0.95
 YEAR_TOLERANCE = 1
+MIN_ABSTRACT_WORDS = 10
 PLACEHOLDER_RE = re.compile(
     r"^(no abstract( is)? available|abstract not available|not available|n/?a|none|"
     r"this article has no abstract|no abstract|abstract|\[no abstract available\])\.?$", re.I)
-MIN_ABSTRACT_WORDS = 10
+ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
+ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
+ARXIV_DOI_RE = re.compile(r"10\.48550/arxiv\.(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})", re.I)
 
 
 def load_env() -> None:
@@ -61,21 +65,10 @@ def load_env() -> None:
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run paper-hunter/a_extract.py first)")
-    conn = sqlite3.connect(path, timeout=120, isolation_level="IMMEDIATE", check_same_thread=False)
+        sys.exit(f"Database not found: {path}  (run circumstance/b_schema.py first)")
+    conn = sqlite3.connect(path, timeout=120)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
-
-
-def redact(url: str, secrets: list[str]) -> str:
-    parts = urllib.parse.urlsplit(url)
-    query = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
-             if k.lower() not in SECRET_PARAMS]
-    clean = urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query, safe=":|/,")))
-    for secret in secrets:
-        if secret and secret in clean:
-            clean = clean.replace(secret, "REDACTED")
-    return clean
 
 
 class TransientError(Exception):
@@ -87,35 +80,34 @@ class QuotaExhausted(Exception):
 
 
 class RateLimiter:
-    def __init__(self, per_second: float):
-        self.interval = 1.0 / per_second
+    def __init__(self, interval: float):
+        self.interval = interval
         self.next_at = 0.0
+        self.lock = threading.Lock()
 
     def wait(self) -> None:
-        now = time.monotonic()
-        if now < self.next_at:
-            time.sleep(self.next_at - now)
-        self.next_at = max(time.monotonic(), self.next_at) + self.interval
+        with self.lock:
+            now = time.monotonic()
+            start = max(now, self.next_at)
+            self.next_at = start + self.interval
+        if start > now:
+            time.sleep(start - now)
 
 
 class Http:
-    def __init__(self, limiter: RateLimiter, session: requests.Session | None = None,
-                 attempts: int = 6, first_delay: float = 1.0, max_delay: float = 60.0):
-        self.limiter = limiter
-        self.session = session or requests.Session()
-        self.session.headers["User-Agent"] = AGENT + (
-            f" (mailto:{os.environ['CONTACT_MAILTO']})" if os.environ.get("CONTACT_MAILTO") else "")
+    def __init__(self, interval: float, attempts: int = 6, first_delay: float = 2.0, max_delay: float = 120.0):
+        self.limiter = RateLimiter(interval)
+        self.session = requests.Session()
+        mailto = os.environ.get("CONTACT_MAILTO")
+        self.session.headers["User-Agent"] = AGENT + (f" (mailto:{mailto})" if mailto else "")
         self.attempts, self.first_delay, self.max_delay = attempts, first_delay, max_delay
         self.calls = 0
-        self.retries = 0
-        self.sent_at: list[float] = []
 
     def request(self, method: str, url: str, on_429=None, **kwargs) -> requests.Response:
         delay = self.first_delay
         for attempt in range(1, self.attempts + 1):
             self.limiter.wait()
             self.calls += 1
-            self.sent_at.append(time.monotonic())
             try:
                 r = self.session.request(method, url, timeout=TIMEOUT, **kwargs)
             except (requests.ConnectionError, requests.Timeout) as e:
@@ -131,35 +123,28 @@ class Http:
                     delay = max(delay, float(after))
             if attempt == self.attempts:
                 raise TransientError(f"{reason} after {attempt} attempts")
-            self.retries += 1
             time.sleep(min(delay, self.max_delay))
             delay *= 2
-        raise TransientError(f"no answer after {self.attempts} attempts")
-
-    def observed_rate(self) -> tuple[float, int]:
-        if len(self.sent_at) < 2:
-            return 0.0, len(self.sent_at)
-        span = self.sent_at[-1] - self.sent_at[0]
-        peak, j = 0, 0
-        for i, t in enumerate(self.sent_at):
-            while self.sent_at[j] <= t - 1.0:
-                j += 1
-            peak = max(peak, i - j + 1)
-        return (len(self.sent_at) - 1) / span if span else 0.0, peak
+        raise TransientError("no answer")
 
 
-def rebuild_inverted_index(inverted: dict | None) -> str:
-    if not inverted:
-        return ""
-    positions = [(i, word) for word, idx in inverted.items() for i in idx]
-    return " ".join(word for _, word in sorted(positions))
+@dataclass
+class Paper:
+    paper_id: int
+    doi: str | None
+    arxiv_id: str | None
+    title: str | None
+    authors: list[str]
+    year: int
+    abstract: str | None = None
+    new_arxiv: str | None = None
+    pending_arxiv: str | None = None
+    failed: bool = False
 
 
 def clean_text(text: str | None) -> str:
-    text = re.sub(r"<[^>]+>", " ", text or "")
-    text = html.unescape(text)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = " ".join(text.split())
+    text = html.unescape(re.sub(r"<[^>]+>", " ", text or ""))
+    text = " ".join(re.sub(r"<[^>]+>", " ", text).split())
     return re.sub(r"^(abstract|summary)\s*[:.\-–—]?\s+", "", text, flags=re.I)
 
 
@@ -167,12 +152,11 @@ def normalize_title(title: str | None) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", (title or "").lower()).split())
 
 
-def valid_abstract(text: str, title: str | None) -> bool:
-    if not text or PLACEHOLDER_RE.match(text):
-        return False
-    if normalize_title(text) == normalize_title(title):
-        return False
-    return len(text.split()) >= MIN_ABSTRACT_WORDS
+def valid_abstract(text: str, title: str | None) -> str | None:
+    text = clean_text(text)
+    if not text or PLACEHOLDER_RE.match(text) or normalize_title(text) == normalize_title(title):
+        return None
+    return text if len(text.split()) >= MIN_ABSTRACT_WORDS else None
 
 
 def surname(name: str) -> str:
@@ -184,7 +168,7 @@ def surname(name: str) -> str:
     return tokens[-1] if tokens else ""
 
 
-def title_matches(paper: "Paper", title: str | None, year, authors: list[str]) -> bool:
+def title_matches(paper: Paper, title: str | None, year, authors: list[str]) -> bool:
     if SequenceMatcher(None, normalize_title(paper.title), normalize_title(title)).ratio() < TITLE_SIMILARITY:
         return False
     if not isinstance(year, int) or abs(year - paper.year) > YEAR_TOLERANCE:
@@ -193,137 +177,40 @@ def title_matches(paper: "Paper", title: str | None, year, authors: list[str]) -
     return bool(ours & ({surname(a) for a in authors} - {""}))
 
 
-@dataclass
-class Paper:
-    paper_id: int
-    doi: str | None
-    arxiv_id: str | None
-    title: str | None
-    authors: list[str]
-    year: int
+def canonical_arxiv(value: str | None) -> str | None:
+    m = ARXIV_ID_RE.fullmatch((value or "").strip().removeprefix("arXiv:").removeprefix("arxiv:"))
+    return m.group(1).lower() if m else None
 
 
-@dataclass
-class Outcome:
-    paper_id: int
-    source: str
-    lookup_by: str
-    request: str
-    response: str
-    abstract: str | None
+class ArXiv:
+    def __init__(self):
+        self.http = Http(ARXIV_INTERVAL)
 
-
-def logged(source: str, by: str) -> str:
-    return (f"(EXISTS (SELECT 1 FROM paper_abstract_hit h WHERE h.paper_id = p.paper_id "
-            f"AND h.source = '{source}' AND h.lookup_by = '{by}') "
-            f"OR EXISTS (SELECT 1 FROM paper_abstract_miss m WHERE m.paper_id = p.paper_id "
-            f"AND m.source = '{source}' AND m.lookup_by = '{by}'))")
-
-
-def found(source: str, by: str) -> str:
-    return (f"EXISTS (SELECT 1 FROM paper_abstract_miss f WHERE f.paper_id = p.paper_id "
-            f"AND f.source = '{source}' AND f.lookup_by = '{by}' AND f.response <> '')")
-
-
-def todo(source: str, step: str) -> str:
-    doi_done = f"(p.doi IS NULL OR {logged(source, 'doi')})"
-    if step == "doi":
-        return f"(p.doi IS NOT NULL AND NOT {logged(source, 'doi')})"
-    if step == "arxiv":
-        return (f"(p.arxiv_id IS NOT NULL AND NOT {logged(source, 'arxiv')} AND {doi_done} "
-                f"AND NOT {found(source, 'doi')})")
-    return (f"(p.title IS NOT NULL AND NOT {logged(source, 'title')} AND {doi_done} "
-            f"AND (p.arxiv_id IS NULL OR {logged(source, 'arxiv')} OR {found(source, 'doi')}) "
-            f"AND NOT {found(source, 'doi')} AND NOT {found(source, 'arxiv')})")
-
-
-def finished(source: str) -> str:
-    return " AND ".join(f"NOT {todo(source, step)}" for step in STEPS)
-
-
-def pending(conn: sqlite3.Connection, source: str, step: str, scope: list[int] | None,
-            after: str | None, exclude: set[int]) -> list[Paper]:
-    sql = (f"SELECT p.paper_id, p.doi, p.arxiv_id, p.title, p.authors, p.year FROM paper_dblp p "
-           f"JOIN paper_abstract_status s ON s.paper_id = p.paper_id "
-           f"WHERE s.has_abstract = 0 AND {todo(source, step)}")
-    args: list = []
-    if after:
-        sql += f" AND {finished(after)}"
-    if scope is not None:
-        sql += " AND p.paper_id IN (SELECT value FROM json_each(?))"
-        args.append(json.dumps(scope))
-    if exclude:
-        sql += " AND p.paper_id NOT IN (SELECT value FROM json_each(?))"
-        args.append(json.dumps(sorted(exclude)))
-    sql += f" ORDER BY p.paper_id LIMIT {ROUND_ROWS}"
-    return [Paper(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5]) for r in conn.execute(sql, args)]
-
-
-def record(conn: sqlite3.Connection, outcomes: list[Outcome]) -> None:
-    with conn:
-        for o in outcomes:
-            table = "paper_abstract_hit" if o.abstract else "paper_abstract_miss"
-            conn.execute(
-                f"INSERT INTO {table} (paper_id, source, lookup_by, request, response) VALUES (?, ?, ?, ?, ?)",
-                (o.paper_id, o.source, o.lookup_by, o.request, o.response),
-            )
-            if o.abstract:
-                stored = conn.execute(
-                    "INSERT OR IGNORE INTO paper_abstract (paper_id, abstract, source) VALUES (?, ?, ?)",
-                    (o.paper_id, o.abstract, o.source),
-                ).rowcount
-                conn.execute(
-                    "UPDATE paper_abstract_status SET hit_count = hit_count + 1, "
-                    "has_abstract = CASE WHEN ? THEN 1 ELSE has_abstract END WHERE paper_id = ?",
-                    (stored, o.paper_id),
-                )
-            else:
-                conn.execute("UPDATE paper_abstract_status SET miss_count = miss_count + 1 WHERE paper_id = ?",
-                             (o.paper_id,))
-
-
-class Source:
-    name = ""
-    batch = 1
-
-    def abstract_of(self, work: dict) -> str:
-        raise NotImplementedError
-
-    def match_fields(self, work: dict) -> tuple[str | None, object, list[str]]:
-        raise NotImplementedError
-
-    def outcomes(self, papers: list[Paper], works: list[dict], step: str, request: str) -> list[Outcome]:
-        out = []
-        for paper in papers:
-            candidates = works
-            if step == "title":
-                candidates = [w for w in works if title_matches(paper, *self.match_fields(w))]
-            chosen, abstract = None, None
-            for work in candidates:
-                text = clean_text(self.abstract_of(work))
-                if valid_abstract(text, paper.title):
-                    chosen, abstract = work, text
-                    break
-                chosen = chosen or work
-            chosen = chosen if chosen is not None else (works[0] if works else None)
-            response = json.dumps(chosen, ensure_ascii=False) if chosen is not None else ""
-            out.append(Outcome(paper.paper_id, self.name, step, request, response, abstract))
+    def fetch(self, ids: list[str]) -> dict[str, str]:
+        out = {}
+        for i in range(0, len(ids), ARXIV_BATCH):
+            out.update(self.fetch_chunk(ids[i:i + ARXIV_BATCH]))
         return out
 
-    def lookup(self, step: str, papers: list[Paper]) -> list[Outcome]:
-        if step == "title":
-            return [o for paper in papers for o in self.lookup_title(paper)]
-        key = (lambda p: p.doi) if step == "doi" else (lambda p: p.arxiv_id)
-        groups: dict[str, list[Paper]] = {}
-        for paper in papers:
-            groups.setdefault(key(paper), []).append(paper)
-        return self.lookup_ids(step, groups)
-
-    def lookup_ids(self, step: str, groups: dict[str, list[Paper]]) -> list[Outcome]:
-        raise NotImplementedError
-
-    def lookup_title(self, paper: Paper) -> list[Outcome]:
-        raise NotImplementedError
+    def fetch_chunk(self, ids: list[str]) -> dict[str, str]:
+        r = self.http.request("GET", ARXIV, params={"id_list": ",".join(ids), "max_results": len(ids)})
+        if r.status_code == 400:
+            if len(ids) == 1:
+                return {}
+            out = {}
+            for one in ids:
+                out.update(self.fetch_chunk([one]))
+            return out
+        if r.status_code != 200:
+            raise TransientError(f"arXiv HTTP {r.status_code}")
+        ns = {"a": "http://www.w3.org/2005/Atom"}
+        out = {}
+        for entry in ET.fromstring(r.text).findall("a:entry", ns):
+            m = ARXIV_URL_RE.search(entry.findtext("a:id", "", ns))
+            summary = entry.findtext("a:summary", "", ns)
+            if m and summary:
+                out[m.group(1).lower()] = summary
+        return out
 
 
 class _Bearer(requests.auth.AuthBase):
@@ -335,89 +222,104 @@ class _Bearer(requests.auth.AuthBase):
         return r
 
 
-class OpenAlex(Source):
-    name = "openalex"
-    batch = OPENALEX_BATCH
-
-    def __init__(self, session: requests.Session | None = None):
+class OpenAlex:
+    def __init__(self):
         numbered = sorted((int(m.group(1)), v.strip()) for k, v in os.environ.items()
                           if (m := re.fullmatch(r"OPENALEX_API_KEY_(\d+)", k)) and v.strip())
         self.keys = [v for _, v in numbered]
         if not self.keys:
             sys.exit("No OPENALEX_API_KEY_<n> in .env")
         self.key_no = 0
-        self.http = Http(RateLimiter(OPENALEX_RPS), session)
-        self.remaining: str | None = None
-        self.needed = 1
+        self.lock = threading.Lock()
+        self.http = Http(1.0 / OPENALEX_RPS)
 
-    def _on_429(self, r: requests.Response) -> bool:
-        left = r.headers.get("X-RateLimit-Remaining", "").strip()
-        if not left.lstrip("-").isdigit() or int(left) >= self.needed:
-            return False
-        self.key_no += 1
-        if self.key_no >= len(self.keys):
-            raise QuotaExhausted("every OpenAlex key has used up its daily budget")
-        print(f"\n  [openalex] key {self.key_no} used up its daily budget; switching to key {self.key_no + 1}")
-        return True
+    def _on_429(self, needed: int):
+        def handler(r: requests.Response) -> bool:
+            left = r.headers.get("X-RateLimit-Remaining", "").strip()
+            if not left.lstrip("-").isdigit() or int(left) >= needed:
+                return False
+            with self.lock:
+                self.key_no += 1
+                if self.key_no >= len(self.keys):
+                    raise QuotaExhausted("every OpenAlex key has used up its daily budget")
+                print(f"\n  [openalex] switching to key {self.key_no + 1}", flush=True)
+            return True
+        return handler
 
-    def get(self, path: str, params: dict, needed: int = 1) -> tuple[requests.Response, str]:
-        url = f"{OPENALEX}{path}?{urllib.parse.urlencode(params, safe=':|/,')}"
-        self.needed = needed
-        r = self.http.request("GET", url, on_429=self._on_429, auth=_Bearer(lambda: self.keys[self.key_no]))
+    def get(self, params: dict, needed: int = 1) -> dict:
+        url = f"{OPENALEX}/works?{urllib.parse.urlencode(params, safe=':|/,')}"
+        r = self.http.request("GET", url, on_429=self._on_429(needed),
+                              auth=_Bearer(lambda: self.keys[min(self.key_no, len(self.keys) - 1)]))
         if r.status_code in (401, 403):
             raise SystemExit(f"OpenAlex rejected key {self.key_no + 1} (HTTP {r.status_code}): {r.text[:200]}")
-        self.remaining = r.headers.get("X-RateLimit-Remaining", self.remaining)
-        return r, redact(url, self.keys)
+        if r.status_code != 200:
+            raise TransientError(f"OpenAlex HTTP {r.status_code}")
+        return r.json()
 
-    def abstract_of(self, work: dict) -> str:
-        return rebuild_inverted_index(work.get("abstract_inverted_index"))
+    @staticmethod
+    def abstract(work: dict) -> str:
+        inverted = work.get("abstract_inverted_index") or {}
+        return " ".join(w for _, w in sorted((i, w) for w, idx in inverted.items() for i in idx))
 
-    def match_fields(self, work: dict):
+    @staticmethod
+    def arxiv_id(work: dict) -> str | None:
+        for doi in ((work.get("ids") or {}).get("doi"), work.get("doi")):
+            m = ARXIV_DOI_RE.search(doi or "")
+            if m:
+                return m.group(1).lower()
+        for loc in work.get("locations") or []:
+            for url in (loc.get("landing_page_url"), loc.get("pdf_url")):
+                m = ARXIV_URL_RE.search(url or "")
+                if m:
+                    return m.group(1).lower()
+        return None
+
+    @staticmethod
+    def match_fields(work: dict):
         names = [(a.get("author") or {}).get("display_name") or a.get("raw_author_name") or ""
                  for a in work.get("authorships") or []]
         return work.get("display_name"), work.get("publication_year"), names
 
-    def lookup_ids(self, step: str, groups: dict[str, list[Paper]]) -> list[Outcome]:
-        doi_of = (lambda k: k) if step == "doi" else (lambda k: f"10.48550/arxiv.{k}")
-        wanted = {doi_of(k).lower(): k for k in groups}
-        works: dict[str, list[dict]] = {}
-        page, seen, request_url = 1, 0, ""
-        while True:
-            r, url = self.get("/works", {"filter": "doi:" + "|".join(wanted), "per_page": 100,
-                                         "page": page, "select": OPENALEX_SELECT})
-            request_url = request_url or url
+    def doi_chunks(self, papers: list[Paper]) -> list[list[Paper]]:
+        chunks, current, length = [], [], 0
+        for p in papers:
+            if any(c in p.doi for c in ",|"):
+                chunks.append([p])
+                continue
+            size = len(urllib.parse.quote(p.doi, safe="/:")) + 1
+            if current and (len(current) >= 100 or length + size > OPENALEX_URL_LIMIT):
+                chunks.append(current)
+                current, length = [], 0
+            current.append(p)
+            length += size
+        return chunks + [current] if current else chunks
+
+    def by_doi(self, papers: list[Paper]) -> dict[int, dict | None]:
+        if len(papers) == 1 and any(c in papers[0].doi for c in ",|"):
+            url = f"{OPENALEX}/works/https://doi.org/{urllib.parse.quote(papers[0].doi, safe='/')}"
+            r = self.http.request("GET", url, params={"select": OPENALEX_SELECT}, on_429=self._on_429(1),
+                                  auth=_Bearer(lambda: self.keys[min(self.key_no, len(self.keys) - 1)]))
+            if r.status_code == 404:
+                return {papers[0].paper_id: None}
             if r.status_code != 200:
-                return [o for k, group in groups.items() for o in self.lookup_single(step, doi_of(k), group)]
-            data = r.json()
-            for work in data.get("results", []):
-                doi = (work.get("doi") or "").removeprefix("https://doi.org/").lower()
-                if doi in wanted:
-                    works.setdefault(wanted[doi], []).append(work)
-            seen += len(data.get("results", []))
-            if seen >= data.get("meta", {}).get("count", 0) or not data.get("results"):
-                break
-            page += 1
-        return [o for k, group in groups.items() for o in self.outcomes(group, works.get(k, []), step, request_url)]
+                raise TransientError(f"OpenAlex HTTP {r.status_code}")
+            return {papers[0].paper_id: r.json()}
+        data = self.get({"filter": "doi:" + "|".join(p.doi for p in papers), "per_page": 100,
+                         "select": OPENALEX_SELECT})
+        works = {(w.get("doi") or "").removeprefix("https://doi.org/").lower(): w for w in data.get("results", [])}
+        return {p.paper_id: works.get(p.doi.lower()) for p in papers}
 
-    def lookup_single(self, step: str, doi: str, group: list[Paper]) -> list[Outcome]:
-        r, url = self.get(f"/works/doi:{urllib.parse.quote(doi, safe='/')}", {"select": OPENALEX_SELECT})
-        return self.outcomes(group, [r.json()] if r.status_code == 200 else [], step, url)
-
-    def lookup_title(self, paper: Paper) -> list[Outcome]:
-        params = {"search.title": normalize_title(paper.title), "per_page": OPENALEX_TITLE_RESULTS,
-                  "select": OPENALEX_TITLE_SELECT,
-                  "filter": f"publication_year:{paper.year - YEAR_TOLERANCE}-{paper.year + YEAR_TOLERANCE}"}
-        r, url = self.get("/works", params, needed=OPENALEX_SEARCH_CREDITS)
-        works = r.json().get("results", []) if r.status_code == 200 else []
-        return self.outcomes([paper], works, "title", url)
+    def by_title(self, paper: Paper) -> dict | None:
+        data = self.get({"search.title": normalize_title(paper.title), "per_page": OPENALEX_TITLE_RESULTS,
+                         "select": OPENALEX_SELECT,
+                         "filter": f"publication_year:{paper.year - YEAR_TOLERANCE}-{paper.year + YEAR_TOLERANCE}"},
+                        needed=OPENALEX_TITLE_CREDITS)
+        return next((w for w in data.get("results", []) if title_matches(paper, *self.match_fields(w))), None)
 
 
-class SemanticScholar(Source):
-    name = "s2"
-    batch = S2_BATCH
-
-    def __init__(self, session: requests.Session | None = None):
-        self.http = Http(RateLimiter(S2_RPS), session, attempts=8, first_delay=5.0, max_delay=120.0)
+class SemanticScholar:
+    def __init__(self):
+        self.http = Http(S2_INTERVAL, attempts=8, first_delay=5.0)
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
         r = self.http.request(method, url, **kwargs)
@@ -425,150 +327,169 @@ class SemanticScholar(Source):
             raise SystemExit(f"Semantic Scholar refused the request (HTTP {r.status_code}): {r.text[:200]}")
         return r
 
-    def abstract_of(self, work: dict) -> str:
+    @staticmethod
+    def abstract(work: dict) -> str:
         return work.get("abstract") or ""
 
-    def match_fields(self, work: dict):
-        return work.get("title"), work.get("year"), [a.get("name") or "" for a in work.get("authors") or []]
+    @staticmethod
+    def arxiv_id(work: dict) -> str | None:
+        return canonical_arxiv((work.get("externalIds") or {}).get("ArXiv"))
 
-    def lookup_ids(self, step: str, groups: dict[str, list[Paper]]) -> list[Outcome]:
-        prefix = "DOI:" if step == "doi" else "ARXIV:"
-        keys = list(groups)
-        url = f"{S2}/paper/batch?{urllib.parse.urlencode({'fields': S2_FIELDS}, safe=',')}"
-        r = self.request("POST", url, json={"ids": [prefix + k for k in keys]})
+    def by_doi(self, papers: list[Paper]) -> dict[int, dict | None]:
+        r = self.request("POST", f"{S2}/paper/batch", params={"fields": S2_FIELDS},
+                         json={"ids": [f"DOI:{p.doi}" for p in papers]})
         if r.status_code != 200:
-            return [o for k in keys for o in self.lookup_single(step, prefix + k, groups[k])]
-        out = []
-        for k, work in zip(keys, r.json()):
-            request = f"POST {url} " + json.dumps({"ids": [prefix + k]})
-            out += self.outcomes(groups[k], [work] if work else [], step, request)
-        return out
+            raise TransientError(f"Semantic Scholar HTTP {r.status_code}")
+        return {p.paper_id: w for p, w in zip(papers, r.json())}
 
-    def lookup_single(self, step: str, paper_key: str, group: list[Paper]) -> list[Outcome]:
-        url = f"{S2}/paper/{urllib.parse.quote(paper_key, safe=':/')}?" + urllib.parse.urlencode(
-            {"fields": S2_FIELDS}, safe=",")
-        r = self.request("GET", url)
-        return self.outcomes(group, [r.json()] if r.status_code == 200 else [], step, url)
-
-    def lookup_title(self, paper: Paper) -> list[Outcome]:
-        url = f"{S2}/paper/search/match?" + urllib.parse.urlencode(
-            {"query": paper.title, "fields": S2_FIELDS}, safe=",")
-        r = self.request("GET", url)
-        works = r.json().get("data", []) if r.status_code == 200 else []
-        return self.outcomes([paper], works, "title", url)
+    def by_title(self, paper: Paper) -> dict | None:
+        r = self.request("GET", f"{S2}/paper/search/match", params={"query": paper.title, "fields": S2_FIELDS})
+        if r.status_code == 404:
+            return None
+        if r.status_code != 200:
+            raise TransientError(f"Semantic Scholar HTTP {r.status_code}")
+        work = next(iter(r.json().get("data") or []), None)
+        if work is None:
+            return None
+        names = [a.get("name") or "" for a in work.get("authors") or []]
+        return work if title_matches(paper, work.get("title"), work.get("year"), names) else None
 
 
-class Worker(threading.Thread):
-    def __init__(self, source: Source, scope: list[int] | None, after: str | None = None,
-                 upstream_done: threading.Event | None = None):
-        super().__init__(name=source.name, daemon=True)
-        self.source, self.scope, self.after, self.upstream_done = source, scope, after, upstream_done
-        self.done = threading.Event()
+class Fetcher:
+    def __init__(self):
+        self.arxiv = ArXiv()
+        self.openalex = OpenAlex()
+        self.s2 = SemanticScholar()
         self.stats: Counter = Counter()
-        self.failed: set[int] = set()
-        self.error: BaseException | None = None
 
-    def run(self) -> None:
-        conn = connect()
-        try:
-            while True:
-                upstream_finished = self.upstream_done is None or self.upstream_done.is_set()
-                progressed = False
-                for step in STEPS:
-                    progressed |= self.run_step(conn, step)
-                if not progressed:
-                    if upstream_finished:
-                        break
-                    time.sleep(POLL_SECONDS)
-        except QuotaExhausted as e:
-            print(f"\n  [{self.source.name}] stopping: {e}")
-        except BaseException as e:
-            self.error = e
-        finally:
-            conn.close()
-            self.done.set()
+    def open_papers(self, papers: list[Paper], need_doi: bool = False) -> list[Paper]:
+        return [p for p in papers if not p.abstract and not p.failed and (p.doi or not need_doi)]
 
-    def run_step(self, conn: sqlite3.Connection, step: str) -> bool:
-        papers = pending(conn, self.source.name, step, self.scope, self.after, self.failed)
-        size = self.source.batch if step != "title" else 1
-        for i in range(0, len(papers), size):
-            batch = papers[i:i + size]
-            try:
-                outcomes = self.source.lookup(step, batch)
-            except TransientError as e:
-                self.stats[step, "error"] += len(batch)
-                self.failed.update(p.paper_id for p in batch)
-                print(f"\n  [{self.source.name}] {step} batch of {len(batch)} skipped: {e}")
+    def accept(self, papers: list[Paper], lookup: str, results: dict[int, dict | None], source) -> None:
+        for p in papers:
+            work = results.get(p.paper_id)
+            if work is None:
                 continue
-            record(conn, outcomes)
-            for o in outcomes:
-                self.stats[step, "hit" if o.abstract else "miss"] += 1
-            self.progress()
-        return bool(papers)
+            p.abstract = valid_abstract(source.abstract(work), p.title)
+            if p.abstract:
+                self.stats[lookup] += 1
+            elif not p.arxiv_id and not p.new_arxiv:
+                found = source.arxiv_id(work)
+                if found:
+                    p.new_arxiv = p.pending_arxiv = found
+                    self.stats["arxiv ids found"] += 1
 
-    def progress(self) -> None:
-        hits = sum(n for (_, kind), n in self.stats.items() if kind == "hit")
-        misses = sum(n for (_, kind), n in self.stats.items() if kind == "miss")
-        print(f"  [{self.source.name:8s}] hits {hits:,}  misses {misses:,}  calls {self.source.http.calls:,}",
-              flush=True)
+    def fail(self, papers: list[Paper], lookup: str, error: Exception) -> None:
+        for p in papers:
+            p.failed = True
+        self.stats["failed"] += len(papers)
+        print(f"\n  [{lookup}] {len(papers)} papers left at B for the next run: {error}", flush=True)
+
+    def arxiv_stage(self, papers: list[Paper], lookup: str, attr: str) -> None:
+        todo = [p for p in self.open_papers(papers) if getattr(p, attr)]
+        if not todo:
+            return
+        try:
+            found = self.arxiv.fetch(sorted({getattr(p, attr) for p in todo}))
+        except TransientError as e:
+            self.fail(todo, lookup, e)
+            return
+        for p in todo:
+            p.abstract = valid_abstract(found.get(getattr(p, attr), ""), p.title)
+            self.stats[lookup] += bool(p.abstract)
+            p.pending_arxiv = None
+
+    def doi_stage(self, papers: list[Paper], source, lookup: str, chunks: list[list[Paper]], workers: int) -> None:
+        def run(chunk):
+            try:
+                self.accept(chunk, lookup, source.by_doi(chunk), source)
+            except TransientError as e:
+                self.fail(chunk, lookup, e)
+        with ThreadPoolExecutor(workers) as pool:
+            list(pool.map(run, chunks))
+
+    def title_stage(self, papers: list[Paper], source, lookup: str, workers: int) -> None:
+        def run(p):
+            try:
+                self.accept([p], lookup, {p.paper_id: source.by_title(p)}, source)
+            except TransientError as e:
+                self.fail([p], lookup, e)
+        with ThreadPoolExecutor(workers) as pool:
+            list(pool.map(run, [p for p in self.open_papers(papers) if p.title]))
+
+    def chain(self, papers: list[Paper]) -> None:
+        self.arxiv_stage(papers, "1 arxiv id", "arxiv_id")
+        todo = self.open_papers(papers, need_doi=True)
+        self.doi_stage(papers, self.openalex, "2 openalex doi", self.openalex.doi_chunks(todo), OPENALEX_WORKERS)
+        self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
+        self.title_stage(papers, self.openalex, "3 openalex title", OPENALEX_WORKERS)
+        self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
+        todo = self.open_papers(papers, need_doi=True)
+        self.doi_stage(papers, self.s2, "4 s2 doi", [todo[i:i + S2_BATCH] for i in range(0, len(todo), S2_BATCH)], 1)
+        self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
+        self.title_stage(papers, self.s2, "5 s2 title", 1)
+        self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
 
 
-def scope_papers(conn: sqlite3.Connection, limit: int | None) -> list[int] | None:
-    if limit is None:
-        return None
-    sql = (f"SELECT p.paper_id FROM paper_dblp p JOIN paper_abstract_status s ON s.paper_id = p.paper_id "
-           f"WHERE s.has_abstract = 0 AND NOT ({finished('openalex')} AND {finished('s2')}) "
-           f"ORDER BY p.paper_id LIMIT ?")
-    return [r[0] for r in conn.execute(sql, (limit,))]
+def load_round(conn: sqlite3.Connection, size: int, skip: set[int]) -> list[Paper]:
+    rows = conn.execute(
+        "SELECT paper_id, doi, arxiv_id, title, authors, year FROM paper_summary WHERE status = 'B' "
+        "AND paper_id NOT IN (SELECT value FROM json_each(?)) ORDER BY paper_id LIMIT ?",
+        (json.dumps(sorted(skip)), size)).fetchall()
+    return [Paper(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5]) for r in rows]
 
 
-def run(limit: int | None, oa_session=None, s2_session=None) -> tuple[Worker, Worker, float]:
-    conn = connect()
-    scope = scope_papers(conn, limit)
-    conn.close()
-    print(f"  Scope: {'all pending papers' if scope is None else f'{len(scope):,} papers'}\n")
-    started = time.time()
-    oa = Worker(OpenAlex(oa_session), scope)
-    s2 = Worker(SemanticScholar(s2_session), scope, after="openalex", upstream_done=oa.done)
-    oa.start()
-    s2.start()
-    for w in (oa, s2):
-        while w.is_alive():
-            w.join(1)
-    for w in (oa, s2):
-        if w.error is not None:
-            raise w.error
-    return oa, s2, time.time() - started
-
-
-def report(workers: tuple[Worker, ...], elapsed: float) -> None:
-    print("━" * 70)
-    print(f"  {'source':10s}{'lookup_by':>10s}{'hits':>9s}{'misses':>9s}{'errors':>9s}")
-    for w in workers:
-        for step in STEPS:
-            h, m, e = (w.stats[step, k] for k in ("hit", "miss", "error"))
-            print(f"  {w.source.name:10s}{step:>10s}{h:>9,}{m:>9,}{e:>9,}")
-    for w in workers:
-        avg, peak = w.source.http.observed_rate()
-        print(f"  {w.source.name}: {w.source.http.calls:,} calls ({w.source.http.retries:,} retries), "
-              f"average {avg:.2f}/s, peak {peak} in any 1 s window")
-    print(f"  elapsed {elapsed:,.0f}s")
-    print("━" * 70)
+def save(conn: sqlite3.Connection, papers: list[Paper]) -> None:
+    with conn:
+        conn.executemany("UPDATE paper_field_arxiv SET arxiv_id = ? WHERE paper_id = ? AND arxiv_id IS NULL",
+                         [(p.new_arxiv, p.paper_id) for p in papers if p.new_arxiv])
+        conn.executemany("UPDATE paper_field_abstract SET abstract = ? WHERE paper_id = ? AND abstract IS NULL",
+                         [(p.abstract, p.paper_id) for p in papers if p.abstract])
+        conn.executemany("UPDATE paper_status SET status = 'C' WHERE paper_id = ? AND status = 'B'",
+                         [(p.paper_id,) for p in papers if not p.failed])
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch abstracts from OpenAlex and Semantic Scholar.")
-    parser.add_argument("--limit", type=int, help="process only the first N pending papers (for testing)")
+    parser = argparse.ArgumentParser(description="Fetch abstracts for papers at status B.")
+    parser.add_argument("--limit", type=int, help="process at most N papers (for testing)")
     args = parser.parse_args()
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
-    print("║         paperhunter  ·  Abstract Fetcher                             ║")
+    print("║         paperhunter  ·  C · Abstract Fetcher                         ║")
     print("╚══════════════════════════════════════════════════════════════════════╝")
-    print(f"\n  Database: {DB_PATH}")
-    print(f"  Limits: OpenAlex {OPENALEX_RPS}/s (documented 30/s), Semantic Scholar {S2_RPS}/s keyless (shared public pool)")
+    print(f"\n  Database: {DB_PATH}\n")
     load_env()
-    oa, s2, elapsed = run(args.limit)
-    report((oa, s2), elapsed)
+    conn = connect()
+    fetcher = Fetcher()
+    started, done, skip = time.time(), 0, set()
+    try:
+        while args.limit is None or done < args.limit:
+            size = ROUND_PAPERS if args.limit is None else min(ROUND_PAPERS, args.limit - done)
+            papers = load_round(conn, size, skip)
+            if not papers:
+                break
+            try:
+                fetcher.chain(papers)
+            except QuotaExhausted as e:
+                for p in fetcher.open_papers(papers):
+                    p.failed = True
+                save(conn, papers)
+                print(f"\n  stopping: {e}")
+                break
+            save(conn, papers)
+            skip.update(p.paper_id for p in papers if p.failed)
+            done += len(papers)
+            found = sum(bool(p.abstract) for p in papers)
+            print(f"  round of {len(papers):,}: {found:,} abstracts  |  total {done:,} papers  |  "
+                  f"{time.time() - started:,.0f}s", flush=True)
+    finally:
+        conn.close()
+    print("\n" + "━" * 70)
+    print("  abstracts by lookup:  " + "  |  ".join(f"{k} {v:,}" for k, v in sorted(fetcher.stats.items())))
+    print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.http.calls:,}  "
+          f"Semantic Scholar {fetcher.s2.http.calls:,}  |  {time.time() - started:,.0f}s")
+    print("  Done.  → Give d_abstract.md to the AI next")
+    print("━" * 70)
     print()
 
 
