@@ -12,8 +12,6 @@
 
 ## 1. Tables
 
-In the order they are populated.
-
 ### 1.1 `paper_semantic_threshold`
 
 Filled by `circumstance/c_threshold.py`, before the pipeline runs (see section 3).
@@ -94,11 +92,9 @@ Accepted papers only.
 
 ## 2. Views
 
-In the order the pipeline first uses them.
-
 ### 2.1 `paper_summary`
 
-Every paper with all its fields, pipeline status, venue rank and category: one row per paper.
+Every paper with all the fields mentioned below (one row per paper).
 
 **Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_status`, `conf_list`, `journal_list`, `paper_ai_shortlist`
 
@@ -123,7 +119,7 @@ Every paper with all its fields, pipeline status, venue rank and category: one r
 
 ### 2.2 `paper_review`
 
-Every paper that still has no abstract, waiting for a web search.
+Every paper that has no abstract.
 
 **Depends on:** `paper_field_abstract`
 
@@ -133,7 +129,7 @@ Every paper that still has no abstract, waiting for a web search.
 
 ### 2.3 `paper_list`
 
-Every accepted paper, with its arXiv ID, abstract, category and venue rank: the final result.
+Every paper from `paper_ai_shortlist` only.
 
 **Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_ai_shortlist`, `conf_list`, `journal_list`
 
@@ -355,4 +351,3 @@ When this plan is implemented, the AI removes everything the project no longer n
 - **Docs:** `README.md` updated to the new run order, with no references to removed files.
 
 The conference and journal hunters stay, because step A needs `conf_list` and `journal_list`. Only their unused parts are removed.
-
