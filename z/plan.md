@@ -134,7 +134,9 @@ Accepted papers only.
 
 ## 2. Views
 
-### `paper_absent_abstract`
+### `paper_review`
+
+Every paper that still has no abstract, waiting for a web search.
 
 **Depends on:** `paper_field_abstract`
 
@@ -143,6 +145,8 @@ Accepted papers only.
 | `paper_id` | INTEGER |
 
 ### `paper_list`
+
+Every accepted paper, with its arXiv ID, abstract, category and venue rank: the final result.
 
 **Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_ai_shortlist`, `conf_list`, `journal_list`
 
@@ -163,6 +167,8 @@ Accepted papers only.
 | `venue_rank` | TEXT    |
 
 ### `paper_summary`
+
+Every paper with all its fields, pipeline status, venue rank and category: one row per paper.
 
 **Depends on:** `paper_dblp`, `paper_field_arxiv`, `paper_field_abstract`, `paper_status`, `conf_list`, `journal_list`, `paper_ai_shortlist`
 
@@ -196,7 +202,7 @@ Accepted papers only.
 | A    | `a_extract.py`   | Build the base paper list             | new papers             | `A`         | `archive/dblp.xml`, `conf_list`, `journal_list` | `paper_dblp`, `paper_status`; `paper_id` in `paper_field_arxiv`, `paper_field_abstract` |
 | B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `archive/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
 | C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
-| D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_absent_abstract`, web search | `paper_field_abstract`, `paper_status` |
+| D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_review`, web search | `paper_field_abstract`, `paper_status` |
 | E    | `e_embedding.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_model`, `paper_semantic_vector`, `paper_status` |
 | F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_model`, `paper_semantic_query`, `paper_semantic_seed`, `paper_semantic_keyword`, `paper_summary` | `paper_semantic_threshold`, `paper_semantic_shortlist`, `paper_status` |
 | G    | `g_search.md`    | Build the final AI-reviewed shortlist | `F`                    | `G`         | `paper_semantic_shortlist`, `paper_summary`  | `paper_ai_shortlist`, `paper_status` |
@@ -237,67 +243,61 @@ DBLP stores arXiv preprints as separate `journals/corr/` records and never links
 - **Takes:** papers at status `B`
 - **Output:** Fill in every available value in `paper_field_abstract` and `paper_field_arxiv`. Move every finished paper to `C`.
 
-**API order.** For each paper without an abstract, try the sources in this order and **stop as soon as one returns an abstract**:
+**Lookup chain.** A lookup is successful only if it returns an abstract. For each paper without an abstract, run the lookups in this order and stop at the first success:
 
-| Order | API              | Lookup |
-|-------|------------------|--------|
-| 1     | arXiv            | By arXiv ID (if the paper has one) |
-| 2     | OpenAlex         | By DOI (if the paper has one); if the DOI lookup gives no abstract, by title |
-| 3     | Semantic Scholar | By DOI (if the paper has one); if the DOI lookup gives no abstract, by title |
+| # | Lookup                       | Runs if                 |
+|---|------------------------------|-------------------------|
+| 1 | arXiv by arXiv ID            | the paper has an arXiv ID |
+| 2 | OpenAlex by DOI              | the paper has a DOI     |
+| 3 | OpenAlex by title            | always                  |
+| 4 | Semantic Scholar by DOI      | the paper has a DOI     |
+| 5 | Semantic Scholar by title    | always                  |
 
-- "DOI lookup gives no abstract" means the paper was not found by its DOI, or was found without an abstract.
-- Papers without a DOI are looked up by title directly.
-- A paper that already has an abstract is moved to `C` without any API call.
-- A paper is moved to `C` when it has an abstract, or when every applicable lookup has given a finished "no abstract" answer.
+- **arXiv fallback.** When lookup 2, 3, 4 or 5 finds the paper but no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID. If arXiv returns an abstract, the chain stops there.
+- **Title results** (lookups 3 and 5) are used only if they pass the title match check. A result that fails is treated as not found.
+- **Moving to `C`.** A paper moves to `C` as soon as a lookup succeeds, or when every lookup that runs has finished without an abstract. A failed call (timeout, 429, 5xx) leaves the paper at `B` for the next run.
 
-**Title match check.** A title lookup result is accepted only if all three hold:
+**Title match check.** A title result is accepted only if all three hold:
 
 1. Normalized title similarity ≥ 95%.
 2. Publication year within ±1 of `paper_dblp.year`.
 3. At least one shared author surname.
 
-**arXiv ID discovery.** If an OpenAlex or Semantic Scholar response contains an arXiv ID and the paper has none in `paper_field_arxiv`:
-
-1. Update `paper_field_arxiv` with that ID.
-2. If the paper still has no abstract, call the arXiv API with that ID before trying the next source.
-
-Each source is read in its own way:
+**arXiv ID discovery.** Used only when the paper has no arXiv ID yet. Each source is read in its own way:
 
 | Source           | Where the arXiv ID is found |
 |------------------|-----------------------------|
-| Semantic Scholar | `externalIds.ArXiv` |
 | OpenAlex         | an arXiv DOI (`10.48550/arXiv.<id>`) in `doi` or `ids`, or a `locations[]` entry whose `landing_page_url` or `pdf_url` is `arxiv.org/abs/<id>` or `arxiv.org/pdf/<id>` |
+| Semantic Scholar | `externalIds.ArXiv` |
 
 Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 
 **API keys.**
 
 - Load API keys from the `.env` file.
-- For OpenAlex: when a key hits its free-tier limit, switch to the next OpenAlex key in `.env`.
+- OpenAlex: when a key hits its free-tier limit, switch to the next OpenAlex key in `.env`.
 
 **Performance.**
 
-- Work in rounds. In each round, take a block of papers at status `B` and run the API order as batch stages: every paper still without an abstract goes on to the next stage.
-- Put as many papers as each API allows into a single batch call:
-  - arXiv: many IDs per `id_list` call.
-  - OpenAlex: up to 100 DOIs per call, keeping the URL within the length limit.
-  - Semantic Scholar: up to 500 IDs per batch call.
-- Run multiple batches concurrently, while staying within each source's rate limit.
-- Handle throttling with proper engineering: retry 429 and 5xx responses with backoff, and honor `Retry-After`.
+- Work in rounds. Each round takes a block of papers at status `B` and runs the lookup chain as batch stages: only papers still without an abstract go on to the next stage.
+- Put as many papers as each API allows into one call: many IDs per arXiv `id_list` call, up to 100 DOIs per OpenAlex call (keeping the URL within the length limit), and up to 500 IDs per Semantic Scholar batch call.
+- Run multiple batches concurrently, within each source's rate limit.
+- Retry 429 and 5xx responses with backoff, and honor `Retry-After`.
 
 #### D. `d_abstract.md` — Find Missing Abstracts
 
-- **Inputs:** `paper_summary`, `paper_absent_abstract`
+- **Inputs:** `paper_summary`, `paper_review`
 - **Takes:** papers at status `C`
 - **Output:** Fill in every available value in `paper_field_abstract`. Move every paper to `D`.
 
 **Process.**
 
-1. Move every paper at status `C` that already has an abstract to `D` in one SQL update, with no web search.
-2. Go through the remaining papers at status `C` one by one. For each paper:
-   1. Search online, **excluding** OpenAlex, Semantic Scholar and arXiv.
-   2. Retrieve the abstract from any available source.
-   3. Update `paper_field_abstract` if found, and move the paper to `D` either way.
+1. **Skip papers with an abstract.** Move every paper at status `C` that is not in `paper_review` to `D` in one SQL update.
+2. **Search the rest.** Take the papers at status `C` that are in `paper_review`, one by one. For each paper:
+   1. Read its details (title, authors, year, venue, DOI, `ee`, arXiv ID) from `paper_summary`.
+   2. Search online for its abstract, **excluding** OpenAlex, Semantic Scholar and arXiv.
+   3. If found, write it to `paper_field_abstract`.
+   4. Move the paper to `D`, found or not.
 
 #### E. `e_embedding.py` — Generate Embeddings
 
