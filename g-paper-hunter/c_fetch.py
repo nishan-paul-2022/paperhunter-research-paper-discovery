@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import argparse
 import html
 import json
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import sys
 import threading
@@ -67,8 +67,9 @@ def load_env() -> None:
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
         sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
-    conn = sqlite3.connect(path, timeout=120)
+    conn = sqlite3.connect(path, timeout=120, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
@@ -77,6 +78,10 @@ class TransientError(Exception):
 
 
 class QuotaExhausted(Exception):
+    pass
+
+
+class Stopped(Exception):
     pass
 
 
@@ -193,9 +198,10 @@ class ArXiv:
     def fetch(self, ids: list[str], on_chunk=None) -> dict[str, str]:
         out = {}
         for i in range(0, len(ids), ARXIV_BATCH):
-            out.update(self.fetch_chunk(ids[i:i + ARXIV_BATCH]))
+            part = self.fetch_chunk(ids[i:i + ARXIV_BATCH])
+            out.update(part)
             if on_chunk is not None:
-                on_chunk(ids[i:i + ARXIV_BATCH])
+                on_chunk(ids[i:i + ARXIV_BATCH], part)
         return out
 
     def fetch_chunk(self, ids: list[str]) -> dict[str, str]:
@@ -245,11 +251,14 @@ class OpenAlex:
             left = r.headers.get("X-RateLimit-Remaining", "").strip()
             if not left.lstrip("-").isdigit() or int(left) >= needed:
                 return False
+            used = r.request.headers.get("Authorization", "").removeprefix("Bearer ")
             with self.lock:
-                self.key_no += 1
-                if self.key_no >= len(self.keys):
-                    raise QuotaExhausted("every OpenAlex key has used up its daily budget")
-                self.log(f"  [openalex] switching to key {self.key_no + 1}")
+                if used == self.keys[min(self.key_no, len(self.keys) - 1)]:
+                    self.key_no += 1
+                    if self.key_no >= len(self.keys):
+                        raise QuotaExhausted("every OpenAlex key has used up its daily budget")
+                    self.log(f"  [openalex] key {self.key_no} used up its daily budget, "
+                             f"switching to key {self.key_no + 1} of {len(self.keys)}")
             return True
         return handler
 
@@ -352,21 +361,10 @@ class SemanticScholar:
             raise TransientError(f"Semantic Scholar HTTP {r.status_code}")
         return {p.paper_id: w for p, w in zip(papers, r.json())}
 
-    def by_title(self, paper: Paper) -> dict | None:
-        r = self.request("GET", f"{S2}/paper/search/match", params={"query": paper.title, "fields": S2_FIELDS})
-        if r.status_code == 404:
-            return None
-        if r.status_code != 200:
-            raise TransientError(f"Semantic Scholar HTTP {r.status_code}")
-        work = next(iter(r.json().get("data") or []), None)
-        if work is None:
-            return None
-        names = [a.get("name") or "" for a in work.get("authors") or []]
-        return work if title_matches(paper, work.get("title"), work.get("year"), names) else None
 
 
-LOOKUPS = {"1 arxiv id": "arxiv", "2 openalex doi": "oa-doi", "3 openalex title": "oa-title",
-           "4 s2 doi": "s2-doi", "5 s2 title": "s2-title", "arxiv fallback": "arxiv-fb"}
+LOOKUPS = {"1 arxiv id": "arxiv", "2 openalex doi": "oa-doi", "3 s2 doi": "s2-doi",
+           "4 openalex title": "oa-title", "arxiv fallback": "arxiv-fb"}
 
 
 def clock(seconds: float) -> str:
@@ -441,7 +439,7 @@ class Progress:
 
     def stage(self, lookup: str, total: int) -> None:
         with self.lock:
-            self.stage_name = f"stage {lookup[0]}/5 {lookup[2:]}" if lookup[0].isdigit() else lookup
+            self.stage_name = f"stage {lookup[0]}/4 {lookup[2:]}" if lookup[0].isdigit() else lookup
             self.stage_done, self.stage_total = 0, total
 
     def step(self, n: int, current: str) -> None:
@@ -486,13 +484,37 @@ class Progress:
         sys.stdout.flush()
 
 
+class Store:
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self.lock = threading.Lock()
+
+    def save(self, papers: list[Paper]) -> None:
+        with self.lock, self.conn:
+            self.conn.executemany(
+                "UPDATE paper_field_arxiv SET arxiv_id = ? WHERE paper_id = ? AND arxiv_id IS NULL",
+                [(p.new_arxiv, p.paper_id) for p in papers if p.new_arxiv])
+            self.conn.executemany(
+                "UPDATE paper_field_abstract SET abstract = ? WHERE paper_id = ? AND abstract IS NULL",
+                [(p.abstract, p.paper_id) for p in papers if p.abstract])
+            self.conn.executemany("UPDATE paper_status SET status = 'C' WHERE paper_id = ? AND status = 'B'",
+                                  [(p.paper_id,) for p in papers if p.abstract])
+
+    def finish(self, papers: list[Paper]) -> None:
+        with self.lock, self.conn:
+            self.conn.executemany("UPDATE paper_status SET status = 'C' WHERE paper_id = ? AND status = 'B'",
+                                  [(p.paper_id,) for p in papers if not p.abstract and not p.failed])
+
+
 class Fetcher:
-    def __init__(self, progress: Progress):
+    def __init__(self, progress: Progress, store: Store):
         self.arxiv = ArXiv()
         self.openalex = OpenAlex()
         self.s2 = SemanticScholar()
         self.stats: Counter = Counter()
         self.progress = progress
+        self.store = store
+        self.stopping = threading.Event()
         self.openalex.log = progress.log
         self.arxiv.http.on_wait = progress.waiter("arXiv")
         self.openalex.http.on_wait = progress.waiter("OpenAlex")
@@ -500,6 +522,10 @@ class Fetcher:
 
     def open_papers(self, papers: list[Paper], need_doi: bool = False) -> list[Paper]:
         return [p for p in papers if not p.abstract and not p.failed and (p.doi or not need_doi)]
+
+    def check(self) -> None:
+        if self.stopping.is_set():
+            raise Stopped("Ctrl+C")
 
     def accept(self, papers: list[Paper], lookup: str, results: dict[int, dict | None], source) -> None:
         for p in papers:
@@ -514,6 +540,7 @@ class Fetcher:
                 if found:
                     p.new_arxiv = p.pending_arxiv = found
                     self.stats["arxiv ids found"] += 1
+        self.store.save(papers)
 
     def fail(self, papers: list[Paper], lookup: str, error: Exception) -> None:
         for p in papers:
@@ -525,21 +552,31 @@ class Fetcher:
         todo = [p for p in self.open_papers(papers) if getattr(p, attr)]
         if not todo:
             return
-        ids = sorted({getattr(p, attr) for p in todo})
-        self.progress.stage(lookup, len(ids))
-        try:
-            found = self.arxiv.fetch(ids, lambda chunk: self.progress.step(
-                len(chunk), f"arXiv {chunk[-1]} (batch of {len(chunk)})"))
-        except TransientError as e:
-            self.fail(todo, lookup, e)
-            return
+        self.check()
+        by_id: dict[str, list[Paper]] = {}
         for p in todo:
-            p.abstract = valid_abstract(found.get(getattr(p, attr), ""), p.title)
-            self.stats[lookup] += bool(p.abstract)
-            p.pending_arxiv = None
+            by_id.setdefault(getattr(p, attr), []).append(p)
+        done = set()
+
+        def on_chunk(ids: list[str], found: dict[str, str]) -> None:
+            chunk = [p for i in ids for p in by_id[i]]
+            for p in chunk:
+                p.abstract = valid_abstract(found.get(getattr(p, attr), ""), p.title)
+                self.stats[lookup] += bool(p.abstract)
+                p.pending_arxiv = None
+            self.store.save(chunk)
+            done.update(ids)
+            self.progress.step(len(ids), f"arXiv {ids[-1]} (batch of {len(ids)})")
+            self.check()
+        self.progress.stage(lookup, len(by_id))
+        try:
+            self.arxiv.fetch(sorted(by_id), on_chunk)
+        except TransientError as e:
+            self.fail([p for i, ps in by_id.items() if i not in done for p in ps], lookup, e)
 
     def doi_stage(self, papers: list[Paper], source, lookup: str, chunks: list[list[Paper]], workers: int) -> None:
         def run(chunk):
+            self.check()
             try:
                 self.accept(chunk, lookup, source.by_doi(chunk), source)
             except TransientError as e:
@@ -551,6 +588,7 @@ class Fetcher:
 
     def title_stage(self, papers: list[Paper], source, lookup: str, workers: int) -> None:
         def run(p):
+            self.check()
             try:
                 self.accept([p], lookup, {p.paper_id: source.by_title(p)}, source)
             except TransientError as e:
@@ -566,13 +604,13 @@ class Fetcher:
         todo = self.open_papers(papers, need_doi=True)
         self.doi_stage(papers, self.openalex, "2 openalex doi", self.openalex.doi_chunks(todo), OPENALEX_WORKERS)
         self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
-        self.title_stage(papers, self.openalex, "3 openalex title", OPENALEX_WORKERS)
-        self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
         todo = self.open_papers(papers, need_doi=True)
-        self.doi_stage(papers, self.s2, "4 s2 doi", [todo[i:i + S2_BATCH] for i in range(0, len(todo), S2_BATCH)], 1)
+        self.doi_stage(papers, self.s2, "3 s2 doi", [todo[i:i + S2_BATCH] for i in range(0, len(todo), S2_BATCH)], 1)
         self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
-        self.title_stage(papers, self.s2, "5 s2 title", 1)
+        self.title_stage(papers, self.openalex, "4 openalex title", OPENALEX_WORKERS)
         self.arxiv_stage(papers, "arxiv fallback", "pending_arxiv")
+        self.check()
+        self.store.finish(papers)
 
 
 def load_round(conn: sqlite3.Connection, size: int, skip: set[int]) -> list[Paper]:
@@ -583,20 +621,7 @@ def load_round(conn: sqlite3.Connection, size: int, skip: set[int]) -> list[Pape
     return [Paper(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5]) for r in rows]
 
 
-def save(conn: sqlite3.Connection, papers: list[Paper]) -> None:
-    with conn:
-        conn.executemany("UPDATE paper_field_arxiv SET arxiv_id = ? WHERE paper_id = ? AND arxiv_id IS NULL",
-                         [(p.new_arxiv, p.paper_id) for p in papers if p.new_arxiv])
-        conn.executemany("UPDATE paper_field_abstract SET abstract = ? WHERE paper_id = ? AND abstract IS NULL",
-                         [(p.abstract, p.paper_id) for p in papers if p.abstract])
-        conn.executemany("UPDATE paper_status SET status = 'C' WHERE paper_id = ? AND status = 'B'",
-                         [(p.paper_id,) for p in papers if not p.failed])
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch abstracts for papers at status B.")
-    parser.add_argument("--limit", type=int, help="process at most N papers (for testing)")
-    args = parser.parse_args()
     print()
     print("╔══════════════════════════════════════════════════════════════════════╗")
     print("║         paperhunter  ·  C · Abstract Fetcher                         ║")
@@ -608,35 +633,43 @@ def main() -> None:
         "SELECT COUNT(*), SUM(arxiv_id IS NOT NULL), SUM(arxiv_id IS NULL AND doi IS NOT NULL) "
         "FROM paper_summary WHERE status = 'B'").fetchone()
     with_arxiv, doi_only = with_arxiv or 0, doi_only or 0
-    target = total if args.limit is None else min(total, args.limit)
-    rounds = -(-target // ROUND_PAPERS)
+    rounds = -(-total // ROUND_PAPERS)
     print(f"  Papers at B: {total:,}  (arXiv id {with_arxiv:,} · DOI only {doi_only:,} · "
           f"neither {total - with_arxiv - doi_only:,})")
-    print(f"  This run:    {target:,} papers in {rounds:,} rounds of up to {ROUND_PAPERS:,}\n")
-    progress = Progress(target, rounds)
-    fetcher = Fetcher(progress)
-    started, done, skip = time.time(), 0, set()
+    print(f"  This run:    {total:,} papers in {rounds:,} rounds of up to {ROUND_PAPERS:,}")
+    print("  Ctrl+C once to stop safely, twice to quit at once\n")
+    progress = Progress(total, rounds)
+    fetcher = Fetcher(progress, Store(conn))
+
+    def on_sigint(signum, frame):
+        if fetcher.stopping.is_set():
+            progress.close()
+            print("\n  quit at once: everything found so far is already saved", flush=True)
+            os._exit(130)
+        fetcher.stopping.set()
+        progress.log("  stopping: finishing requests in flight (Ctrl+C again to quit at once)")
+    signal.signal(signal.SIGINT, on_sigint)
+    started, skip = time.time(), set()
     try:
-        while args.limit is None or done < args.limit:
-            size = ROUND_PAPERS if args.limit is None else min(ROUND_PAPERS, args.limit - done)
-            papers = load_round(conn, size, skip)
+        while True:
+            papers = load_round(conn, ROUND_PAPERS, skip)
             if not papers:
                 break
             progress.start_round(papers)
             before = Counter(fetcher.stats)
             try:
                 fetcher.chain(papers)
-            except QuotaExhausted as e:
+            except (QuotaExhausted, Stopped) as e:
                 for p in fetcher.open_papers(papers):
                     p.failed = True
-                save(conn, papers)
                 progress.end_round(papers, fetcher.stats - before)
-                progress.log(f"\n  stopping: {e}")
+                progress.log(f"\n  stopped: {e}")
                 break
-            save(conn, papers)
             skip.update(p.paper_id for p in papers if p.failed)
-            done += len(papers)
             progress.end_round(papers, fetcher.stats - before)
+            if fetcher.stopping.is_set():
+                progress.log("\n  stopped: Ctrl+C")
+                break
     finally:
         progress.close()
         conn.close()

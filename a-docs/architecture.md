@@ -248,13 +248,13 @@ DBLP stores arXiv preprints as separate `journals/corr/` records and never links
 |---|------------------------------|-------------------------|
 | 1 | arXiv by arXiv ID            | the paper has an arXiv ID |
 | 2 | OpenAlex by DOI              | the paper has a DOI     |
-| 3 | OpenAlex by title            | always                  |
-| 4 | Semantic Scholar by DOI      | the paper has a DOI     |
-| 5 | Semantic Scholar by title    | always                  |
+| 3 | Semantic Scholar by DOI      | the paper has a DOI     |
+| 4 | OpenAlex by title            | the paper has a title   |
 
-- **arXiv fallback.** When lookup 2, 3, 4 or 5 finds the paper but no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID. If arXiv returns an abstract, the chain stops there.
-- **Title results** (lookups 3 and 5) are used only if they pass the title match check. A result that fails is treated as not found.
+- **arXiv fallback.** When lookup 2, 3 or 4 finds the paper but no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID. If arXiv returns an abstract, the chain stops there.
+- **Title results** (lookup 4) are used only if they pass the title match check. A result that fails is treated as not found.
 - **Moving to `C`.** A paper moves to `C` as soon as a lookup succeeds, or when every lookup that runs has finished without an abstract. A failed call (timeout, 429, 5xx) leaves the paper at `B` for the next run.
+- **Saving.** Write every abstract, arXiv ID and status change to the database the moment it is known, never at the end of a round. An interruption (Ctrl+C, crash, power loss) loses only the calls in flight. The first Ctrl+C finishes the calls in flight and stops; a second quits at once.
 
 **Title match check.** A title result is accepted only if all three hold:
 
@@ -274,7 +274,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 **API keys.**
 
 - Load API keys from the `.env` file.
-- OpenAlex: when a key hits its free-tier limit, switch to the next OpenAlex key in `.env`.
+- OpenAlex: use every `OPENALEX_API_KEY_<n>` in `.env`, in order. When a key hits its daily budget, switch to the next one, exactly once per exhausted key. When all are used up, stop; everything found is already saved.
 - Semantic Scholar: send `S2_API_KEY` from `.env` in the `x-api-key` header.
 
 **Performance.**
