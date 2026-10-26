@@ -5,4 +5,6 @@ __pycache__/
 dblp.xml
 dblp.xml.gz
 paperhunter.db
+paperhunter.db-shm
+paperhunter.db-wal
 paperhunter-backup.db
