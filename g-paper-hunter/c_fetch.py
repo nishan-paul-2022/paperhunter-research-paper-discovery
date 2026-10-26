@@ -39,6 +39,7 @@ OPENALEX_URL_LIMIT = 3_800
 OPENALEX_SELECT = "id,doi,ids,display_name,publication_year,abstract_inverted_index,locations,authorships"
 OPENALEX_TITLE_RESULTS = 5
 OPENALEX_TITLE_CREDITS = 10
+OPENALEX_BUDGET_WAIT = 600
 
 S2 = "https://api.semanticscholar.org/graph/v1"
 S2_BATCH = 500
@@ -111,8 +112,8 @@ class Http:
         self.on_wait = None
 
     def request(self, method: str, url: str, on_429=None, **kwargs) -> requests.Response:
-        delay = self.first_delay
-        for attempt in range(1, self.attempts + 1):
+        delay, attempt = self.first_delay, 0
+        while True:
             self.limiter.wait()
             self.calls += 1
             try:
@@ -128,13 +129,13 @@ class Http:
                 after = r.headers.get("Retry-After", "")
                 if after.isdigit():
                     delay = max(delay, float(after))
+            attempt += 1
             if attempt == self.attempts:
                 raise TransientError(f"{reason} after {attempt} attempts")
             if self.on_wait is not None:
                 self.on_wait(reason, min(delay, self.max_delay), attempt, self.attempts)
             time.sleep(min(delay, self.max_delay))
             delay *= 2
-        raise TransientError("no answer")
 
 
 @dataclass
@@ -246,17 +247,34 @@ class OpenAlex:
         self.http = Http(1.0 / OPENALEX_RPS)
         self.log = print
 
+    @staticmethod
+    def budget_spent(r: requests.Response, needed: int) -> bool:
+        if "insufficient budget" in r.text.lower():
+            return True
+        left = r.headers.get("X-RateLimit-Remaining", "").strip()
+        if left.lstrip("-").isdigit():
+            return int(left) < needed
+        after = r.headers.get("Retry-After", "").strip()
+        return after.isdigit() and int(after) > OPENALEX_BUDGET_WAIT
+
+    @staticmethod
+    def reset_in(r: requests.Response) -> str:
+        for name in ("Retry-After", "X-RateLimit-Reset"):
+            value = r.headers.get(name, "").strip()
+            if value.isdigit():
+                return f" (resets at 00:00 UTC, in {clock(int(value))})"
+        return " (resets at 00:00 UTC)"
+
     def _on_429(self, needed: int):
         def handler(r: requests.Response) -> bool:
-            left = r.headers.get("X-RateLimit-Remaining", "").strip()
-            if not left.lstrip("-").isdigit() or int(left) >= needed:
+            if not self.budget_spent(r, needed):
                 return False
             used = r.request.headers.get("Authorization", "").removeprefix("Bearer ")
             with self.lock:
                 if used == self.keys[min(self.key_no, len(self.keys) - 1)]:
                     self.key_no += 1
                     if self.key_no >= len(self.keys):
-                        raise QuotaExhausted("every OpenAlex key has used up its daily budget")
+                        raise QuotaExhausted("OpenAlex free daily budget is used up" + self.reset_in(r))
                     self.log(f"  [openalex] key {self.key_no} used up its daily budget, "
                              f"switching to key {self.key_no + 1} of {len(self.keys)}")
             return True
