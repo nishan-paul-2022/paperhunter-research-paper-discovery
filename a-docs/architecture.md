@@ -249,7 +249,7 @@ DBLP stores arXiv preprints as separate `journals/corr/` records and never links
 | 1 | arXiv by arXiv ID            | the paper has an arXiv ID |
 | 2 | OpenAlex by DOI              | the paper has a DOI     |
 | 3 | Semantic Scholar by DOI      | the paper has a DOI     |
-| 4 | OpenAlex by title            | the paper has a title   |
+| 4 | OpenAlex by title            | the paper has a title but no DOI and no arXiv ID |
 
 - **arXiv fallback.** When lookup 2, 3 or 4 finds the paper but no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID. If arXiv returns an abstract, the chain stops there.
 - **Title results** (lookup 4) are used only if they pass the title match check. A result that fails is treated as not found.

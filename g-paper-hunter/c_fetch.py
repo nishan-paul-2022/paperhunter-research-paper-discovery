@@ -594,7 +594,7 @@ class Fetcher:
             except TransientError as e:
                 self.fail([p], lookup, e)
             self.progress.step(1, describe(p))
-        todo = [p for p in self.open_papers(papers) if p.title]
+        todo = [p for p in self.open_papers(papers) if p.title and not p.doi and not p.arxiv_id and not p.new_arxiv]
         self.progress.stage(lookup, len(todo))
         with ThreadPoolExecutor(workers) as pool:
             list(pool.map(run, todo))
