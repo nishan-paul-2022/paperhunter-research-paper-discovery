@@ -257,6 +257,11 @@ class Verifier:
                 live.current = f"S2 {todo[-1].doi}"
             self.step("S2", len(chunk))
 
+    def check_doi(self, items: list[Item], live) -> None:
+        self.check_openalex_batch(items, live)
+        if not self.stop.is_set():
+            self.check_s2(items, live)
+
     def check_openalex_single(self, items: list[Item], live) -> None:
         todo = [it for it in items if self.open(it, "oa-single")]
         self.phase["OA single"] = [0, len(todo)]
@@ -374,7 +379,7 @@ def main() -> None:
           f"skipped, from the backfill: {len(backfilled):,} checked there)")
     print(f"  arXiv ID {len(with_arxiv):,} · DOI {len(with_doi):,} · neither "
           f"{sum(not it.arxiv_id and not it.doi for it in items):,}")
-    print("  arXiv, OpenAlex batch and S2 run side by side; OpenAlex single runs last on what is left")
+    print("  arXiv runs side by side with OpenAlex batch → S2; OpenAlex single runs last on what is left")
     print("  Ctrl+C once to stop safely, twice to quit at once\n")
     v = Verifier(items)
     live = Live(v, len(items))
@@ -393,8 +398,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, on_sigint)
 
     threads = [threading.Thread(target=v.check_arxiv, args=(with_arxiv, live)),
-               threading.Thread(target=v.check_openalex_batch, args=(with_doi, live)),
-               threading.Thread(target=v.check_s2, args=(with_doi, live))]
+               threading.Thread(target=v.check_doi, args=(with_doi, live))]
     try:
         for t in threads:
             t.start()
