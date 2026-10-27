@@ -42,7 +42,7 @@ Filled by `c-context/c_threshold.py`, before the pipeline runs (see section 3).
 
 ### 1.3 `paper_status`
 
-One row per paper. `status` is the last step that has finished with the paper: `A`, `B`, `C`, `D`, `E`, `F` or `G`.
+One row per paper. `status` is the last step that has finished with the paper: `A`, `B`, `C`, `D`, `E`, `F` or `G`. Step C also uses `B-1`, `B-2` and `B-3` for papers part-way through its lookup stages.
 
 | Column     | Type    |
 |------------|---------|
@@ -200,7 +200,7 @@ The thresholds depend only on `semantic.json` (queries and seeds), the model and
 |------|------------------|---------------------------------------|------------------------|-------------|----------------------------------------------|-----------|
 | A    | `a_extract.py`   | Build the base paper list             | new papers             | `A`         | `d-download/dblp.xml`, `conf_list`, `journal_list` | `paper_dblp`, `paper_status`; `paper_id` in `paper_field_arxiv`, `paper_field_abstract` |
 | B    | `b_arxiv.py`     | Fill in arXiv IDs                     | `A`                    | `B`         | `d-download/dblp.xml`, `paper_summary`          | `paper_field_arxiv`, `paper_status` |
-| C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`                    | `C`         | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
+| C    | `c_fetch.py`     | Fetch abstracts from external APIs    | `B`, `B-1`, `B-2`, `B-3` | `B-1`, `B-2`, `B-3`, `C` | `paper_summary`; arXiv, OpenAlex, Semantic Scholar APIs | `paper_field_arxiv`, `paper_field_abstract`, `paper_status` |
 | D    | `d_abstract.md`  | Find remaining missing abstracts      | `C`                    | `D`         | `paper_summary`, `paper_review`, web search | `paper_field_abstract`, `paper_status` |
 | E    | `e_embed.py` | Generate embeddings                   | `D`                    | `E`         | `paper_summary`                              | `paper_semantic_vector`, `paper_status` |
 | F    | `f_semantic.py`  | Build the semantic shortlist          | `E`                    | `F`         | `paper_semantic_vector`, `paper_semantic_threshold`, `paper_summary`, `b-config/semantic.json` | `paper_semantic_shortlist`, `paper_status` |
@@ -211,7 +211,7 @@ The thresholds depend only on `semantic.json` (queries and seeds), the model and
 Every paper moves through every status from `A` to `G`, whether or not a step changes its data. Because of this, any file can be run at any time and any number of times: it always starts from the latest state, and no work is repeated.
 
 1. **One status per paper.** `status` is the last step that has finished with the paper.
-2. **Each step takes only papers at the previous status** (B takes `A`, C takes `B`, …, G takes `F`) and moves each one forward when it is done. Papers at any other status are ignored.
+2. **Each step takes only papers at the previous status** (B takes `A`, C takes `B` and its stage statuses `B-1` to `B-3`, …, G takes `F`) and moves each one forward when it is done. Papers at any other status are ignored.
 3. **Every paper moves forward**, including papers the step has nothing to do for. For example, B moves a paper that already has an arXiv ID from `A` to `B` without changing it, and G moves a paper that is not in `paper_semantic_shortlist` from `F` to `G` without an AI review.
 4. **Status moves only on a finished outcome.** "Not found anywhere" is a finished outcome. A failed attempt (timeout, 429, 5xx, crash) is not: the paper keeps its status and the next run retries it.
 5. **Data and status are written together** in one transaction per paper or batch, so a crash never leaves them out of step.
@@ -239,22 +239,24 @@ DBLP stores arXiv preprints as separate `journals/corr/` records and never links
 #### C. `c_fetch.py` — Fetch Abstracts from External APIs
 
 - **Input:** `paper_summary`
-- **Takes:** papers at status `B`
+- **Takes:** papers at status `B`, `B-1`, `B-2` and `B-3`
 - **Output:** Fill in every available value in `paper_field_abstract` and `paper_field_arxiv`. Move every finished paper to `C`.
 
-**Lookup chain.** A lookup is successful only if it returns an abstract. For each paper without an abstract, run the lookups in this order and stop at the first success:
+**Stages.** Run four stages one after another, each over the whole database. A lookup is successful only if it returns an abstract.
 
-| # | Lookup                       | Runs if                 |
-|---|------------------------------|-------------------------|
-| 1 | arXiv by arXiv ID            | the paper has an arXiv ID |
-| 2 | OpenAlex by DOI              | the paper has a DOI     |
-| 3 | Semantic Scholar by DOI      | the paper has a DOI     |
-| 4 | OpenAlex by title            | the paper has a title but no DOI and no arXiv ID |
+| # | Stage                        | Takes | Looks up papers that      | Without an abstract, moves to |
+|---|------------------------------|-------|---------------------------|-------------------------------|
+| 1 | arXiv by arXiv ID            | `B`   | have an arXiv ID          | `B-1` |
+| 2 | OpenAlex by DOI              | `B-1` | have a DOI                | `B-2` |
+| 3 | Semantic Scholar by DOI      | `B-2` | have a DOI                | `B-3` |
+| 4 | OpenAlex by title            | `B-3` | have a title but no DOI and no arXiv ID | `C` |
 
-- **arXiv fallback.** When lookup 2, 3 or 4 finds the paper but no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID. If arXiv returns an abstract, the chain stops there.
-- **Title results** (lookup 4) are used only if they pass the title match check. A result that fails is treated as not found.
-- **Moving to `C`.** A paper moves to `C` as soon as a lookup succeeds, or when every lookup that runs has finished without an abstract. A failed call (timeout, 429, 5xx) leaves the paper at `B` for the next run.
-- **Saving.** Write every abstract, arXiv ID and status change to the database the moment it is known, never at the end of a round. An interruption (Ctrl+C, crash, power loss) loses only the calls in flight. The first Ctrl+C finishes the calls in flight and stops; a second quits at once.
+- **Passing on.** At the start of each stage, papers it does not look up move straight to the next status with no call.
+- **Found.** A paper with an abstract moves to `C` at once.
+- **arXiv fallback.** When stage 2, 3 or 4 finds no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID (or by the paper's existing arXiv ID). If arXiv returns an abstract, the paper moves to `C`.
+- **Title results** (stage 4) are used only if they pass the title match check. A result that fails is treated as not found.
+- **Failed calls.** A failed call (timeout, 429, 5xx) leaves the paper at its status for the next run.
+- **Saving.** Write every abstract, arXiv ID and status change to the database the moment it is known. An interruption (Ctrl+C, crash, power loss) loses only the calls in flight. The first Ctrl+C finishes the calls in flight and stops; a second quits at once. A rerun continues from the statuses in the database.
 
 **Title match check.** A title result is accepted only if all three hold:
 
@@ -274,14 +276,14 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 **API keys.**
 
 - Load API keys from the `.env` file.
-- OpenAlex: use every `OPENALEX_API_KEY_<n>` in `.env`, in order. When a key hits its daily budget, switch to the next one, exactly once per exhausted key. When all are used up, stop; everything found is already saved.
+- OpenAlex: use one key, the lowest-numbered `OPENALEX_API_KEY_<n>` in `.env`. When its daily budget is used up, stage 2 switches to free single-DOI lookups without a key, and stage 4 stops the run; everything found is already saved. The budget resets at 00:00 UTC.
 - Semantic Scholar: send `S2_API_KEY` from `.env` in the `x-api-key` header.
 
 **Performance.**
 
-- Work in rounds. Each round takes a block of papers at status `B` and runs the lookup chain as batch stages: only papers still without an abstract go on to the next stage.
-- Put as many papers as each API allows into one call: many IDs per arXiv `id_list` call, up to 100 DOIs per OpenAlex call (keeping the URL within the length limit), and up to 500 IDs per Semantic Scholar batch call.
-- Run multiple batches concurrently, within each source's rate limit.
+- Each stage reads its papers in chunks of 10,000.
+- Put as many papers as each API allows into one call: 100 IDs per arXiv `id_list` call, up to 100 DOIs per OpenAlex call (keeping the URL within the length limit), and up to 500 IDs per Semantic Scholar batch call.
+- Stage 2 runs 8 calls at once; stages 1, 3 and 4 run one call at a time.
 - Retry 429 and 5xx responses with backoff, and honor `Retry-After`.
 
 #### D. `d_abstract.md` — Find Missing Abstracts
