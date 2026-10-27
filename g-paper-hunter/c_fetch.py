@@ -35,6 +35,7 @@ ARXIV_INTERVAL = 3.1
 OPENALEX = "https://api.openalex.org"
 OPENALEX_RPS = 10
 OPENALEX_WORKERS = 8
+OPENALEX_SINGLE_CHUNK = 20
 OPENALEX_URL_LIMIT = 3_800
 OPENALEX_SELECT = "id,doi,ids,display_name,publication_year,abstract_inverted_index,locations,authorships"
 OPENALEX_TITLE_RESULTS = 5
@@ -48,10 +49,12 @@ S2_FIELDS = "title,year,authors,externalIds,abstract"
 
 TITLE_SIMILARITY = 0.95
 YEAR_TOLERANCE = 1
-MIN_ABSTRACT_WORDS = 10
 PLACEHOLDER_RE = re.compile(
     r"^(no abstract( is)? available|abstract not available|not available|n/?a|none|"
     r"this article has no abstract|no abstract|abstract|\[no abstract available\])\.?$", re.I)
+WITHDRAWN_RE = re.compile(
+    r"^(this|the) (paper|article|submission|manuscript|preprint|work) (has been|was|is|have been) withdrawn", re.I)
+LETTER_RE = re.compile(r"[^\W\d_]")
 ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
 ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
 ARXIV_DOI_RE = re.compile(r"10\.48550/arxiv\.(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})", re.I)
@@ -164,9 +167,9 @@ def normalize_title(title: str | None) -> str:
 
 def valid_abstract(text: str, title: str | None) -> str | None:
     text = clean_text(text)
-    if not text or PLACEHOLDER_RE.match(text) or normalize_title(text) == normalize_title(title):
+    if not LETTER_RE.search(text) or PLACEHOLDER_RE.match(text) or WITHDRAWN_RE.match(text):
         return None
-    return text if len(text.split()) >= MIN_ABSTRACT_WORDS else None
+    return None if normalize_title(text) == normalize_title(title) else text
 
 
 def surname(name: str) -> str:
@@ -233,8 +236,6 @@ class OpenAlex:
         if not numbered:
             sys.exit("No OPENALEX_API_KEY_<n> in .env")
         self.key = numbered[0][1]
-        self.free = False
-        self.lock = threading.Lock()
         self.http = Http(1.0 / OPENALEX_RPS)
 
     @staticmethod
@@ -296,12 +297,14 @@ class OpenAlex:
                  for a in work.get("authorships") or []]
         return work.get("display_name"), work.get("publication_year"), names
 
+    @classmethod
+    def same_paper(cls, work: dict, paper: Paper) -> bool:
+        doi = (work.get("doi") or "").removeprefix("https://doi.org/").lower()
+        return bool(paper.doi and doi == paper.doi.lower()) or title_matches(paper, *cls.match_fields(work))
+
     def doi_chunks(self, papers: list[Paper]) -> list[list[Paper]]:
         chunks, current, length = [], [], 0
         for p in papers:
-            if any(c in p.doi for c in ",|"):
-                chunks.append([p])
-                continue
             size = len(urllib.parse.quote(p.doi, safe="/:")) + 1
             if current and (len(current) >= 100 or length + size > OPENALEX_URL_LIMIT):
                 chunks.append(current)
@@ -354,6 +357,14 @@ class SemanticScholar:
     def arxiv_id(work: dict) -> str | None:
         return canonical_arxiv((work.get("externalIds") or {}).get("ArXiv"))
 
+    @staticmethod
+    def same_paper(work: dict, paper: Paper) -> bool:
+        doi = ((work.get("externalIds") or {}).get("DOI") or "").lower()
+        if paper.doi and doi == paper.doi.lower():
+            return True
+        return title_matches(paper, work.get("title"), work.get("year"),
+                             [a.get("name") or "" for a in work.get("authors") or []])
+
     def by_doi(self, papers: list[Paper]) -> dict[int, dict | None]:
         r = self.request("POST", f"{S2}/paper/batch", params={"fields": S2_FIELDS},
                          json={"ids": [f"DOI:{p.doi}" for p in papers]})
@@ -375,12 +386,13 @@ class Stage:
 
 STAGES = [
     Stage(1, "arXiv ID", "arxiv", "B", "B-1", "arxiv_id IS NOT NULL"),
-    Stage(2, "OpenAlex DOI", "oa-doi", "B-1", "B-2", "doi IS NOT NULL"),
-    Stage(3, "S2 DOI", "s2-doi", "B-2", "B-3", "doi IS NOT NULL"),
-    Stage(4, "OpenAlex title", "oa-title", "B-3", "C",
+    Stage(2, "OpenAlex DOI batch", "oa-batch", "B-1", "B-2", "doi IS NOT NULL"),
+    Stage(3, "OpenAlex DOI single", "oa-single", "B-2", "B-3", "doi IS NOT NULL"),
+    Stage(4, "S2 DOI", "s2-doi", "B-3", "B-4", "doi IS NOT NULL"),
+    Stage(5, "OpenAlex title", "oa-title", "B-4", "C",
           "doi IS NULL AND arxiv_id IS NULL AND trim(coalesce(title, '')) <> ''"),
 ]
-OPEN_STATUSES = ["B", "B-1", "B-2", "B-3"]
+OPEN_STATUSES = [stage.takes for stage in STAGES]
 
 
 def clock(seconds: float) -> str:
@@ -428,7 +440,7 @@ class Progress:
         if not self.live or self.stage is None:
             return
         width = shutil.get_terminal_size().columns - 1
-        top = (f"  stage {self.stage.no}/4 {self.stage.name} · {self.done:,}/{self.total:,} · {self.counts()} · "
+        top = (f"  stage {self.stage.no}/{len(STAGES)} {self.stage.name} · {self.done:,}/{self.total:,} · {self.counts()} · "
                f"{clock(time.time() - self.stage_started)} · ETA {self.eta()}")
         bottom = f"    → {self.current}"
         if self.waiting and self.waiting[0] > time.time():
@@ -454,7 +466,7 @@ class Progress:
     def start_stage(self, stage: Stage, total: int, passed: int) -> None:
         with self.lock:
             self.erase()
-            print(f"\n  stage {stage.no}/4 · {stage.name} · {stage.takes} → {stage.sets} · "
+            print(f"\n  stage {stage.no}/{len(STAGES)} · {stage.name} · {stage.takes} → {stage.sets} · "
                   f"{total:,} to look up · {passed:,} passed on with no call", flush=True)
             self.stage, self.total, self.stage_started = stage, total, time.time()
             self.done = self.found = self.missed = self.failed = 0
@@ -535,8 +547,8 @@ class Store:
 
     def statuses(self) -> dict[str, int]:
         return dict(self.conn.execute(
-            "SELECT status, COUNT(*) FROM paper_status WHERE status IN (?, ?, ?, ?, 'C') GROUP BY status",
-            OPEN_STATUSES).fetchall())
+            f"SELECT status, COUNT(*) FROM paper_status WHERE status IN ({', '.join('?' * len(OPEN_STATUSES))}, 'C') "
+            "GROUP BY status", OPEN_STATUSES).fetchall())
 
 
 class Fetcher:
@@ -578,6 +590,9 @@ class Fetcher:
     def accept(self, papers: list[Paper], stage: Stage, results: dict[int, dict | None], source) -> None:
         for p in papers:
             work = results[p.paper_id]
+            if work is not None and not source.same_paper(work, p):
+                work = None
+                self.stats["other paper"] += 1
             if work is not None:
                 p.abstract = valid_abstract(source.abstract(work), p.title)
             if p.abstract:
@@ -613,15 +628,7 @@ class Fetcher:
             self.fail(rest, stage.name, e)
             self.progress.step(rest, str(e))
 
-    def openalex_doi(self, papers: list[Paper], stage: Stage) -> dict[int, dict | None]:
-        if not self.openalex.free and not (len(papers) == 1 and any(c in papers[0].doi for c in ",|")):
-            try:
-                return self.openalex.by_doi(papers)
-            except QuotaExhausted as e:
-                with self.openalex.lock:
-                    if not self.openalex.free:
-                        self.openalex.free = True
-                        self.progress.log(f"    [openalex] {e}; switching to free single-DOI lookups without a key")
+    def openalex_single(self, papers: list[Paper], stage: Stage) -> dict[int, dict | None]:
         results = {}
         for p in papers:
             if self.stopping.is_set():
@@ -633,22 +640,31 @@ class Fetcher:
         return results
 
     def doi_chunk(self, papers: list[Paper], stage: Stage) -> None:
+        lookup, source = {"oa-batch": (self.openalex.by_doi, self.openalex),
+                          "oa-single": (lambda chunk: self.openalex_single(chunk, stage), self.openalex),
+                          "s2-doi": (self.s2.by_doi, self.s2)}[stage.source]
+
         def run(chunk: list[Paper]) -> None:
             self.check()
             results = {}
             try:
-                if stage.no == 2:
-                    results = self.openalex_doi(chunk, stage)
-                else:
-                    results = self.s2.by_doi(chunk)
+                results = lookup(chunk)
             except TransientError as e:
                 self.fail(chunk, stage.name, e)
             else:
-                self.accept([p for p in chunk if p.paper_id in results], stage, results,
-                            self.openalex if stage.no == 2 else self.s2)
+                self.accept([p for p in chunk if p.paper_id in results], stage, results, source)
             self.progress.step([p for p in chunk if p.failed or p.paper_id in results], describe(chunk[-1]))
-        if stage.no == 2:
-            chunks, workers = self.openalex.doi_chunks(papers), OPENALEX_WORKERS
+        if stage.source == "oa-batch":
+            unsafe = [p for p in papers if any(c in p.doi for c in ",|")]
+            if unsafe:
+                self.accept(unsafe, stage, {p.paper_id: None for p in unsafe}, source)
+                self.progress.step(unsafe, describe(unsafe[-1]))
+            skip = {p.paper_id for p in unsafe}
+            chunks = self.openalex.doi_chunks([p for p in papers if p.paper_id not in skip])
+            workers = OPENALEX_WORKERS
+        elif stage.source == "oa-single":
+            chunks = [papers[i:i + OPENALEX_SINGLE_CHUNK] for i in range(0, len(papers), OPENALEX_SINGLE_CHUNK)]
+            workers = OPENALEX_WORKERS
         else:
             chunks, workers = [papers[i:i + S2_BATCH] for i in range(0, len(papers), S2_BATCH)], 1
         with ThreadPoolExecutor(workers) as pool:
@@ -667,7 +683,7 @@ class Fetcher:
         self.check()
         passed = self.store.pass_on(stage)
         self.progress.start_stage(stage, self.store.count(stage), passed)
-        work = {1: self.arxiv_chunk, 2: self.doi_chunk, 3: self.doi_chunk, 4: self.title_chunk}[stage.no]
+        work = {"arxiv": self.arxiv_chunk, "oa-title": self.title_chunk}.get(stage.source, self.doi_chunk)
         after = 0
         try:
             while papers := self.store.load(stage, after):
@@ -703,11 +719,15 @@ def main() -> None:
         fetcher.stopping.set()
         progress.log("    stopping: finishing requests in flight (Ctrl+C again to quit at once)")
     signal.signal(signal.SIGINT, on_sigint)
-    started, stopped = time.time(), None
+    started, stopped, budget = time.time(), None, None
     try:
         for stage in STAGES:
-            fetcher.run_stage(stage)
-    except (QuotaExhausted, Stopped) as e:
+            try:
+                fetcher.run_stage(stage)
+            except QuotaExhausted as e:
+                budget = e
+                progress.log(f"    stage {stage.no} paused: {e}; its papers wait for the next run")
+    except Stopped as e:
         stopped = e
     finally:
         progress.close()
@@ -715,12 +735,15 @@ def main() -> None:
         conn.close()
     if stopped:
         print(f"\n  stopped: {stopped}")
+    if budget:
+        print(f"\n  {budget}")
     print("\n" + "━" * 70)
     for stage in STAGES:
         if stage.no in fetcher.summary:
             found, missed, failed, passed = fetcher.summary[stage.no]
             print(f"  stage {stage.no} {stage.name:<15} ✓ {found:,}  ✗ {missed:,}  ⚠ {failed:,}  · passed on {passed:,}")
-    print(f"  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}")
+    print(f"  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
+          f"  ·  other paper rejected {fetcher.stats['other paper']:,}")
     print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.http.calls:,}  "
           f"Semantic Scholar {fetcher.s2.http.calls:,}  |  {clock(time.time() - started)}")
     print("  status now: " + " · ".join(f"{s} {after.get(s, 0):,}" for s in OPEN_STATUSES + ["C"]))

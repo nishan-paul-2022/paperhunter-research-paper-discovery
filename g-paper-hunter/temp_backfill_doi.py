@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_fetch as c
 
-DONE_FILE = c.REPO_ROOT / "b-config" / "c_backfill_checked.txt"
+DONE_FILE = Path(__file__).resolve().with_name("temp_backfill_checked.txt")
 WORKERS = 8
 CHUNK = 1_000
 LOG_EVERY = 10_000
@@ -27,12 +27,6 @@ def lookup(http: c.Http, doi: str) -> dict | None:
     if r.status_code != 200:
         raise c.TransientError(f"OpenAlex HTTP {r.status_code}")
     return r.json()
-
-
-def same_paper(work: dict, paper: c.Paper) -> bool:
-    if (work.get("doi") or "").removeprefix("https://doi.org/").lower() == paper.doi.lower():
-        return True
-    return c.title_matches(paper, *c.OpenAlex.match_fields(work))
 
 
 class Live:
@@ -151,7 +145,7 @@ def main() -> None:
             live.last_error = str(e)
             live.record("failed", doi, f"no answer: {e}")
             return
-        other = work is not None and not same_paper(work, paper)
+        other = work is not None and not c.OpenAlex.same_paper(work, paper)
         abstract = c.valid_abstract(c.OpenAlex.abstract(work), title) if work and not other else None
         with lock:
             if abstract:
@@ -185,7 +179,7 @@ def main() -> None:
     print(f"  ⚠ {live.failed:,} no answer" + (f" (last: {live.last_error})" if live.failed else ""))
     print(f"  checked {live.done:,} of {live.total:,}  ·  calls {http.calls:,}  ·  {c.clock(time.time() - live.started)}")
     if live.failed or live.done < live.total:
-        print("  Not finished.  → Run c_backfill_doi.py again to continue")
+        print("  Not finished.  → Run temp_backfill_doi.py again to continue")
     else:
         print("  Done.")
     print("━" * 70)

@@ -328,7 +328,7 @@ CREATE INDEX IF NOT EXISTS paper_dblp_doi ON paper_dblp (doi);
 
 CREATE TABLE IF NOT EXISTS paper_status (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    status   TEXT NOT NULL DEFAULT 'A' CHECK (status IN ('A', 'B', 'B-1', 'B-2', 'B-3', 'C', 'D', 'E', 'F', 'G'))
+    status   TEXT NOT NULL DEFAULT 'A' CHECK (status IN ('A', 'B', 'B-1', 'B-2', 'B-3', 'B-4', 'C', 'D', 'E', 'F', 'G'))
 );
 CREATE INDEX IF NOT EXISTS paper_status_status ON paper_status (status);
 
@@ -398,7 +398,7 @@ LEFT JOIN journal_list j ON j.dblp_key = p.venue_key;
 
 def migrate_status(conn):
     row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'paper_status'").fetchone()
-    if row is None or "'B-1'" in row[0]:
+    if row is None or "'B-4'" in row[0]:
         return
     conn.executescript("""
 PRAGMA foreign_keys = OFF;
@@ -406,9 +406,10 @@ BEGIN;
 DROP VIEW IF EXISTS paper_summary;
 CREATE TABLE paper_status_new (
     paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    status   TEXT NOT NULL DEFAULT 'A' CHECK (status IN ('A', 'B', 'B-1', 'B-2', 'B-3', 'C', 'D', 'E', 'F', 'G'))
+    status   TEXT NOT NULL DEFAULT 'A' CHECK (status IN ('A', 'B', 'B-1', 'B-2', 'B-3', 'B-4', 'C', 'D', 'E', 'F', 'G'))
 );
-INSERT INTO paper_status_new (paper_id, status) SELECT paper_id, status FROM paper_status;
+INSERT INTO paper_status_new (paper_id, status)
+SELECT paper_id, CASE status WHEN 'B-3' THEN 'B-4' ELSE status END FROM paper_status;
 DROP TABLE paper_status;
 ALTER TABLE paper_status_new RENAME TO paper_status;
 COMMIT;
