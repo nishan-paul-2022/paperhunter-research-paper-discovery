@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import shutil
 import signal
@@ -28,13 +29,19 @@ def lookup(http: c.Http, doi: str) -> dict | None:
     return r.json()
 
 
+def same_paper(work: dict, paper: c.Paper) -> bool:
+    if (work.get("doi") or "").removeprefix("https://doi.org/").lower() == paper.doi.lower():
+        return True
+    return c.title_matches(paper, *c.OpenAlex.match_fields(work))
+
+
 class Live:
     def __init__(self, total: int):
         self.total = total
         self.live = sys.stdout.isatty()
         self.lock = threading.RLock()
         self.started = time.time()
-        self.done = self.found = self.missing = self.empty = self.failed = 0
+        self.done = self.found = self.missing = self.empty = self.other = self.failed = 0
         self.current, self.waiting, self.last_error = "", None, ""
         self.drawn = False
         self.stop = threading.Event()
@@ -60,7 +67,7 @@ class Live:
 
     def counts(self) -> str:
         return (f"✓ {self.found:,} abstracts · ✗ {self.empty:,} no abstract · "
-                f"✗ {self.missing:,} not in OpenAlex · ⚠ {self.failed:,} no answer")
+                f"✗ {self.missing:,} not in OpenAlex · ✗ {self.other:,} other paper · ⚠ {self.failed:,} no answer")
 
     def draw(self) -> None:
         if not self.live:
@@ -110,7 +117,7 @@ def main() -> None:
     c.load_env()
     conn = c.connect()
     checked = set(int(x) for x in DONE_FILE.read_text().split()) if DONE_FILE.exists() else set()
-    rows = conn.execute("SELECT paper_id, doi, title FROM paper_summary "
+    rows = conn.execute("SELECT paper_id, doi, title, authors, year FROM paper_summary "
                         "WHERE status = 'C' AND abstract IS NULL AND doi IS NOT NULL ORDER BY paper_id").fetchall()
     todo = [r for r in rows if r[0] not in checked]
     print(f"  C papers with a DOI and no abstract: {len(rows):,}  ·  already checked: {len(rows) - len(todo):,}"
@@ -134,7 +141,8 @@ def main() -> None:
     signal.signal(signal.SIGINT, on_sigint)
 
     def run(row) -> None:
-        paper_id, doi, title = row
+        paper = c.Paper(row[0], row[1], None, row[2], json.loads(row[3]), row[4])
+        paper_id, doi, title = paper.paper_id, paper.doi, paper.title
         if stop.is_set():
             return
         try:
@@ -143,7 +151,8 @@ def main() -> None:
             live.last_error = str(e)
             live.record("failed", doi, f"no answer: {e}")
             return
-        abstract = c.valid_abstract(c.OpenAlex.abstract(work), title) if work else None
+        other = work is not None and not same_paper(work, paper)
+        abstract = c.valid_abstract(c.OpenAlex.abstract(work), title) if work and not other else None
         with lock:
             if abstract:
                 with conn:
@@ -152,6 +161,8 @@ def main() -> None:
             done_file.write(f"{paper_id}\n")
         if abstract:
             live.record("found", doi, f"✓ abstract saved ({len(abstract.split())} words)")
+        elif other:
+            live.record("other", doi, f"✗ DOI points to another paper: {work.get('display_name') or ''}")
         elif work:
             live.record("empty", doi, "✗ in OpenAlex, no abstract")
         else:
@@ -170,7 +181,7 @@ def main() -> None:
         conn.close()
     print("\n" + "━" * 70)
     print(f"  ✓ {live.found:,} abstracts added  ·  ✗ {live.empty:,} no abstract in OpenAlex  ·  "
-          f"✗ {live.missing:,} not in OpenAlex")
+          f"✗ {live.missing:,} not in OpenAlex  ·  ✗ {live.other:,} DOI points to another paper")
     print(f"  ⚠ {live.failed:,} no answer" + (f" (last: {live.last_error})" if live.failed else ""))
     print(f"  checked {live.done:,} of {live.total:,}  ·  calls {http.calls:,}  ·  {c.clock(time.time() - live.started)}")
     if live.failed or live.done < live.total:
