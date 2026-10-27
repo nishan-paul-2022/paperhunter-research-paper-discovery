@@ -38,15 +38,48 @@ def digest(text: str | None) -> bytes:
 
 
 class Item:
-    __slots__ = ("paper_id", "doi", "arxiv_id", "title", "authors", "year", "digest", "notes")
+    __slots__ = ("paper_id", "doi", "arxiv_id", "title", "authors", "year", "digest", "notes", "tried")
 
-    def __init__(self, row):
+    def __init__(self, row, tried: dict[int, list[tuple[str, str]]]):
         self.paper_id, self.doi, self.arxiv_id, self.title, self.authors, self.year = row[:6]
         self.digest = digest(row[6])
-        self.notes: list[str] = []
+        past = tried.get(self.paper_id, [])
+        self.notes: list[str] = [note for _, note in past]
+        self.tried: set[str] = {source for source, _ in past}
 
     def paper(self) -> c.Paper:
         return c.Paper(self.paper_id, self.doi, self.arxiv_id, self.title, json.loads(self.authors), self.year)
+
+    def needed(self) -> set[str]:
+        return ({"arxiv"} if self.arxiv_id else set()) | ({"s2", "oa-single"} if self.doi else set())
+
+
+def read_progress() -> tuple[set[int], dict[int, list[tuple[str, str]]]]:
+    done, tried = set(), {}
+    if CHECKED_FILE.exists():
+        for line in CHECKED_FILE.read_text().splitlines():
+            parts = line.split("\t")
+            if len(parts) < 2:
+                continue
+            if parts[1].startswith("-"):
+                tried.setdefault(int(parts[0]), []).append((parts[1][1:], parts[2] if len(parts) > 2 else ""))
+            else:
+                done.add(int(parts[0]))
+    return done, tried
+
+
+def write_unconfirmed() -> int:
+    rows = [line.split("\t") for line in CHECKED_FILE.read_text().splitlines()] if CHECKED_FILE.exists() else []
+    why = {int(r[0]): r[2] for r in rows if len(r) > 2 and r[1] == "unconfirmed"}
+    conn = sqlite3.connect(f"file:{c.DB_PATH}?mode=ro", uri=True, timeout=120)
+    lines = ["paper_id\tdoi\tarxiv_id\twhy\ttitle"]
+    for paper_id in sorted(why):
+        row = conn.execute("SELECT doi, arxiv_id, title FROM paper_summary WHERE paper_id = ?", (paper_id,)).fetchone()
+        if row:
+            lines.append(f"{paper_id}\t{row[0] or '-'}\t{row[1] or '-'}\t{why[paper_id]}\t{row[2]}")
+    conn.close()
+    UNCONFIRMED_FILE.write_text("\n".join(lines) + "\n")
+    return len(why)
 
 
 class Verifier:
@@ -60,7 +93,7 @@ class Verifier:
         self.by_source: Counter = Counter()
         self.phase: dict[str, list[int]] = {}
         self.stop = threading.Event()
-        self.out = CHECKED_FILE.open("a")
+        self.out = CHECKED_FILE.open("a", buffering=1)
         self.arxiv = c.ArXiv()
         self.openalex = c.OpenAlex()
         self.s2 = c.SemanticScholar()
@@ -79,8 +112,8 @@ class Verifier:
         a, b = words(self.stored(item.paper_id)), words(text)
         return SequenceMatcher(None, a[:2000], b[:2000]).ratio() >= SAME_TEXT
 
-    def open(self, item: Item) -> bool:
-        return item.paper_id not in self.confirmed
+    def open(self, item: Item, source: str | None = None) -> bool:
+        return item.paper_id not in self.confirmed and (source is None or source not in item.tried)
 
     def confirm(self, item: Item, source: str) -> None:
         with self.lock:
@@ -90,9 +123,11 @@ class Verifier:
             self.by_source[source] += 1
             self.out.write(f"{item.paper_id}\t{source}\n")
 
-    def note(self, item: Item, text: str) -> None:
+    def note(self, item: Item, source: str, text: str) -> None:
         with self.lock:
             item.notes.append(text)
+            item.tried.add(source)
+            self.out.write(f"{item.paper_id}\t-{source}\t{text}\n")
 
     def step(self, name: str, n: int) -> None:
         with self.lock:
@@ -101,9 +136,10 @@ class Verifier:
     def check_arxiv(self, items: list[Item], live) -> None:
         by_id: dict[str, list[Item]] = {}
         for it in items:
-            by_id.setdefault(it.arxiv_id, []).append(it)
+            if self.open(it, "arxiv"):
+                by_id.setdefault(it.arxiv_id, []).append(it)
         ids = sorted(by_id)
-        self.phase["arXiv"] = [0, len(items)]
+        self.phase["arXiv"] = [0, sum(len(v) for v in by_id.values())]
         fails = 0
         for i in range(0, len(ids), c.ARXIV_BATCH):
             if self.stop.is_set():
@@ -129,16 +165,16 @@ class Verifier:
             for it in group:
                 entry = entries.get(it.arxiv_id)
                 if entry is None:
-                    self.note(it, "arXiv: id not found")
+                    self.note(it, "arxiv", "arXiv: id not found")
                     continue
                 summary, names = entry
                 ours = {c.surname(a) for a in json.loads(it.authors)} - {""}
                 if not ours & ({c.surname(a) for a in names} - {""}):
-                    self.note(it, "arXiv: no shared author")
+                    self.note(it, "arxiv", "arXiv: no shared author")
                 elif self.same_text(it, summary):
                     self.confirm(it, "arxiv")
                 else:
-                    self.note(it, "arXiv: different text")
+                    self.note(it, "arxiv", "arXiv: different text")
             self.step("arXiv", len(group))
             live.current = f"arXiv {chunk[-1]}"
 
@@ -166,23 +202,24 @@ class Verifier:
                 continue
             work = results[it.paper_id]
             if work is None:
-                self.note(it, f"{name}: not found")
+                self.note(it, name, f"{name}: not found")
             elif not source.same_paper(work, it.paper()):
-                self.note(it, f"{name}: other paper")
+                self.note(it, name, f"{name}: other paper")
             elif self.same_text(it, source.abstract(work)):
                 self.confirm(it, name)
             else:
-                self.note(it, f"{name}: different text")
+                self.note(it, name, f"{name}: different text")
 
     def check_openalex_batch(self, items: list[Item], live) -> None:
-        safe = [it for it in items if not any(ch in it.doi for ch in ",|")]
+        safe = [it for it in items if not any(ch in it.doi for ch in ",|") and self.open(it, "oa-batch")
+                and self.open(it, "oa-single")]
         self.phase["OA batch"] = [0, len(safe)]
         chunks = self.openalex.doi_chunks(safe)
 
         def run(chunk: list[Item]) -> None:
             if self.stop.is_set() or self.budget:
                 return
-            todo = [it for it in chunk if self.open(it)]
+            todo = [it for it in chunk if self.open(it, "oa-batch")]
             if todo:
                 try:
                     results = self.openalex.by_doi(todo)
@@ -201,12 +238,13 @@ class Verifier:
             list(pool.map(run, chunks))
 
     def check_s2(self, items: list[Item], live) -> None:
+        items = [it for it in items if self.open(it, "s2")]
         self.phase["S2"] = [0, len(items)]
         for i in range(0, len(items), c.S2_BATCH):
             if self.stop.is_set():
                 return
             chunk = items[i:i + c.S2_BATCH]
-            todo = [it for it in chunk if self.open(it)]
+            todo = [it for it in chunk if self.open(it, "s2")]
             if todo:
                 try:
                     results = self.s2.by_doi(todo)
@@ -220,7 +258,7 @@ class Verifier:
             self.step("S2", len(chunk))
 
     def check_openalex_single(self, items: list[Item], live) -> None:
-        todo = [it for it in items if self.open(it)]
+        todo = [it for it in items if self.open(it, "oa-single")]
         self.phase["OA single"] = [0, len(todo)]
 
         def run(it: Item) -> None:
@@ -240,10 +278,10 @@ class Verifier:
             list(pool.map(run, todo))
 
     def finish(self) -> list[Item]:
-        unconfirmed = [it for it in self.items if it.paper_id not in self.confirmed and it.paper_id not in self.retry]
-        if not self.stop.is_set():
-            for it in unconfirmed:
-                self.out.write(f"{it.paper_id}\tunconfirmed\t{'; '.join(it.notes) or 'no source to check'}\n")
+        unconfirmed = [it for it in self.items if it.paper_id not in self.confirmed
+                       and it.paper_id not in self.retry and it.needed() <= it.tried]
+        for it in unconfirmed:
+            self.out.write(f"{it.paper_id}\tunconfirmed\t{'; '.join(it.notes) or 'no source to check'}\n")
         self.out.close()
         self.db.close()
         return unconfirmed
@@ -320,21 +358,19 @@ def main() -> None:
     print("╚══════════════════════════════════════════════════════════════════════╝")
     print(f"\n  Database: {c.DB_PATH}  (opened read-only)\n")
     c.load_env()
-    done = set()
-    if CHECKED_FILE.exists():
-        done = {int(line.split("\t", 1)[0]) for line in CHECKED_FILE.read_text().splitlines() if line.strip()}
+    done, tried = read_progress()
     backfilled = set()
     if BACKFILL_FILE.exists():
         backfilled = {int(x) for x in BACKFILL_FILE.read_text().split()}
     conn = sqlite3.connect(f"file:{c.DB_PATH}?mode=ro", uri=True, timeout=120)
-    items = [Item(r) for r in conn.execute(
+    items = [Item(r, tried) for r in conn.execute(
         "SELECT paper_id, doi, arxiv_id, title, authors, year, abstract FROM paper_summary "
         "WHERE status = 'C' AND abstract IS NOT NULL ORDER BY paper_id")
         if r[0] not in done and r[0] not in backfilled]
     conn.close()
     with_arxiv = [it for it in items if it.arxiv_id]
     with_doi = [it for it in items if it.doi]
-    print(f"  Papers at C with an abstract left to verify: {len(items):,}  (already done: {len(done):,} · "
+    print(f"  Papers at C with an abstract left to verify: {len(items):,}  (finished earlier: {len(done):,} · "
           f"skipped, from the backfill: {len(backfilled):,} checked there)")
     print(f"  arXiv ID {len(with_arxiv):,} · DOI {len(with_doi):,} · neither "
           f"{sum(not it.arxiv_id and not it.doi for it in items):,}")
@@ -370,18 +406,16 @@ def main() -> None:
     finally:
         live.close()
         unconfirmed = v.finish()
-    if not v.stop.is_set():
-        lines = [f"{it.paper_id}\t{it.doi or '-'}\t{it.arxiv_id or '-'}\t{'; '.join(it.notes) or 'no source to check'}"
-                 f"\t{it.title}" for it in unconfirmed]
-        UNCONFIRMED_FILE.write_text("paper_id\tdoi\tarxiv_id\twhy\ttitle\n" + "\n".join(lines) + "\n")
+    total_unconfirmed = write_unconfirmed()
     print("\n" + "━" * 70)
     print(f"  {live.summary()}")
-    print(f"  unconfirmed {len(unconfirmed):,}" + (f"  → listed in {UNCONFIRMED_FILE.name}" if not v.stop.is_set() else ""))
+    print(f"  unconfirmed this run {len(unconfirmed):,} · all runs {total_unconfirmed:,}  → listed in {UNCONFIRMED_FILE.name}")
     if v.budget:
         print(f"  OpenAlex batch stopped early: {v.budget}")
     print(f"  calls: arXiv {v.arxiv.http.calls:,}  OpenAlex {v.openalex.http.calls:,}  "
           f"Semantic Scholar {v.s2.http.calls:,}")
-    if v.stop.is_set() or v.retry:
+    left = sum(it.paper_id not in v.confirmed and not it.needed() <= it.tried for it in items)
+    if v.stop.is_set() or v.retry or left:
         print("  Not finished.  → Run temp_verify_abstracts.py again to continue")
     else:
         print("  Done.  The database was not changed.")
