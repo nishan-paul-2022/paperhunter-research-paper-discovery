@@ -29,7 +29,7 @@ TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 CHUNK_PAPERS = 10_000
 
 ARXIV = "https://export.arxiv.org/api/query"
-ARXIV_BATCH = 500
+ARXIV_BATCH = 100
 ARXIV_INTERVAL = 3.1
 
 OPENALEX = "https://api.openalex.org"

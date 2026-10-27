@@ -282,7 +282,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 **Performance.**
 
 - Each stage reads its papers in chunks of 10,000.
-- Put as many papers as each API allows into one call: 500 IDs per arXiv `id_list` call, up to 100 DOIs per OpenAlex call (keeping the URL within the length limit), and up to 500 IDs per Semantic Scholar batch call.
+- Put as many papers as each API allows into one call: 100 IDs per arXiv `id_list` call, up to 100 DOIs per OpenAlex call (keeping the URL within the length limit), and up to 500 IDs per Semantic Scholar batch call.
 - Stage 2 runs 8 calls at once; stages 1, 3 and 4 run one call at a time.
 - Retry 429 and 5xx responses with backoff, and honor `Retry-After`.
 
