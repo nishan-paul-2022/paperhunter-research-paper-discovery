@@ -75,6 +75,10 @@ JUNK_RE = re.compile(
     r"|\d+(?:st|nd|rd|th) edition of the interspeech conference, [^.]*"
     r"|the [a-z]+ language resources and evaluation conference \(lrec \d{4}\), [^.]*)\.?$"
     r"|^(?:zora \(zurich open repository and archive\) provides open and worldwide access"
+    r"|open access this article is licensed under a creative commons"
+    r"|this work is licensed under a creative commons"
+    r"|personal use of this material is permitted\. permission from ieee must be obtained"
+    r"|.{0,80}?this is the author['’]s version of the work"
     r"|contains fulltext : "
     r"|test 02 - elsevier's scopus, the largest abstract and citation database"
     r"|views icon views article contents"
@@ -206,6 +210,7 @@ def clean_text(text: str | None) -> str:
     text = html.unescape(re.sub(r"<[^>]+>", " ", text or ""))
     text = " ".join(re.sub(r"<[^>]+>", " ", text).split())
     text = re.sub(r"^©\s*\d{4}\s+by\s+scitepress\b[^.]*\blda\.\s*", "", text, flags=re.I)
+    text = re.sub(r"^©\s*(?:the author\(s\)\s*)?\d{4}(?:\s+(?:ieee|ifip|the authors?))?\.?\s*(?=[A-Z])", "", text, flags=re.I)
     for _ in range(2):
         text = re.sub(r"^[:•\-—–]+\s*", "", text)
         text = re.sub(r"^(?i:abstract|summary)(?:\s*[:.\-–—]\s+|\s*[:\-–—]\s*(?=[A-Z])|\s+(?=[A-Z]))", "", text)
