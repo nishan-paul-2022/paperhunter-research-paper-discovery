@@ -396,31 +396,9 @@ LEFT JOIN journal_list j ON j.dblp_key = p.venue_key;
 """
 
 
-def migrate_status(conn):
-    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'paper_status'").fetchone()
-    if row is None or "'B-4'" in row[0]:
-        return
-    conn.executescript("""
-PRAGMA foreign_keys = OFF;
-BEGIN;
-DROP VIEW IF EXISTS paper_summary;
-CREATE TABLE paper_status_new (
-    paper_id INTEGER PRIMARY KEY REFERENCES paper_dblp (paper_id),
-    status   TEXT NOT NULL DEFAULT 'A' CHECK (status IN ('A', 'B', 'B-1', 'B-2', 'B-3', 'B-4', 'C', 'D', 'E', 'F', 'G'))
-);
-INSERT INTO paper_status_new (paper_id, status)
-SELECT paper_id, CASE status WHEN 'B-3' THEN 'B-4' ELSE status END FROM paper_status;
-DROP TABLE paper_status;
-ALTER TABLE paper_status_new RENAME TO paper_status;
-COMMIT;
-PRAGMA foreign_keys = ON;
-""")
-
-
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DB_PATH
     conn = sqlite3.connect(path)
-    migrate_status(conn)
     conn.executescript(SCHEMA + PAPER_SCHEMA)
     broken = conn.execute("PRAGMA foreign_key_check").fetchall()
     if broken:
