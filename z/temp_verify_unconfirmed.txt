@@ -1,0 +1,540 @@
+paper_id	doi	arxiv_id	why	title
+5866	-	-	no source to check	ReLIGn: a Tool for Model Repair based on Local Instance Graphs.
+5871	-	-	no source to check	A Taste of the Different Flavors of Tiramisù.
+5924	-	-	no source to check	Enhancing Event Log Manipulation and Insight Discovery through Querying Process Representations with DFGs.
+5928	-	-	no source to check	Work Tagger: A Labelling Companion.
+5943	-	-	no source to check	Entropia: Measuring Log Representativeness and Generalization of Discovered Process Models.
+5953	-	-	no source to check	SOUP: Simplifying Event Knowledge Graph Management for Process Mining.
+5957	-	-	no source to check	Process Mining and Artificial Intelligence for the Design, Sustainability, and Improvement of Collaborative Processes.
+6035	-	-	no source to check	SWORD Extractor Pulling Workarounds out the Eventlog.
+6584	10.1109/wcncw67598.2026.11555081	-	s2: not found; oa-batch: different text; oa-single: different text	Resilience-Driven Topology Reconfiguration via Hierarchical Deep Reinforcement Learning in Low-Altitude UAV Networks.
+7250	10.1109/wcnc65185.2026.11555727	-	s2: different text; oa-batch: different text; oa-single: different text	Inverse Learning Assisted V2I Communication for Intent Based 6G ISAC Vehicular Networks.
+11152	10.4230/lipics.csl.2024.27	-	s2: not found; oa-batch: not found; oa-single: different text	Going Deep and Going Wide: Counting Logic and Homomorphism Indistinguishability over Graphs of Bounded Treedepth and Treewidth.
+12052	10.1007/978-981-96-2074-6_43	-	s2: different text; oa-batch: different text; oa-single: different text	VERGE in VBS 2025.
+12090	10.1007/978-981-95-6957-1_5	-	s2: different text; oa-batch: different text; oa-single: different text	MedFuse-GRM: Multi-scale Feature Extraction and Medically-Guided Graph Relation Modeling for Multimodal Skin Lesion Classification.
+12188	-	-	no source to check	Fine-Tuning, Prompting and RAG for Knowledge Graph-to-Russian Text Generation. How do these Methods generalise to Out-of-Distribution Data?
+12222	-	-	no source to check	References Matter: Investigating the Impact of Reference Set Variation on Summarization Evaluation.
+12250	-	-	no source to check	Forecasting Conversation Derailments Through Generation.
+12258	-	-	no source to check	Face the Facts! Evaluating RAG-based Pipelines for Professional Fact-Checking.
+12294	-	-	no source to check	Do My Eyes Deceive Me? A Survey of Human Evaluations of Hallucinations in NLG.
+12306	-	-	no source to check	How (un)faithful are explainable LLM-based NLG metrics?
+12314	-	-	no source to check	Generating Impact and Critique Explanations of Predictions made by a Goal Recognizer.
+12317	-	-	no source to check	Can GPT models Follow Human Summarization Guidelines? A Study for Targeted Communication Goals.
+12551	10.2312/sca.20241165	-	s2: not found; oa-batch: not found; oa-single: different text	Learning Climbing Controllers for Physics-Based Characters.
+12667	10.1007/978-3-032-31285-3_58	-	s2: different text; oa-batch: different text; oa-single: different text	Hybrid Intent Classification for AAC: A Multi-stage LLM Pipeline for Gesture Support in Cerebral Palsy.
+13262	10.1007/978-3-032-07891-9_11	-	s2: different text; oa-batch: not found; oa-single: different text	A Post-quantum Distributed OPRF from the Legendre PRF.
+13496	10.1007/978-3-032-16092-8_12	-	s2: different text; oa-batch: different text; oa-single: different text	Simplicity Performs, But Should It? Evaluating Malware Detection Benchmarks.
+14281	-	-	no source to check	Predictive Quality of In-Fabrication Products in Smart Manufacturing Using Graph-Based Deep Learning.
+14454	-	-	no source to check	Advanced Nonlinear Control for an Omnidirectional Spherical Robot Integrating Aerial and Ground Mobility.
+14715	-	-	no source to check	Recommendation Systems in Scholarly Publishing.
+15029	-	-	no source to check	Uncertainty in Quantitative Bipolar Argumentation Frameworks.
+15660	10.1007/978-3-032-30813-9_32	-	s2: different text; oa-batch: different text; oa-single: different text	Electroencephalogram (EEG) Subband Features During Eye Opening and Closure Enable Classification of Amblyopes and Visually Normal Controls: A Pilot Study.
+15667	10.1007/978-3-032-30813-9_6	-	s2: not found; oa-batch: different text; oa-single: different text	VAIDYA: Validated Agents for Intelligent Diagnosis and Yielded Analysis.
+15677	-	-	no source to check	Enhancing Aphasia Speech Interpretation using Small Language Models (SLMs).
+15706	10.1007/978-3-031-95841-0_40	-	s2: not found; oa-batch: different text; oa-single: different text	Choose Your Words Wisely: Domain-Adaptive Masking Makes Language Models Learn Faster.
+16046	10.1007/978-3-031-51643-6_27	-	s2: not found; oa-batch: different text; oa-single: different text	The Medium is the Message: Toxicity Declines in Structured vs Unstructured Online Deliberations.
+16061	10.1007/978-3-031-93598-5_17	-	s2: not found; oa-batch: different text; oa-single: different text	Towards the Integration of Lightweight Components in Cyber-Physical Systems.
+16080	10.1007/978-3-031-93598-5_29	-	s2: different text; oa-batch: different text; oa-single: different text	The Dual Role of Subaerial Biofilms Through the Lens of AI: The Case for Causal Networks and Targeted Learning.
+17193	-	-	no source to check	A Stochastic Geometry Approach to Performance Modeling of SWIPT Vehicular Networks.
+17229	-	-	no source to check	Prediction-based Coflow Scheduling.
+17280	-	-	no source to check	Addressing Out-of-Distribution Challenges in Image Semantic Communication Systems with Multi-modal Large Language Models.
+17284	-	-	no source to check	Age of Information-Oriented Probabilistic Link Scheduling for Device-to-Device Networks.
+21485	-	-	no source to check	Towards a holistic approach for AI trustworthiness assessment based upon aids for multi-criteria aggregation.
+27419	-	-	no source to check	Exploiting Contextual Embeddings to Extract Topic Genealogy from Scientific Literature.
+29256	-	-	no source to check	SegX: Improving Interpretability of Clinical Image Diagnosis with Segmentation-based Enhancement.
+29667	-	-	no source to check	An Explainable AI-Integrated Diagnostic System for Voice Analysis in Heart Failure Patients.
+31643	-	-	no source to check	Out-of-Distribution Detection Using Deep Neural Network Latent Space Uncertainty.
+44280	-	-	no source to check	Computing an Approximating Version of a Minimum-Size Explanation for Boolean Decision Tree Classifiers.
+44888	-	-	no source to check	Is Artificial Consciousness the Missing Ingredient for Ethical AI?
+45204	-	-	no source to check	Towards Domain-Robust Activity Recognition Using Textual Representations of Binary Sensor Events.
+45255	-	-	no source to check	Learning Proportional Analogies: Lightweight Neural Network vs Large Language Models.
+48838	-	-	no source to check	Monitoring Employee Well-Being with Process Mining.
+48841	-	-	no source to check	Discovering Organizational Models from Event Logs for Workforce Analytics.
+48907	-	-	no source to check	Sustainability in and through IoT-enhanced Business Processes.
+48957	-	-	no source to check	Activity and Sequence Detection Evaluation Metrics: A Comprehensive Tool for Event Log Comparison.
+49046	-	-	no source to check	Using Process Mining to Connect Process Orientation and Data-driven Decision Making in Healthcare: a Qualitative Assessment and Integration of New Data Sources.
+49063	-	-	no source to check	Sequen‑C Explorer for Process Mining.
+49110	-	-	no source to check	Declarative Process Mining with MINERful, Reloaded.
+49238	-	-	no source to check	Unlocking Nursing Work Organization Insights through Integrated HIS and RTLS Data: Novel Methods and Applications.
+49279	-	-	no source to check	FrAIm: A What-If Analysis Tool Enabling Framed Autonomy via Automated Planning.
+49324	-	-	no source to check	Impact of Process Mining Tools on Process Analysis.
+49330	-	-	no source to check	A Business Process Simulation Tool Bridging Control‑Flow and Resource‑Centric Paradigms.
+49546	-	-	no source to check	Adversarial Policies Beat Superhuman Go AIs.
+49549	-	-	no source to check	Layer-wise Alignment: Examining Safety Alignment Across Image Encoder Layers in Vision Language Models.
+49550	-	-	no source to check	Fast Inference with Kronecker-Sparse Matrices.
+49553	-	-	no source to check	One-Shot Federated Conformal Prediction.
+49562	-	-	no source to check	MA-LoT: Model-Collaboration Lean-based Long Chain-of-Thought Reasoning enhances Formal Theorem Proving.
+49578	-	-	no source to check	Overcoming Non-monotonicity in Transducer-based Streaming Generation.
+49580	-	-	no source to check	Online Local Differential Private Quantile Inference via Self-normalization.
+49584	-	-	no source to check	Fair and Optimal Classification via Post-Processing.
+49586	-	-	no source to check	Implicit Graph Neural Networks: A Monotone Operator Viewpoint.
+49611	-	-	no source to check	Semi-Dual Unbalanced Quadratic Optimal Transport: fast statistical rates and convergent algorithm.
+49616	-	-	no source to check	A Model of Place Field Reorganization During Reward Maximization.
+49618	-	-	no source to check	DiffAug: Enhance Unsupervised Contrastive Learning with Domain-Knowledge-Free Diffusion-based Data Augmentation.
+49642	-	-	no source to check	Epsilon-VAE: Denoising as Visual Decoding.
+49664	-	-	no source to check	Representation Surgery: Theory and Practice of Affine Steering.
+49665	-	-	no source to check	Branches: Efficiently Seeking Optimal Sparse Decision Trees via AO.
+49667	-	-	no source to check	Constrained Monotonic Neural Networks.
+49673	-	-	no source to check	Let LLM Tell What to Prune and How Much to Prune.
+49679	-	-	no source to check	Domain-Adapted Diffusion Model for PROTAC Linker Design Through the Lens of Density Ratio in Chemical Space.
+49694	-	-	no source to check	Nonparametric Extensions of Randomized Response for Private Confidence Sets.
+49711	-	-	no source to check	Convergence and Complexity Guarantee for Inexact First-order Riemannian Optimization Algorithms.
+49712	-	-	no source to check	Are labels informative in semi-supervised learning? Estimating and leveraging the missing-data mechanism.
+49714	-	-	no source to check	Sidechain conditioning and modeling for full-atom protein sequence design with FAMPNN.
+49746	-	-	no source to check	Can Classic GNNs Be Strong Baselines for Graph-level Tasks? Simple Architectures Meet Excellence.
+49751	-	-	no source to check	How Many Perturbations Break This Model? Evaluating Robustness Beyond Adversarial Accuracy.
+49752	-	-	no source to check	Sign Rank Limitations for Inner Product Graph Decoders.
+49783	-	-	no source to check	Rotational Equilibrium: How Weight Decay Balances Learning Across Neural Networks.
+49812	-	-	no source to check	Online Learning under Budget and ROI Constraints via Weak Adaptivity.
+49814	-	-	no source to check	Structure-informed Risk Minimization for Robust Ensemble Learning.
+49836	-	-	no source to check	Memoria: Resolving Fateful Forgetting Problem through Human-Inspired Memory Architecture.
+49852	-	-	no source to check	Improving Interpretation Faithfulness for Vision Transformers.
+49861	-	-	no source to check	Beyond Bradley-Terry Models: A General Preference Model for Language Model Alignment.
+49862	-	-	no source to check	GeoAB: Towards Realistic Antibody Design and Reliable Affinity Maturation.
+49897	-	-	no source to check	S2-Track: A Simple yet Strong Approach for End-to-End 3D Multi-Object Tracking.
+49913	-	-	no source to check	Understanding MLP-Mixer as a wide and sparse MLP.
+49918	-	-	no source to check	On the Identifiability of Switching Dynamical Systems.
+49926	-	-	no source to check	Topological Singularity Detection at Multiple Scales.
+49961	-	-	no source to check	Agent-Specific Effects: A Causal Effect Propagation Analysis in Multi-Agent MDPs.
+49968	-	-	no source to check	Q-Star Meets Scalable Posterior Sampling: Bridging Theory and Practice via HyperAgent.
+49978	-	-	no source to check	Regression with Label Permutation in Generalized Linear Model.
+49980	-	-	no source to check	Beyond Message Passing: Neural Graph Pattern Machine.
+50000	-	-	no source to check	On Investigating the Conservative Property of Score-Based Generative Models.
+50024	-	-	no source to check	SGD Jittering: A Training Strategy for Robust and Accurate Model-Based Architectures.
+50027	-	-	no source to check	Principled Acceleration of Iterative Numerical Methods Using Machine Learning.
+50035	-	-	no source to check	Securing Equal Share: A Principled Approach for Learning Multiplayer Symmetric Games.
+50036	-	-	no source to check	Accelerated Infeasibility Detection of Constrained Optimization and Fixed-Point Iterations.
+50040	-	-	no source to check	Causal Modeling of Policy Interventions From Treatment-Outcome Sequences.
+50052	-	-	no source to check	INRFlow: Flow Matching for INRs in Ambient Space.
+50088	-	-	no source to check	Empowering World Models with Reflection for Embodied Video Prediction.
+50093	-	-	no source to check	Regression for the Mean: Auto-Evaluation and Inference with Few Labels through Post-hoc Regression.
+50094	-	-	no source to check	Unified Breakdown Analysis for Byzantine Robust Gossip.
+50098	-	-	no source to check	HiRemate: Hierarchical Approach for Efficient Re-materialization of Neural Networks.
+50105	-	-	no source to check	CuTS: Customizable Tabular Synthetic Data Generation.
+50120	-	-	no source to check	Lean and Mean Adaptive Optimization via Subset-Norm and Subspace-Momentum with Convergence Guarantees.
+50123	-	-	no source to check	Revisiting Context Aggregation for Image Matting.
+50124	-	-	no source to check	Beyond Regular Grids: Fourier-Based Neural Operators on Arbitrary Domains.
+50135	-	-	no source to check	Efficient Algorithms for Sum-Of-Minimum Optimization.
+50169	-	-	no source to check	Discounted Adaptive Online Learning: Towards Better Regularization.
+50175	-	-	no source to check	Optimization for Amortized Inverse Problems.
+50185	-	-	no source to check	FedBR: Improving Federated Learning on Heterogeneous Data via Local Learning Bias Reduction.
+50186	-	-	no source to check	Evolution of Heuristics: Towards Efficient Automatic Algorithm Design Using Large Language Model.
+50194	-	-	no source to check	FeDXL: Provable Federated Learning for Deep X-Risk Optimization.
+50197	-	-	no source to check	Counterfactual Analysis in Dynamic Latent State Models.
+50222	-	-	no source to check	A connection between Tempering and Entropic Mirror Descent.
+50234	-	-	no source to check	Delay-agnostic Asynchronous Coordinate Update Algorithm.
+50238	-	-	no source to check	Understanding the Statistical Accuracy-Communication Trade-off in Personalized Federated Learning with Minimax Guarantees.
+50240	-	-	no source to check	Quantile Credit Assignment.
+50243	-	-	no source to check	EquiPocket: an E(3)-Equivariant Geometric Graph Neural Network for Ligand Binding Site Prediction.
+50262	-	-	no source to check	Collapse-Aware Triplet Decoupling for Adversarially Robust Image Retrieval.
+50269	-	-	no source to check	Model-Aware Contrastive Learning: Towards Escaping the Dilemmas.
+50278	-	-	no source to check	Fleet of Agents: Coordinated Problem Solving with Large Language Models.
+50280	-	-	no source to check	Simplifying Momentum-based Positive-definite Submanifold Optimization with Applications to Deep Learning.
+50289	-	-	no source to check	One-vs-the-Rest Loss to Focus on Important Samples in Adversarial Training.
+50305	-	-	no source to check	Multi-Source Conformal Inference Under Distribution Shift.
+50384	-	-	no source to check	Naive Bayes Classifiers over Missing Data: Decision and Poisoning.
+50385	-	-	no source to check	One Wave To Explain Them All: A Unifying Perspective On Feature Attribution.
+50390	-	-	no source to check	Adaptive Identification of Populations with Treatment Benefit in Clinical Trials: Machine Learning Challenges and Solutions.
+50409	-	-	no source to check	Optimizing Noise Distributions for Differential Privacy.
+50423	-	-	no source to check	DiNADO: Norm-Disentangled Neurally-Decomposed Oracles for Controlling Language Models.
+50425	-	-	no source to check	Evaluation of Test-Time Adaptation Under Computational Time Constraints.
+50438	-	-	no source to check	TraceGrad: a Framework Learning Expressive SO(3)-equivariant Non-linear Representations for Electronic-Structure Hamiltonian Prediction.
+50447	-	-	no source to check	Kernel Debiased Plug-in Estimation: Simultaneous, Automated Debiasing without Influence Functions for Many Target Parameters.
+50489	-	-	no source to check	Graph Distillation with Eigenbasis Matching.
+50492	-	-	no source to check	Mean-field Underdamped Langevin Dynamics and its Spacetime Discretization.
+50500	-	-	no source to check	Learning Mixtures of Experts with EM: A Mirror Descent Perspective.
+50511	-	-	no source to check	Toward a Unified Theory of Gradient Descent under Generalized Smoothness.
+50522	-	-	no source to check	Distributed Retraction-Free and Communication-Efficient Optimization on the Stiefel Manifold.
+50535	-	-	no source to check	A Multi-Region Brain Model to Elucidate the Role of Hippocampus in Spatially Embedded Decision-Making.
+50543	-	-	no source to check	David and Goliath: Small One-step Model Beats Large Diffusion with Score Post-training.
+50544	-	-	no source to check	Matrix Information Theory for Self-Supervised Learning.
+50545	-	-	no source to check	P(all-atom) Is Unlocking New Path For Protein Design.
+50565	-	-	no source to check	Total Variation Distance Meets Probabilistic Inference.
+50580	-	-	no source to check	On Excess Mass Behavior in Gaussian Mixture Models with Orlicz-Wasserstein Distances.
+50585	-	-	no source to check	Convergence of Proximal Point and Extragradient-Based Methods Beyond Monotonicity: the Case of Negative Comonotonicity.
+50586	-	-	no source to check	Outlier Gradient Analysis: Efficiently Identifying Detrimental Training Samples for Deep Learning Models.
+50595	-	-	no source to check	RLang: A Declarative Language for Describing Partial World Knowledge to Reinforcement Learning Agents.
+50601	-	-	no source to check	End-to-End Neuro-Symbolic Reinforcement Learning with Textual Explanations.
+50618	-	-	no source to check	Graph2Tac: Online Representation Learning of Formal Math Concepts.
+50642	-	-	no source to check	Achieving Linear Speedup and Near-Optimal Complexity for Decentralized Optimization over Row-stochastic Networks.
+50652	-	-	no source to check	Craftium: Bridging Flexibility and Efficiency for Rich 3D Single- and Multi-Agent Environments.
+50654	-	-	no source to check	The Surprising Effectiveness of Test-Time Training for Few-Shot Learning.
+50659	-	-	no source to check	Score-based Pullback Riemannian Geometry: Extracting the Data Manifold Geometry using Anisotropic Flows.
+50660	-	-	no source to check	Test-Time Degradation Adaptation for Open-Set Image Restoration.
+50665	-	-	no source to check	Graph Neural Network Generalization With Gaussian Mixture Model Based Augmentation.
+50667	-	-	no source to check	Mastering the Unsupervised Reinforcement Learning Benchmark from Pixels.
+50672	-	-	no source to check	Low-Cost High-Power Membership Inference Attacks.
+50674	-	-	no source to check	Federated Neuro-Symbolic Learning.
+50695	-	-	no source to check	Generalized Polyak Step Size for First Order Optimization with Momentum.
+50697	-	-	no source to check	Statistical Inference Under Constrained Selection Bias.
+50740	-	-	no source to check	Anchor Sampling for Federated Learning with Partial Client Participation.
+50806	-	-	no source to check	A Universal Transfer Theorem for Convex Optimization Algorithms Using Inexact First-order Oracles.
+50808	-	-	no source to check	Towards Understanding Gradient Dynamics of the Sliced-Wasserstein Distance via Critical Point Analysis.
+50829	-	-	no source to check	Sable: a Performant, Efficient and Scalable Sequence Model for MARL.
+50834	-	-	no source to check	GIVE: Structured Reasoning of Large Language Models with Knowledge Graph Inspired Veracity Extrapolation.
+50851	-	-	no source to check	Equilibrium of Data Markets with Externality.
+50883	-	-	no source to check	Compositional Generalization via Forced Rendering of Disentangled Latents.
+50889	-	-	no source to check	Reinforcement Learning for Quantum Control under Physical Constraints.
+50891	-	-	no source to check	An Efficient Matrix Multiplication Algorithm for Accelerating Inference in Binary and Ternary Neural Networks.
+50895	-	-	no source to check	From Mechanistic Interpretability to Mechanistic Biology: Training, Evaluating, and Interpreting Sparse Autoencoders on Protein Language Models.
+50902	-	-	no source to check	Temporal Label Smoothing for Early Event Prediction.
+50907	-	-	no source to check	When Do LLMs Help With Node Classification? A Comprehensive Analysis.
+50932	-	-	no source to check	Controlled Differential Equations on Long Sequences via Non-standard Wavelets.
+50946	-	-	no source to check	Vision-Language Models Create Cross-Modal Task Representations.
+50981	-	-	no source to check	Tuning LLM Judge Design Decisions for 1/1000 of the Cost.
+50992	-	-	no source to check	Efficient Policy Evaluation with Offline Data Informed Behavior Policy Design.
+51003	-	-	no source to check	Position: Optimization in SciML Should Employ the Function Space Geometry.
+51034	-	-	no source to check	On the Within-Group Fairness of Screening Classifiers.
+51056	-	-	no source to check	PFNs4BO: In-Context Learning for Bayesian Optimization.
+51064	-	-	no source to check	Permutation-Free High-Order Interaction Tests.
+51083	-	-	no source to check	On Prompt-Driven Safeguarding for Large Language Models.
+51095	-	-	no source to check	Latent Thought Models with Variational Bayes Inference-Time Computation.
+51104	-	-	no source to check	From Thousands to Billions: 3D Visual Language Grounding via Render-Supervised Distillation from 2D VLMs.
+51105	-	-	no source to check	Hierarchical Graph Tokenization for Molecule-Language Alignment.
+51123	-	-	no source to check	Retraining-free Merging of Sparse MoE via Hierarchical Clustering.
+51132	-	-	no source to check	Robust Collaborative Learning with Linear Gradient Overhead.
+51133	-	-	no source to check	Iterative Approximate Cross-Validation.
+51142	-	-	no source to check	An amortized approach to non-linear mixed-effects modeling based on neural posterior estimation.
+51155	-	-	no source to check	Point-Level Topological Representation Learning on Point Clouds.
+51163	-	-	no source to check	ILLUME: Rationalizing Vision-Language Models through Human Interactions.
+51173	-	-	no source to check	OV-MER: Towards Open-Vocabulary Multimodal Emotion Recognition.
+51175	-	-	no source to check	Differential Privacy has Bounded Impact on Fairness in Classification.
+51178	-	-	no source to check	Naive imputation implicitly regularizes high-dimensional linear models.
+51180	-	-	no source to check	HarmonyDream: Task Harmonization Inside World Models.
+51181	-	-	no source to check	A Cognac Shot To Forget Bad Memories: Corrective Unlearning for Graph Neural Networks.
+51217	-	-	no source to check	The Synergy of LLMs & RL Unlocks Offline Learning of Generalizable Language-Conditioned Policies with Low-fidelity Data.
+51218	-	-	no source to check	The Regret of Exploration and the Control of Bad Episodes in Reinforcement Learning.
+51219	-	-	no source to check	Do Machine Learning Models Learn Statistical Rules Inferred from Data?
+51228	-	-	no source to check	Taming graph kernels with random features.
+51236	-	-	no source to check	Compositional Capabilities of Autoregressive Transformers: A Study on Synthetic, Interpretable Tasks.
+51243	-	-	no source to check	Density-Softmax: Efficient Test-time Model for Uncertainty Estimation and Robustness under Distribution Shifts.
+51260	-	-	no source to check	Inferring the Long-Term Causal Effects of Long-Term Treatments from Short-Term Experiments.
+51274	-	-	no source to check	Measuring Representational Shifts in Continual Learning: A Linear Transformation Perspective.
+51279	-	-	no source to check	Dynamical phases of short-term memory mechanisms in RNNs.
+51285	-	-	no source to check	Using Large Language Models to Simulate Multiple Humans and Replicate Human Subject Studies.
+51290	-	-	no source to check	DRED: Zero-Shot Transfer in Reinforcement Learning via Data-Regularised Environment Design.
+51296	-	-	no source to check	Synergies between Disentanglement and Sparsity: Generalization and Identifiability in Multi-Task Learning.
+51301	-	-	no source to check	On Learning Deep O(n)-Equivariant Hyperspheres.
+51306	-	-	no source to check	Adaptive Sensitivity Analysis for Robust Augmentation against Natural Corruptions in Image Segmentation.
+51309	-	-	no source to check	Emergent Representations of Program Semantics in Language Models Trained on Programs.
+51311	-	-	no source to check	Comparison of meta-learners for estimating multi-valued treatment heterogeneous effects.
+51316	-	-	no source to check	EvoMesh: Adaptive Physical Simulation with Hierarchical Graph Evolutions.
+51357	-	-	no source to check	Reasoning Through Execution: Unifying Process and Outcome Rewards for Code Generation.
+51377	-	-	no source to check	On the Resilience of LLM-Based Multi-Agent Collaboration with Faulty Agents.
+51384	-	-	no source to check	Parallel Simulation for Log-concave Sampling and Score-based Diffusion Models.
+51394	-	-	no source to check	Position: Stop Making Unscientific AGI Performance Claims.
+51425	-	-	no source to check	Lyapunov-stable Neural Control for State and Output Feedback: A Novel Formulation.
+51447	-	-	no source to check	Softmax is not Enough (for Sharp Size Generalisation).
+51450	-	-	no source to check	MetricEmbedding: Accelerate Metric Nearness by Tropical Inner Product.
+51453	-	-	no source to check	TimeDART: A Diffusion Autoregressive Transformer for Self-Supervised Time Series Representation.
+51460	-	-	no source to check	Stationarity without mean reversion in improper Gaussian processes.
+51463	-	-	no source to check	Regularizing with Pseudo-Negatives for Continual Self-Supervised Learning.
+51466	-	-	no source to check	Realistic Unsupervised CLIP Fine-tuning with Universal Entropy Optimization.
+51491	-	-	no source to check	Robust Consensus Anchor Learning for Efficient Multi-view Subspace Clustering.
+51500	-	-	no source to check	Unveiling Markov heads in Pretrained Language Models for Offline Reinforcement Learning.
+51515	-	-	no source to check	Constrain Alignment with Sparse Autoencoders.
+51520	-	-	no source to check	Scalable Set Encoding with Universal Mini-Batch Consistency and Unbiased Full Set Gradient Approximation.
+51542	-	-	no source to check	Standardized Interpretable Fairness Measures for Continuous Risk Scores.
+51548	-	-	no source to check	DPZero: Private Fine-Tuning of Language Models without Backpropagation.
+51555	-	-	no source to check	Leveraging VLM-Based Pipelines to Annotate 3D Objects.
+51573	-	-	no source to check	Sketched Ridgeless Linear Regression: The Role of Downsampling.
+51583	-	-	no source to check	Efficient Error Certification for Physics-Informed Neural Networks.
+51605	-	-	no source to check	A Fast Optimistic Method for Monotone Variational Inequalities.
+51607	-	-	no source to check	Integer Programming for Generalized Causal Bootstrap Designs.
+51622	-	-	no source to check	Lookbehind-SAM: k steps back, 1 step forward.
+51623	-	-	no source to check	Studying K-FAC Heuristics by Viewing Adam through a Second-Order Lens.
+51624	-	-	no source to check	Random Policy Evaluation Uncovers Policies of Generative Flow Networks.
+51625	-	-	no source to check	On the Convergence of SARSA with Linear Function Approximation.
+51642	-	-	no source to check	Explainable Concept Generation through Vision-Language Preference Learning for Understanding Neural Networks' Internal Representations.
+51650	-	-	no source to check	FedRC: Tackling Diverse Distribution Shifts Challenge in Federated Learning by Robust Clustering.
+51665	-	-	no source to check	Critical feature learning in deep neural networks.
+51676	-	-	no source to check	Generalized-Smooth Nonconvex Optimization is As Efficient As Smooth Nonconvex Optimization.
+51690	-	-	no source to check	A Bayesian Model Selection Criterion for Selecting Pretraining Checkpoints.
+51700	-	-	no source to check	Efficient Fine-Grained Guidance for Diffusion Model Based Symbolic Music Generation.
+51713	-	-	no source to check	Nonlinear Filtering with Brenier Optimal Transport Maps.
+51715	-	-	no source to check	Why Target Networks Stabilise Temporal Difference Methods.
+51719	-	-	no source to check	Minimax estimation of discontinuous optimal transport maps: The semi-discrete case.
+51729	-	-	no source to check	What do CNNs Learn in the First Layer and Why? A Linear Systems Perspective.
+51735	-	-	no source to check	diff History for Neural Language Agents.
+51737	-	-	no source to check	Cooperation in the Latent Space: The Benefits of Adding Mixture Components in Variational Autoencoders.
+51749	-	-	no source to check	"Why Is There a Tumor?": Tell Me the Reason, Show Me the Evidence.
+51751	-	-	no source to check	Tight Certification of Adversarially Trained Neural Networks via Nonconvex Low-Rank Semidefinite Relaxations.
+51760	-	-	no source to check	The Hidden Dimensions of LLM Alignment: A Multi-Dimensional Analysis of Orthogonal Safety Directions.
+51770	-	-	no source to check	On the Private Estimation of Smooth Transport Maps.
+51783	-	-	no source to check	Learning to Stabilize Online Reinforcement Learning in Unbounded State Spaces.
+51793	-	-	no source to check	Remembering to Be Fair: Non-Markovian Fairness in Sequential Decision Making.
+51809	-	-	no source to check	Do Large Code Models Understand Programming Concepts? Counterfactual Analysis for Code Predicates.
+51822	-	-	no source to check	Projected Tensor Power Method for Hypergraph Community Recovery.
+51830	-	-	no source to check	Compelling ReLU Networks to Exhibit Exponentially Many Linear Regions at Initialization and During Training.
+51846	-	-	no source to check	Quantum Algorithms for Finite-horizon Markov Decision Processes.
+51875	-	-	no source to check	Predictive Coding beyond Correlations.
+51898	-	-	no source to check	COSDA: Counterfactual-based Susceptibility Risk Framework for Open-Set Domain Adaptation.
+51903	-	-	no source to check	Interpretable Deep Clustering for Tabular Data.
+51908	-	-	no source to check	DCBM: Data-Efficient Visual Concept Bottleneck Models.
+51909	-	-	no source to check	InferCept: Efficient Intercept Support for Augmented Large Language Model Inference.
+51924	-	-	no source to check	Contrastive Learning for Clinical Outcome Prediction with Partial Data Sources.
+51929	-	-	no source to check	Constrained Efficient Global Optimization of Expensive Black-box Functions.
+51947	-	-	no source to check	DSD-DA: Distillation-based Source Debiasing for Domain Adaptive Object Detection.
+51959	-	-	no source to check	How to Escape Sharp Minima with Random Perturbations.
+51969	-	-	no source to check	Nonlinearly Preconditioned Gradient Methods under Generalized Smoothness.
+51971	-	-	no source to check	Dissecting Multimodality in VideoQA Transformer Models by Impairing Modality Fusion.
+51984	-	-	no source to check	Knowledge Retention in Continual Model-Based Reinforcement Learning.
+52009	-	-	no source to check	Incorporating Arbitrary Matrix Group Equivariance into KANs.
+52018	-	-	no source to check	spred: Solving L1 Penalty with SGD.
+52023	-	-	no source to check	Physics-Informed Generative Modeling of Wireless Channels.
+52027	-	-	no source to check	Optimistic Multi-Agent Policy Gradient.
+52029	-	-	no source to check	Inverse Optimization via Learning Feasible Regions.
+52067	-	-	no source to check	Measuring Variable Importance in Heterogeneous Treatment Effects with Confidence.
+52069	-	-	no source to check	Chaos Meets Attention: Transformers for Large-Scale Dynamical Prediction.
+52086	-	-	no source to check	Data-Juicer Sandbox: A Feedback-Driven Suite for Multimodal Data-Model Co-development.
+52102	-	-	no source to check	Bayesian Program Learning by Decompiling Amortized Knowledge.
+52125	-	-	no source to check	Navigating Scaling Laws: Compute Optimality in Adaptive Model Training.
+52137	-	-	no source to check	Generative Graph Dictionary Learning.
+52142	-	-	no source to check	Position: Topological Deep Learning is the New Frontier for Relational Learning.
+52170	-	-	no source to check	Pareto Merging: Multi-Objective Optimization for Preference-Aware Model Merging.
+52178	-	-	no source to check	Quantum Algorithm for Online Exp-concave Optimization.
+52184	-	-	no source to check	How Smooth Is Attention?
+52186	-	-	no source to check	Knowledge Transfer from Vision Foundation Models for Efficient Training of Small Task-specific Models.
+52187	-	-	no source to check	Total Variation Floodgate for Variable Importance Inference in Classification.
+52206	-	-	no source to check	A Single-Loop Robust Policy Gradient Method for Robust Markov Decision Processes.
+52248	-	-	no source to check	Improving Parallel Program Performance with LLM Optimizers via Agent-System Interfaces.
+52256	-	-	no source to check	Best of Both Worlds Guarantees for Smoothed Online Quadratic Optimization.
+52259	-	-	no source to check	Exploring Representations and Interventions in Time Series Foundation Models.
+52260	-	-	no source to check	Symmetric Replay Training: Enhancing Sample Efficiency in Deep Reinforcement Learning for Combinatorial Optimization.
+52261	-	-	no source to check	ROS: A GNN-based Relax-Optimize-and-Sample Framework for Max-k-Cut Problems.
+52266	-	2505.14903	arXiv: no shared author	When to retrain a machine learning model.
+52275	-	-	no source to check	A Parameter-Free and Near-Optimal Zeroth-Order Algorithm for Stochastic Convex Optimization.
+52285	-	-	no source to check	Two-sided Competing Matching Recommendation Markets With Quota and Complementary Preferences Constraints.
+68713	10.1137/1.9781611978322.125	2410.06343	s2: different text; arXiv: no shared author; oa-batch: different text; oa-single: different text	Losing Treewidth In The Presence Of Weights.
+81658	10.3233/faia240342	-	s2: different text; oa-batch: different text; oa-single: different text	Toward the Argument Web of Science.
+81678	10.3233/faia240343	-	s2: different text; oa-batch: different text; oa-single: different text	Documents with Integrated Visually Annotated Arguments.
+81727	10.3233/faia240341	-	s2: different text; oa-batch: different text; oa-single: different text	A Unified Benchmark for Argument Mining.
+92922	10.1007/978-3-031-43990-2_62	2306.17717	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Content-Preserving Diffusion Model for Unsupervised AS-OCT Image Despeckling.
+112935	10.1109/fie61694.2024.10893069	2406.15679	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Iterative Service-Learning: A Computing-Based Case-study Applied to Small Rural Organizations.
+146903	10.1145/3604915.3608755	-	s2: different text; oa-batch: different text; oa-single: different text	Third Workshop on Recommender Systems for Human Resources (RecSys in HR 2023).
+151406	10.4230/lipics.approx/random.2023.61	2307.02193	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Directed Poincaré Inequalities and L¹ Monotonicity Testing of Lipschitz Functions.
+155405	10.4230/lipics.gd.2025.47	-	s2: different text; oa-batch: different text; oa-single: different text	Reconfigurations of Plane Caterpillars and Paths (Poster Abstract).
+155417	10.4230/lipics.gd.2025.49	-	s2: different text; oa-batch: different text; oa-single: different text	Defective Linear Layouts of Graphs (Poster Abstract).
+190326	10.18653/v1/2025.acl-long.445	-	s2: different text; oa-batch: different text; oa-single: different text	White Men Lead, Black Women Help? Benchmarking and Mitigating Language Agency Social Biases in LLMs.
+196331	10.18653/v1/2026.acl-srw.42	-	s2: different text; oa-batch: different text; oa-single: different text	Eye Movement Features Can Predict Human Preferences on Machine-Generated Texts.
+216546	10.18653/v1/2026.findings-eacl.57	-	s2: different text; oa-batch: different text; oa-single: different text	Causal Activation Steering via Sparse Mediation.
+225723	10.63317/5kk3h4p3mp5d	-	s2: different text; oa-batch: different text; oa-single: different text	Radio Haiti-Inter: A Large-Scale Annotated Corpus of Spoken Haitian Creole.
+225734	10.63317/5gun3w98ovtb	-	s2: different text; oa-batch: different text; oa-single: different text	PAIR: A Pilot Dataset for Dual Perspective-based Video-Grounded Dialogue and Reconciliation.
+225919	10.63317/5kshomz64z55	-	s2: different text; oa-batch: different text; oa-single: different text	LitTx: A New Treatment Relation Extraction Dataset.
+226065	10.63317/5kd5docuu6qb	-	s2: different text; oa-batch: different text; oa-single: different text	Echoes of the Troubadours: A Corpus of Troubadour Poetry for Stylometric Analysis and Authorship Attribution.
+226211	10.63317/5pjzh8ma5v76	-	s2: different text; oa-batch: different text; oa-single: different text	CoMMA, a Large-scale Corpus of Multilingual Medieval Archives.
+226274	10.63317/2b6xmbq3kphf	-	s2: not found; oa-batch: different text; oa-single: different text	The Moral Foundations Reddit Corpus.
+226321	10.63317/5iuorx8jxpiw	-	s2: different text; oa-batch: different text; oa-single: different text	How I Met Your Snowclone: Unsupervised Discovery of Snowclone Patterns in Large Datasets.
+226342	10.63317/28ccty7yu9hn	-	s2: different text; oa-batch: different text; oa-single: different text	MultiCoS: A Multilingual Dataset of Connective Semantics with Context-Sentence Compatibility.
+226542	10.63317/359toazp33g8	-	s2: different text; oa-batch: different text; oa-single: different text	Assessing the Difficulty of Inference Types in Natural Language Inference for Clinical Trials.
+226575	10.63317/29f29zththay	-	s2: different text; oa-batch: different text; oa-single: different text	This One or That One? A Study on Accessibility via Demonstratives with Multimodal Large Language Models.
+226643	10.63317/4ys6kofrzoc5	-	s2: different text; oa-batch: different text; oa-single: different text	Frame2KG: A Benchmark and Evaluation Toolkit for Interpretable Frame-to-Graph Generation.
+230647	-	2411.04280	arXiv: no shared author	Bayesian Inference in Recurrent Explicit Duration Switching Linear Dynamical Systems.
+251331	10.4230/lipics.ecoop.2024.41	2407.09106	arXiv: no shared author; s2: not found; oa-batch: not found; oa-single: other paper	Refinements for Multiparty Message-Passing Protocols: Specification-Agnostic Theory and Implementation.
+251596	10.1109/iv64158.2025.11097510	2412.06549	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Prediction of Occluded Pedestrians in Road Scenes Using Human-Like Reasoning: Insights from the OccluRoads Dataset.
+253466	-	2502.05134	arXiv: no shared author	Information-Theoretic Guarantees for Recovering Low-Rank Tensors from Symmetric Rank-One Measurements.
+257205	10.1109/eurospw61312.2024.00016	2405.11876	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Understanding Crypter-as-a-Service in a Popular Underground Marketplace.
+263040	10.1109/iwcmc61514.2024.10592504	2312.06849	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Deep Learning based Modeling of Wireless Communication Channel with Fading.
+274170	-	2603.17841	arXiv: no shared author	Omni-3DEdit: Generalized Versatile 3D Editing in One-Pass.
+278131	-	2412.13058	arXiv: no shared author	CondiMen: Conditional Multi-Person Mesh Recovery.
+287635	10.1007/978-3-031-33383-5_20	2302.13106	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Topic-Selective Graph Network for Topic-Focused Summarization.
+294471	10.4230/lipics.esa.2025.39	2507.03447	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Going Beyond Surfaces in Diameter Approximation.
+296573	10.21437/interspeech.2023-295	-	s2: different text; oa-batch: different text; oa-single: different text	Increasing aspiration of word-medial fortis plosives in Swiss Standard German.
+297901	10.21437/interspeech.2024-2286	-	s2: different text; oa-batch: different text; oa-single: different text	The Use of Phone Categories and Cross-Language Modeling for Phone Alignment of Panãra.
+298238	10.21437/interspeech.2023-1052	-	s2: different text; oa-batch: different text; oa-single: different text	An Outlier Analysis of Vowel Formants from a Corpus Phonetics Pipeline.
+300918	10.4230/lipics.disc.2025.49	-	s2: not found; oa-batch: different text; oa-single: different text	Brief Announcement: Synchronization in Anonymous Networks Under Arbitrary Dynamics.
+300940	10.4230/lipics.disc.2025.51	-	s2: not found; oa-batch: not found; oa-single: other paper	Brief Announcement: Non-Uniform Content-Oblivious Leader Election on Oriented Asynchronous Rings.
+300958	10.4230/lipics.disc.2025.59	-	s2: not found; oa-batch: different text; oa-single: different text	Brief Announcement: Carry the Tail in Consensus Protocols.
+300978	10.4230/lipics.disc.2025.61	-	s2: not found; oa-batch: not found; oa-single: other paper	Brief Announcement: Asynchronous Approximate Agreement with Quadratic Communication.
+300994	10.4230/lipics.disc.2025.52	-	s2: not found; oa-batch: not found; oa-single: other paper	Brief Announcement: From Few to Many Faults: Adaptive Byzantine Agreement with Optimal Communication.
+301021	10.4230/lipics.disc.2025.6	-	s2: different text; oa-batch: different text; oa-single: different text	Hierarchical Consensus: Scalability Through Optimism and Weak Liveness.
+310831	-	2310.17901	arXiv: no shared author	Improving the Knowledge Gradient Algorithm.
+320661	-	2311.04943	arXiv: no shared author	MathNAS: If Blocks Have a Role in Mathematical Architecture Design.
+324476	10.1007/978-3-032-22730-0_18	2601.01638	arXiv: different text; s2: different text; oa-batch: different text; oa-single: different text	Interaction Improvement.
+336519	-	2401.09198	arXiv: no shared author	Space and time continuous physics simulation from partial observations.
+337485	-	2506.10971	arXiv: no shared author	What Exactly Does Guidance Do in Masked Discrete Diffusion Models.
+346671	-	2403.15516	arXiv: no shared author	CTSM: Combining Trait and State Emotions for Empathetic Response Model.
+350837	10.4230/lipics.ipec.2025.35	-	s2: different text; oa-batch: different text; oa-single: different text	PACE Solver Description: Bad Dominating Set Maker.
+350841	10.4230/lipics.ipec.2025.18	-	s2: different text; oa-batch: different text; oa-single: different text	Bridging Treewidth and Clique-Width via Cograph-Modular-Treewidth.
+358184	-	2402.19160	arXiv: no shared author	Effective Message Hiding with Order-Preserving Mechanisms.
+360014	10.1109/focs61266.2024.00134	2404.17882	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Directed Isoperimetry and Monotonicity Testing: A Dynamical Approach.
+368367	10.1007/978-3-031-72341-4_25	2410.12250	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Dual Action Policy for Robust Sim-to-Real Reinforcement Learning.
+376833	10.18653/v1/2025.findings-emnlp.167	2412.15540	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	MRAG: A Modular Retrieval Framework for Time-Sensitive Question Answering.
+377900	10.18653/v1/2025.findings-emnlp.60	-	s2: different text; oa-batch: different text; oa-single: different text	Multilingual Verbalisation of Knowledge Graphs.
+390661	10.1109/icme59968.2025.11210014	2407.21316	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Diff-Cleanse: Identifying and Mitigating Backdoor Attacks in Diffusion Models.
+399638	10.1109/tnnls.2025.3547331	2410.07499	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Dense Optimizer: An Information Entropy-Guided Structural Search Method for Dense-Like Neural Network Design.
+399957	10.1109/tnnls.2025.3582909	2506.18126	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Decentralized Consensus Inference-Based Hierarchical Reinforcement Learning for Multiconstrained UAV Pursuit-Evasion Game.
+421332	10.1504/ijahuc.2024.140442	-	s2: not found; oa-batch: different text; oa-single: different text	Horse herd optimised elliptic curve cryptography for secure data aggregation in WSN.
+421879	10.1021/acs.jcim.5c01774	-	s2: different text; oa-batch: different text; oa-single: different text	MEMO-Stab2: Multi-View Sequence-Based Deep Learning Framework for Predicting Mutation-Induced Stability Changes in Transmembrane Proteins.
+421976	10.1021/acs.jcim.5c02891	-	s2: different text; oa-batch: different text; oa-single: different text	Overrepresentation Bias Leads to Performance Overestimation in Blood-Brain Barrier Permeability Prediction Models: Characterization and Mitigation.
+422336	10.1021/acs.jcim.6c00861	-	s2: different text; oa-batch: different text; oa-single: different text	MechaSuite : An Integrated Software for Chemical Reaction Mechanism Analysis and Microkinetic Modeling.
+422581	10.1021/acs.jcim.6c00344	-	s2: different text; oa-batch: different text; oa-single: different text	KBKit: A Python Toolkit for Kirkwood-Buff Theory from Molecular Dynamics.
+422611	10.1021/acs.jcim.5c03112	-	s2: different text; oa-batch: different text; oa-single: different text	Heavy Metal Directly Blocks Potassium Channels: An Experimental and Theoretical Approach.
+422659	10.1021/acs.jcim.5c02320	-	s2: different text; oa-batch: different text; oa-single: different text	Molecular Insights into the Conformational Dynamics of the Novel Dispersion Sensor Histidine Kinase DspS.
+422790	10.1021/acs.jcim.6c00362	-	s2: different text; oa-batch: different text; oa-single: different text	CARS-AMP: A Simple and Efficient Deep Learning Model for Antimicrobial Peptide Prediction.
+423491	10.1021/acs.jcim.5c01681	-	s2: different text; oa-batch: different text; oa-single: different text	Graph-Based Deep Learning Models for Predicting p K a Values of Protein-Ionizable Residues via Physically Inspired Feature Engineering.
+423600	10.1021/acs.jcim.5c02610	-	s2: different text; oa-batch: different text; oa-single: different text	The Disordered JM Motif in RTKs Promotes Classical DFG out Conformation Formation via the Dynamic Effect.
+423659	10.1021/acs.jcim.6c00490	-	s2: different text; oa-batch: different text; oa-single: different text	Exploring Conformer Search Workflows Using OpenBabel, Hierarchical Clustering, and Quantum Chemical Optimizations: A Workflow Study Including Oligothiophenes and Y6.
+423885	10.1021/acs.jcim.5c01641	-	s2: different text; oa-batch: different text; oa-single: different text	Constant-pH Simulation of the Human β2 Adrenergic Receptor Inactivation.
+423918	10.1021/acs.jcim.6c00219	-	s2: different text; oa-batch: different text; oa-single: different text	Machine Learning Prediction for Fe(II) Spin-Crossover Complex in the Same Spin State Using Geometrical and Topological Descriptors.
+424188	10.1021/acs.jcim.5c02430	-	s2: different text; oa-batch: different text; oa-single: different text	Subtimizer: Computational Workflow for Structure-Guided Design of Potent and Selective Kinase Peptide Substrates.
+424279	10.1021/acs.jcim.6c00241	-	s2: different text; oa-batch: different text; oa-single: different text	A Multistage Virtual Screening Strategy Integrating Molecular Similarity, Deep Learning Scoring, and Molecular Docking toward the Discovery of Novel LRRK2 Inhibitors.
+424305	10.1021/acs.jcim.6c00402	-	s2: different text; oa-batch: different text; oa-single: different text	SuAVE-Scatter: A Module for Integrating Simulations and SAXS/SANS Analyses.
+424745	10.1021/acs.jcim.5c03023	-	s2: different text; oa-batch: different text; oa-single: different text	DUW-MGCA: A Dynamic Uncertainty-Weighted Multi-Granularity Coattention Framework for Protein-Ligand Interaction Prediction from Hybrid QM/MD Data.
+424785	10.1021/acs.jcim.5c01917	-	s2: different text; oa-batch: different text; oa-single: different text	ToxFCDB: Toxicity Database for Forever Chemicals.
+424883	10.1021/acs.jcim.5c01528	-	s2: different text; oa-batch: different text; oa-single: different text	Graph-Based Machine Learning Framework for Predicting Hydrogen Storage Capacity in Metal-Organic Frameworks.
+425418	10.1108/itse-01-2026-332	-	s2: different text; oa-batch: different text; oa-single: different text	A book review on Learning Technologies and User Interaction: Diversifying Implementation in Curriculum, Instruction, and Professional Development.
+435745	10.1016/j.asoc.2026.116028	2506.16737	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Cross-modal offset-guided dynamic alignment and fusion for weakly aligned UAV object detection.
+456518	10.1093/llc/fqad054	-	s2: different text; oa-batch: different text; oa-single: different text	Principal component analysis and authorship.
+472363	10.1007/s10994-021-05996-7	2006.09111	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Unified SVM algorithm based on LS-DC loss.
+474828	10.1016/j.ijar.2025.109533	-	s2: different text; oa-batch: different text; oa-single: different text	Generalized conjunction and disjunction of two conditional events in the setting of conditional random quantities.
+479551	10.1109/tpami.2024.3432913	2407.19269	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	A Bayesian Approach Toward Robust Multidimensional Ellipsoid-Specific Fitting.
+479577	10.1109/tpami.2022.3205036	2409.02778	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Regularized Multi-Output Gaussian Convolution Process With Domain Adaptation.
+487842	10.3389/fdata.2023.1156811	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: AI and data science in drug development and public health: Highlights from the MCBIOS 2022 conference.
+487872	10.3389/fdata.2023.1242482	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Multimodal digital approaches to personalized medicine.
+487912	10.3389/fdata.2024.1368581	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Internet of Medical Things and computational intelligence in healthcare 4.0.
+487915	10.3389/fdata.2023.1193412	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Critical data and algorithm studies.
+487974	10.3389/fdata.2024.1384460	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Reviews in recommender systems: 2022.
+488040	10.3389/fdata.2024.1369159	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Cyber security in the wake of fourth industrial revolution: opportunities and challenges.
+488073	10.3389/fdata.2023.1148331	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Automated data curation and data governance automation.
+488075	10.3389/fdata.2024.1353988	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Big scientific data analytics on HPC and cloud.
+497338	10.1186/s13321-026-01235-0	-	s2: different text; oa-batch: different text; oa-single: different text	Transformer-accelerated discovery of inhibitors targeting the RpsAΔ438 deletion in PZA-resistant tuberculosis.
+497428	10.1186/s13321-025-01010-7	-	s2: different text; oa-batch: different text; oa-single: different text	LAGNet: better electron density prediction for LCAO-based data and drug-like substances.
+497568	10.1186/s13321-025-01055-8	-	s2: different text; oa-batch: different text; oa-single: different text	Deep learning molecular interaction motifs from receptor structures alone.
+499750	10.25596/jalc-2025-227	2212.11834	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Real-Valued Affine Automata Compute Beyond Turing Machines.
+511699	10.1016/j.tcs.2026.116177	-	s2: not found; oa-batch: different text; oa-single: different text	Constrained distributed heterogeneous two-facility location problems with max-variant cost.
+517154	10.1109/tvt.2022.3205888	2205.00491	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Many a Little Makes a Mickle: Probing Backscattering Energy Recycling for Backscatter Communications.
+525393	10.1108/k-07-2024-1868	-	s2: not found; oa-batch: different text; oa-single: different text	Retraction notice: A new model for investigating the role of IT-based innovation in the pharmaceutical knowledge-sharing attitude: a study of marketing biotechnology firms.
+533189	10.3389/frobt.2023.1270373	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: From cobots to human-robot synergy-overview and future trends.
+533262	10.3389/frobt.2023.1189525	-	s2: different text; oa-batch: different text; oa-single: different text	Developing ChatGPT's Theory of Mind.
+533264	10.3389/frobt.2024.1370948	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: The future of bio-inspired robotics: an early career scientists' perspective.
+533326	10.3389/frobt.2024.1407421	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Understanding and engineering cyber-physical collectives.
+533406	10.3389/frobt.2024.1399217	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Design, modeling and control of kinematically redundant robots.
+533463	10.3389/frobt.2023.1232215	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Socially, culturally and contextually aware robots.
+533599	10.3389/frobt.2023.1102438	-	s2: different text; oa-batch: different text; oa-single: different text	Intrinsic motivation learning for real robot applications.
+533827	10.3389/frobt.2023.1134462	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Robots in assisted living environments: Enhancements, challenges and future perspectives.
+533851	10.3389/frobt.2024.1422344	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Decision-making and planning for multi-agent systems.
+539157	10.1016/j.pmcj.2023.101849	2309.09807	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Efficient concept drift handling for batch android malware detection models.
+540493	10.3389/fnbot.2023.1211287	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Patient cooperative robotics in neurorehabilitation.
+540497	10.3389/fnbot.2023.1282982	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Intelligent control and applications for robotics, volume II.
+540502	10.3389/fnbot.2023.1231853	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Intellisense, guidance, control, and risk assessment of autonomous marine vehicles.
+540539	10.3389/fnbot.2023.1191045	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Machine learning and applied neuroscience.
+540552	10.3389/fnbot.2023.1191655	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Efficient deep neural network for intelligent robot system: Focusing on visual signal processing.
+540567	10.3389/fnbot.2023.1354389	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Neurorobotics and strategies for adaptive human-machine interaction, volume II.
+540576	10.3389/fnbot.2023.1306042	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Engineering applications of neurocomputing, volume II.
+540627	10.3389/fnbot.2023.1151609	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Privacy-preserving deep heterogeneous view perception for data learning in neurorobotics volume II.
+540651	10.3389/fnbot.2023.1259773	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: EMG/EEG signals-based control of assistive and rehabilitation robots, volume II.
+540765	10.3389/fnbot.2023.1140508	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Brain-computer interface and its applications.
+540785	10.3389/fnbot.2023.1151473	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Hybrid intelligent algorithms based learning, optimization, and application to autonomic control systems, volume II.
+540813	10.3389/fnbot.2023.1162568	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Novel methods in embodied and enactive AI and cognition.
+540847	10.3389/fnbot.2023.1193119	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Learning and control in robotic systems aided with neural dynamics.
+540894	10.3389/fnbot.2024.1360021	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Neuro-derived control for interactive technology on unmanned robot systems.
+547802	10.1007/s11263-024-02149-w	2207.04673	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Learning Temporal Variations for 4D Point Cloud Segmentation.
+548387	10.1007/s11263-023-01947-y	2211.10880	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	PartCom: Part Composition Learning for 3D Open-Set Recognition.
+549065	10.1007/s11263-024-02246-w	2305.12231	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Bi-VLGM: Bi-Level Class-Severity-Aware Vision-Language Graph Matching for Text Guided Medical Image Segmentation.
+554306	10.1016/j.cag.2024.104142	2411.15420	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Semi-supervised single-view 3D reconstruction via multi shape prior fusion strategy and self-attention.
+563121	10.1080/10447318.2024.2446511	2405.13426	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	A New Era in Human Factors Engineering: A Survey of the Applications and Prospects of Large Multimodal Models.
+569404	10.1016/j.neunet.2024.106773	2503.03733	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Rethinking deep clustering paradigms: Self-supervision is all you need.
+571308	10.2308/isys-2023-002	-	s2: different text; oa-batch: different text; oa-single: different text	Journal of Information Systems Workshop on Data Value Creation: Views from Industry and Academia.
+571356	10.2308/isys-2024-003	-	s2: different text; oa-batch: different text; oa-single: different text	Reflections on the Journal of Information Systems and Suggested Future Initiatives.
+571601	10.1016/j.infsof.2025.107755	-	s2: different text; oa-batch: different text; oa-single: different text	Promoting social sustainability within software development through the lens of organizational readiness for change theory.
+573074	10.1117/1.jei.33.6.063043	2406.01918	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Image steganography based on generative implicit neural representation.
+576714	10.1007/s00138-023-01492-1	2111.01364	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Learning to explore by reinforcement over high-level options.
+584519	10.1587/transinf.2022edp7111	2204.10667	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	DFAM-DETR: Deformable Feature Based Attention Mechanism DETR on Slender Object Detection.
+586543	10.1007/s10915-023-02224-3	-	s2: different text; oa-batch: different text; oa-single: different text	Correction to: Enhancing Reproducibility of Research Papers in SISC, JSC and JCP.
+600916	-	2607.16990	arXiv: no shared author	STEM2: A Fast and Space-efficient Data Structure for Exact Multi-Set Membership Query.
+605220	10.3389/frai.2023.1161006	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Human-centered AI: Crowd computing.
+605299	10.3389/frai.2024.1326358	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Financial intermediation versus disintermediation: opportunities and challenges in the FinTech era, volume II.
+605344	10.3389/frai.2024.1430756	-	s2: different text; oa-batch: different text; oa-single: different text	Artificial intelligence: promise and peril in achieving the quadruple aim in healthcare.
+605570	10.3389/frai.2023.1223909	-	s2: different text; oa-batch: different text; oa-single: different text	Bone fracture detection - Can artificial intelligence replace doctors in orthopedic radiography analysis?
+605647	10.3389/frai.2024.1382426	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Computational argumentation: a foundation for human-centric AI.
+605803	10.3389/frai.2023.1166014	-	s2: different text; oa-batch: different text; oa-single: different text	Impact of ChatGPT on medical chatbots as a disruptive technology.
+606159	10.3389/frai.2023.1282800	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Explainable artificial intelligence for critical healthcare applications.
+606295	10.3389/frai.2023.1213419	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Deep learning with limited labeled data for vision, audio, and text.
+606302	10.3389/frai.2023.1267377	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Artificial Intelligence in Finance and Industry: volume II - highlights from the 7th European conference.
+606352	10.3389/frai.2023.1281059	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Unhealthy language: linguistic investigations of COVID-19 discourse.
+606393	10.3389/frai.2024.1411795	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Human-centered AI at work: common ground in theories and methods.
+612302	10.1109/mits.2025.3579798	2405.20121	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	A Structure-Aware Lane Graph Transformer Model for Vehicle Trajectory Prediction.
+617316	10.3389/fninf.2023.1238168	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Physical neuromorphic computing and its industrial applications.
+617383	10.3389/fninf.2023.1229945	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Bringing together data- and knowledge-driven solutions for a better understanding and effective diagnostics of neurological disorders.
+617440	10.3389/fninf.2023.1150157	-	s2: different text; oa-batch: different text; oa-single: different text	Targeted neuroplasticity in spatiotemporally patterned invasive neuromodulation therapies for improving clinical outcomes.
+626563	10.3390/sym15081492	2305.09676	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	Integrating Node Importance and Network Topological Properties for Link Prediction in Complex Network.
+636454	10.3389/frvir.2023.1132921	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Supernatural enhancements of perception, interaction, and collaboration in mixed reality.
+636484	10.3389/frvir.2023.1235004	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: User states in extended reality media experiences for entertainment games.
+636548	10.3389/frvir.2023.1138660	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Virtual learning environments in educational institutions.
+636563	10.3389/frvir.2023.1236765	-	s2: different text; oa-batch: different text; oa-single: different text	Erratum: Supporting the creation of non-linear everyday AR experiences in exhibitions and museums: an authoring process based on self-contained building blocks.
+636565	10.3389/frvir.2023.1197858	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Everyday Virtual and Augmented Reality: Methods and Applications, Volume II.
+636675	10.3389/frvir.2024.1423638	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Virtual agents in virtual reality: design and implications for VR users.
+636693	10.3389/frvir.2023.1147731	-	s2: different text; oa-batch: different text; oa-single: different text	Corrigendum: Real-time affect detection in virtual reality: A technique based on a three-dimensional model of affect and EEG signals.
+664764	10.1109/tsc.2026.3699152	2510.18544	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	SLICE: SLO-Driven Scheduling for LLM Inference on Edge Computing Devices.
+664884	10.1108/ijpcc-09-2024-0349	-	s2: not found; oa-batch: different text; oa-single: different text	Retraction notice: Enhanced gray wolf optimization for estimation of time difference of arrival in WSNs.
+665049	10.1145/3700598	2406.10848	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	A Transparency-Based Action Model Implemented in a Robotic Physical Trainer for Improved HRI.
+669266	10.7717/peerj-cs.1591	2209.02453	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Instance attack: an explanation-based vulnerability analysis framework against DNNs for malware detection.
+671439	10.1007/s10878-024-01148-4	2208.10386	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Multiple shooting approach for finding approximately shortest paths for autonomous robots in unknown environments in 2D.
+676813	10.1108/jeim-07-2025-722	-	s2: different text; oa-batch: different text; oa-single: different text	Guest editorial: AHP/ANP in supply chain resilience in the era of digital enterprise.
+676853	10.1108/jeim-10-2025-1065	-	s2: different text; oa-batch: different text; oa-single: different text	Expression of concern: Reconnecting governance configuration variables to enterprises contingency factors for optimizing productivity at the start-up level.
+680710	10.1504/ijmlo.2026.152815	-	s2: different text; oa-batch: different text; oa-single: different text	Concept map-facilitated game-based learning in the mobile era: a systematic review of journal publications from 2009 to 2024.
+703744	10.1016/j.engappai.2024.107885	2304.10941	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Deep metric learning assisted by intra-variance in a semi-supervised view of learning.
+726982	10.1016/j.ejor.2025.09.040	-	s2: different text; oa-batch: different text; oa-single: different text	Recent developments in location-routing problems.
+734752	10.1016/j.patcog.2026.113449	2509.01487	arXiv: no shared author; s2: not found; oa-batch: different text; oa-single: different text	PointSlice: Accurate and efficient slice-based representation for 3D object detection from point clouds.
+749472	10.1016/j.jcp.2025.114231	2408.14193	arXiv: no shared author; s2: different text; oa-batch: different text; oa-single: different text	Recursive sparse LU decomposition based on nested dissection and low rank approximations.
+751393	10.3389/fbloc.2023.1235704	-	s2: different text; oa-batch: different text; oa-single: different text	Editorial: Blockchain for trusted information systems.
+807367	10.1016/j.neucom.2026.133503	2510.20314	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Enhancing security in deep reinforcement learning: A comprehensive survey on adversarial attacks and defenses.
+825849	10.3390/computation12110228	2409.17023	arXiv: no shared author; oa-batch: different text; s2: not found; oa-single: different text	Enhanced Wavelet Scattering Network for Image Inpainting Detection.
+846053	10.1007/s11227-026-08499-1	2512.02070	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Dpwmixer: dual-path wavelet mixer for long-term time series forecasting.
+846766	10.1049/cmu2.12846	2401.08976	arXiv: no shared author; oa-batch: different text; s2: not found; oa-single: different text	ACT-GAN: Radio map construction based on generative adversarial networks with ACT blocks.
+865045	10.1109/tie.2023.3283698	2302.03310	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Decomposition by Approximation With Pulse Waves Allowing Further Research on Sources of Voltage Fluctuations.
+875877	10.1108/dlp-05-2025-206	-	oa-batch: different text; s2: different text; oa-single: different text	Bridging artificial intelligence (AI) and open science: an interview with Elena Giglia.
+875918	10.1108/dlp-08-2025-209	-	oa-batch: different text; s2: not found; oa-single: different text	Publisher's note.
+875931	10.1108/dlp-06-2025-207	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: "The journey and challenges of transdisciplinarity in the development of community-centered digital libraries".
+886141	10.1007/s40747-022-00962-9	2203.14550	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	CenterLoc3D: monocular 3D vehicle localization network for roadside surveillance cameras.
+888624	10.1016/j.envsoft.2025.106804	-	oa-batch: different text; s2: different text; oa-single: different text	Development of a River Dynamical Core for E3SM to simulate compound flooding on Exascale-class heterogeneous supercomputers.
+890921	10.1007/s13042-023-01833-6	2103.07302	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Siamese infrared and visible light fusion network for RGB-T tracking.
+905384	10.1371/journal.pcbi.1014059	-	oa-batch: different text; s2: different text; oa-single: different text	Benchmarking spike source localization algorithms in high density probes.
+911948	10.1145/3676969	2304.07778	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	SikuGPT: A Generative Pre-trained Model for Intelligent Information Processing of Ancient Texts from the Perspective of Digital Humanities.
+937249	10.1007/s11390-024-3702-7	2308.05106	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Balancing Accuracy and Training Time in Federated Learning for Violence Detection in Surveillance Videos: A Study of Neural Network Architectures.
+953937	10.1093/bioinformatics/btaf164	-	oa-batch: different text; s2: different text; oa-single: different text	Rebuttal letter of the "comment on "contrastive pre-training and 3D convolution neural network for RNA and small molecule binding affinity prediction" by Sun and Gao".
+962260	10.1016/j.matcom.2024.07.018	2305.02804	arXiv: no shared author; oa-batch: different text; s2: not found; oa-single: different text	An asymptotic preserving kinetic scheme for the M1 model of linear transport.
+986633	10.3389/fdgth.2023.1186713	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Pattern recognition for healthcare analytics.
+986636	10.3389/fdgth.2023.1224999	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Innovations in depression diagnosis and treatment outcome monitoring.
+986659	10.3389/fdgth.2023.1148356	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Digital suicide prevention.
+986673	10.3389/fdgth.2023.1236178	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Artificial intelligence in point of care diagnostics.
+986828	10.3389/fdgth.2023.1214111	-	oa-batch: different text; s2: different text; oa-single: different text	Commentary: Machine learning in clinical decision-making.
+986919	10.3389/fdgth.2023.1142897	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Digital brain health.
+986952	10.3389/fdgth.2023.1150875	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Surfacing best practices for AI software development and integration in healthcare.
+986968	10.3389/fdgth.2023.1264638	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Digital health quality, acceptability, and cost: steps to effective continuity of cancer care.
+986970	10.3389/fdgth.2023.1204550	-	oa-batch: different text; s2: different text; oa-single: different text	NBSP: an online centralized database management system for a newborn sickle cell program in India.
+987012	10.3389/fdgth.2023.1291110	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: The digitalization of neurology.
+987031	10.3389/fdgth.2024.1330160	-	oa-batch: different text; s2: different text; oa-single: different text	Accelerating health disparities research with artificial intelligence.
+987151	10.3389/fdgth.2023.1184847	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Digital health equity.
+987163	10.3389/fdgth.2023.1329196	-	oa-batch: different text; s2: different text; oa-single: different text	Revolutionizing healthcare information systems with blockchain.
+987248	10.3389/fdgth.2023.1298782	-	oa-batch: different text; s2: different text; oa-single: different text	Erratum: A remote group-mediated daylong physical activity intervention for older adults with chronic pain: Results of the MORPH-II randomized pilot trial.
+987267	10.3389/fdgth.2023.1037113	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Harnessing digital health innovations to improve healthcare delivery in Africa: Progress, challenges and future directions.
+987466	10.3389/fdgth.2023.1212586	-	oa-batch: different text; s2: different text; oa-single: different text	Stepping inside the whispers and tingles: multisensory virtual reality for enhanced relaxation and wellbeing.
+990479	10.37236/11063	2103.06218	arXiv: no shared author; oa-batch: different text; s2: not found; oa-single: different text	Bounds on Half Graph Orders in Powers of Sparse Graphs.
+992736	10.1109/tifs.2025.3639994	2501.01672	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Practical Secure Inference Algorithm for a Fine-Tuned Large Language Model Based on Fully Homomorphic Encryption.
+998838	10.1016/j.softx.2026.102945	-	oa-batch: different text; s2: different text; oa-single: different text	AutoAIM Studio: A desktop application for automated machine learning in materials science.
+1001315	10.1108/jd-09-2024-275	-	oa-batch: different text; s2: different text; oa-single: different text	Guest editorial: Artificial intelligence for cultural heritage materials.
+1001414	10.1108/jd-07-2025-314	-	oa-batch: different text; s2: not found; oa-single: different text	Publisher's Note.
+1001562	10.3389/fcomp.2023.1265902	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Responsible AI in healthcare: opportunities, challenges, and best practices.
+1001608	10.3389/fcomp.2023.1295041	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Inbodied interaction.
+1001614	10.3389/fcomp.2024.1393102	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Body-centric computing for health and wellbeing.
+1001623	10.3389/fcomp.2023.1327140	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Infrastructure sharing in broadband networks: impact on telecommunications operators and consumers.
+1001696	10.3389/fcomp.2023.1173296	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Security and privacy for the Internet of Things.
+1001741	10.3389/fcomp.2024.1308634	-	oa-batch: different text; s2: different text; oa-single: different text	Dataset of suspicious phishing URL detection.
+1001817	10.3389/fcomp.2023.1129898	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Cognitive infocommunications.
+1001836	10.3389/fcomp.2023.1275031	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Biosignal-based human-computer interfaces.
+1001924	10.3389/fcomp.2024.1419831	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Perceptual organization in computer and biological vision.
+1002044	10.3389/fcomp.2023.1192413	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: Deep neural computing for advanced automotive system applications.
+1002067	10.3389/fcomp.2024.1454694	-	oa-batch: different text; s2: different text; oa-single: different text	Editorial: HCI and worker well-being.
+1003096	10.1007/s00500-023-08752-2	2006.07677	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Total chromatic number for some classes of Cayley graphs.
+1006984	10.54364/aaiml.2024.43162	2408.06429	arXiv: no shared author; oa-batch: different text; s2: not found; oa-single: different text	Wavelet Based Inpainting Detection.
+1012747	10.1007/s10851-024-01200-2	2311.18107	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	A Stochastic-Geometrical Framework for Object Pose Estimation Based on Mixture Models Avoiding the Correspondence Problem.
+1014980	10.1007/s10115-026-02703-7	2505.24826	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Legaleval-q: a benchmark for quality evaluation of LLM-generated Chinese legal text.
+1030306	10.1145/3674839	2210.06795	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Subspace-Contrastive Multi-View Clustering.
+1034536	10.1016/j.bspc.2024.107047	2307.08048	arXiv: no shared author; oa-batch: different text; s2: not found; oa-single: different text	A novel SLCA-UNet architecture for automatic MRI brain tumor segmentation.
+1043173	10.1007/s00779-021-01627-z	2104.08094	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Innovative chest X-ray image recognition technique and its economic value.
+1044228	10.1016/j.jnca.2025.104141	-	oa-batch: different text; s2: different text; oa-single: different text	MuLPP: A multi-level privacy preserving for blockchain-based bilateral P2P energy trading.
+1052690	10.1007/s11128-022-03764-7	2207.04603	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	Small set of orthogonal product states with nonlocality.
+1053575	10.1007/s00454-025-00742-5	2312.00015	arXiv: no shared author; oa-batch: different text; s2: different text; oa-single: different text	On the ℓ 0 Isoperimetric Coefficient for Measurable Sets.
+1061590	10.1108/ijwis-08-2025-398	-	oa-batch: different text; s2: different text; oa-single: different text	Guest editorial: Big data technologies and applications in Web 3.0 - trends and challenges.
