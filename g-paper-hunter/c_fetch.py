@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import html
 import json
 import os
@@ -12,7 +13,7 @@ import time
 import unicodedata
 import urllib.parse
 import xml.etree.ElementTree as ET
-from collections import Counter
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -92,6 +93,7 @@ JUNK_RE = re.compile(
     r"|s mission of unlocking human potential\.for over two centuries, wiley)", re.I)
 TAG_RE = re.compile(r"\s*[(\[][^)\]]*[)\]]")
 SWEEP_MIN_WORDS = 40
+SWEEP_KEY_WORDS = 40
 SWEEP_OWNER_SHARE = 0.5
 SWEEP_SAME_TEXT = 0.95
 SWEEP_SOURCES = ("arxiv", "openalex", "s2", "title", "s2-title")
@@ -684,19 +686,27 @@ class Store:
             (stage.takes, after, CHUNK_PAPERS)).fetchall()
         return [Paper(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5]) for r in rows]
 
-    def shared_abstracts(self) -> tuple[dict[str, list[Paper]], set[int]]:
-        groups: dict[str, list[Paper]] = {}
-        at_c: set[int] = set()
-        for text, pid, doi, arxiv_id, title, authors, year, status in self.conn.execute(
-                "SELECT a.abstract, p.paper_id, p.doi, x.arxiv_id, p.title, p.authors, p.year, s.status "
-                "FROM paper_field_abstract a JOIN paper_dblp p USING (paper_id) "
-                "JOIN paper_status s USING (paper_id) LEFT JOIN paper_field_arxiv x USING (paper_id) "
-                "WHERE a.abstract IN (SELECT abstract FROM paper_field_abstract WHERE abstract IS NOT NULL "
-                "GROUP BY abstract HAVING COUNT(*) > 1)"):
-            groups.setdefault(text, []).append(Paper(pid, doi, arxiv_id, title, json.loads(authors), year))
-            if status == "C":
-                at_c.add(pid)
-        return groups, at_c
+    def abstract_groups(self) -> list[list[int]]:
+        keys: dict[bytes, list[int]] = defaultdict(list)
+        for pid, text in self.conn.execute("SELECT paper_id, abstract FROM paper_field_abstract WHERE abstract IS NOT NULL"):
+            if len(text.split()) < SWEEP_MIN_WORDS:
+                continue
+            words = normalize_title(text).split()
+            for side, part in ((b"h", words[:SWEEP_KEY_WORDS]), (b"t", words[-SWEEP_KEY_WORDS:])):
+                keys[side + hashlib.blake2b(" ".join(part).encode(), digest_size=12).digest()].append(pid)
+        return [group for group in keys.values() if len(group) > 1]
+
+    def sweep_papers(self, ids: set[int]) -> dict[int, tuple[Paper, str, str]]:
+        out, ids = {}, sorted(ids)
+        for i in range(0, len(ids), 900):
+            chunk = ids[i:i + 900]
+            for pid, doi, arxiv_id, title, authors, year, text, status in self.conn.execute(
+                    "SELECT p.paper_id, p.doi, x.arxiv_id, p.title, p.authors, p.year, a.abstract, s.status "
+                    "FROM paper_field_abstract a JOIN paper_dblp p USING (paper_id) "
+                    "JOIN paper_status s USING (paper_id) LEFT JOIN paper_field_arxiv x USING (paper_id) "
+                    f"WHERE a.paper_id IN ({', '.join('?' * len(chunk))})", chunk):
+                out[pid] = (Paper(pid, doi, arxiv_id, title, json.loads(authors), year), text, status)
+        return out
 
     def add_arxiv_ids(self, found: dict[int, str]) -> None:
         with self.lock, self.conn:
@@ -866,21 +876,38 @@ class Fetcher:
             self.progress.step([p], describe(p))
 
     def wrong_copies(self) -> list[tuple[Paper, str]]:
+        groups = self.store.abstract_groups()
+        rows = self.store.sweep_papers({pid for group in groups for pid in group})
+        parent = {pid: pid for pid in rows}
+
+        def root(pid: int) -> int:
+            while parent[pid] != pid:
+                parent[pid] = parent[parent[pid]]
+                pid = parent[pid]
+            return pid
+        for group in groups:
+            group = [pid for pid in group if pid in rows]
+            for i, a in enumerate(group):
+                for b in group[i + 1:]:
+                    if root(a) != root(b) and same_text(rows[a][1], rows[b][1]):
+                        parent[root(b)] = root(a)
+        clusters: dict[int, list[int]] = defaultdict(list)
+        for pid in rows:
+            clusters[root(pid)].append(pid)
         found = []
-        groups, at_c = self.store.shared_abstracts()
-        for text, papers in groups.items():
-            if len(text.split()) < SWEEP_MIN_WORDS:
+        for members in clusters.values():
+            if len(members) < 2:
                 continue
-            share = {p.paper_id: title_share(p.title, text) for p in papers}
-            owner = max(papers, key=lambda p: share[p.paper_id])
-            owner_names = name_tokens(owner.authors)
-            if share[owner.paper_id] < SWEEP_OWNER_SHARE or not owner_names:
+            share = {pid: title_share(rows[pid][0].title, rows[pid][1]) for pid in members}
+            owner = max(members, key=lambda pid: share[pid])
+            owner_names = name_tokens(rows[owner][0].authors)
+            if share[owner] < SWEEP_OWNER_SHARE or not owner_names:
                 continue
-            for p in papers:
-                names = name_tokens(p.authors)
-                if (p is not owner and p.paper_id in at_c and share[p.paper_id] == 0 and names
-                        and not names & owner_names):
-                    found.append((p, text))
+            for pid in members:
+                paper, text, status = rows[pid]
+                names = name_tokens(paper.authors)
+                if pid != owner and status == "C" and share[pid] == 0 and names and not names & owner_names:
+                    found.append((paper, text))
         return found
 
     def replacement(self, paper: Paper, wrong: str, answers: dict) -> tuple[bool, str | None]:

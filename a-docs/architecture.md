@@ -263,7 +263,7 @@ Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its si
 - **Failed calls.** A failed call (timeout, 429, 5xx) leaves the paper at its status for the next run.
 - **Saving.** Write every abstract, arXiv ID and status change to the database the moment it is known. An interruption (Ctrl+C, crash, power loss) loses only the calls in flight. The first Ctrl+C finishes the calls in flight and stops; a second quits at once. A rerun continues from the statuses in the database.
 
-**Wrong copy sweep.** After stage 5, every run checks the whole database for abstracts that a source stored on the wrong paper. An abstract stored on two or more papers is a wrong copy on a paper when all of these hold:
+**Wrong copy sweep.** After stage 5, every run checks the whole database for abstracts that a source stored on the wrong paper. Abstracts count as the same text when they are identical or near-identical: every abstract of at least 40 words is keyed by its first 40 and its last 40 normalized words (lowercase, punctuation removed), papers sharing a key are compared, and pairs with at least 95% text similarity are joined into one group. An abstract stored on two or more papers is a wrong copy on a paper when all of these hold:
 
 1. The abstract has at least 40 words.
 2. Another paper in the group owns it: at least half of that paper's title words appear in the abstract.
