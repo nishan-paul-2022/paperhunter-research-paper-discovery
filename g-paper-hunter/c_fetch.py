@@ -64,7 +64,12 @@ JUNK_RE = re.compile(
     r"|the abstract for this item has not been populated|the full paper is available at \S+"
     r"|gecco '\d{2} companion, [^.]*|\d+(?:st|nd|rd|th) international conference on [^.]*\([a-z]+ \d{4}\)"
     r"|no abstract is available(?: for this (?:article|paper|chapter))?"
-    r"|publisher copyright: ©[^.]*\.(?: all rights reserved)?"
+    r"|publisher copyright:.*|\d{6} bc[a-z]{2}|issn: ?\d{4}-\d{3}[\dx]|scopus: \S+|graphical abstract"
+    r"|\[no abstract\]|\[abstract not available\]|no description (?:provided|supplied)|editorial - no abstract available"
+    r"|data will be made available on request|accepted version|non peer reviewed|qc \d{8}|link_to_subscribed_fulltext"
+    r"|open access via the elsevier agreement|this is an open access article under the cc by license"
+    r"|the author declares no conflict of interest|preprint paper|\d+ p\.-\d+ fig|status: published online|version: ?vor"
+    r"|artículos en revistas|funding agencies\|.*|\| openaire: .*|if no abstract provided do not include one in the jats xml"
     r"|the author\(s\) declare that no financial support was received for the research, authorship, and/or publication of this article"
     r"|\d{4} chi conference on human factors in computing systems, [^.]*"
     r"|\d+(?:st|nd|rd|th) edition of the interspeech conference, [^.]*"
@@ -91,6 +96,8 @@ TITLE_STOP_WORDS = frozenset(
     "than more most also such these those other then have been does case study approach method methods analysis "
     "paper novel efficient effective learning model models system systems data".split())
 LETTER_RE = re.compile(r"[^\W\d_]")
+MIN_WORDS = 2
+ONE_WORD_CHARS = 100
 ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
 ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
 ARXIV_DOI_RE = re.compile(r"10\.48550/arxiv\.(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})", re.I)
@@ -207,7 +214,7 @@ def normalize_title(title: str | None) -> str:
 
 def valid_abstract(text: str, title: str | None) -> str | None:
     text = clean_text(text)
-    if not LETTER_RE.search(text) or PLACEHOLDER_RE.match(text) or WITHDRAWN_RE.match(text) or JUNK_RE.search(text):
+    if (len(text.split()) < MIN_WORDS and len(text) < ONE_WORD_CHARS) or not LETTER_RE.search(text) or PLACEHOLDER_RE.match(text) or WITHDRAWN_RE.match(text) or JUNK_RE.search(text):
         return None
     return None if normalize_title(text) == normalize_title(title) else text
 
