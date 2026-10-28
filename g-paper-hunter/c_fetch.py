@@ -56,7 +56,12 @@ PLACEHOLDER_RE = re.compile(
 WITHDRAWN_RE = re.compile(
     r"^(this|the) (paper|article|submission|manuscript|preprint|work) (has been|was|is|have been) withdrawn", re.I)
 JUNK_RE = re.compile(
-    r"^(?:nema|peer-reviewed|status: ?published|version: ?na|altres ajuts: acords transformatius de la uab"
+    r"^(?:nema|peer[- ]reviewed|status: ?published|version: ?na|altres ajuts: acords transformatius de la uab"
+    r"|international audience|published[_ ]or[_ ]final[_ ]version|published version|tutorial|ccs concepts"
+    r"|\[powerpoint presentation\]|work-in-progress extended abstract|guest editors'? introduction"
+    r"|computer systems, imagery and media|hot chips \d{4}|https?:(?://\S*)?"
+    r"|the abstract for this item has not been populated|the full paper is available at \S+"
+    r"|gecco '\d{2} companion, [^.]*|\d+(?:st|nd|rd|th) international conference on [^.]*\([a-z]+ \d{4}\)"
     r"|no abstract is available(?: for this (?:article|paper|chapter))?"
     r"|publisher copyright: ©[^.]*\.(?: all rights reserved)?"
     r"|the author\(s\) declare that no financial support was received for the research, authorship, and/or publication of this article"
@@ -64,6 +69,7 @@ JUNK_RE = re.compile(
     r"|\d+(?:st|nd|rd|th) edition of the interspeech conference, [^.]*"
     r"|the [a-z]+ language resources and evaluation conference \(lrec \d{4}\), [^.]*)\.?$"
     r"|^(?:zora \(zurich open repository and archive\) provides open and worldwide access"
+    r"|contains fulltext : "
     r"|test 02 - elsevier's scopus, the largest abstract and citation database"
     r"|views icon views article contents"
     r"|inderscience is a global company"
