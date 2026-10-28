@@ -311,8 +311,8 @@ class OpenAlex:
                           if (m := re.fullmatch(r"OPENALEX_API_KEY_(\d+)", k)) and v.strip())
         if not numbered:
             sys.exit("No OPENALEX_API_KEY_<n> in .env")
-        self.key = numbered[0][1]
-        self.keyed = True
+        self.keys = [v for _, v in numbered]
+        self.key_no = 0
         self.lock = threading.Lock()
         self.http_key = Http(1.0 / OPENALEX_KEY_RPS)
         self.http = Http(1.0 / OPENALEX_RPS)
@@ -348,27 +348,31 @@ class OpenAlex:
             if not self.budget_spent(r, needed):
                 return False
             if keyed:
-                raise KeyBudgetSpent("OpenAlex key's daily budget is used up" + self.reset_in(r))
-            raise QuotaExhausted("OpenAlex daily budget is used up, with and without the key" + self.reset_in(r))
+                raise KeyBudgetSpent("daily budget is used up" + self.reset_in(r))
+            raise QuotaExhausted("OpenAlex daily budget is used up, with every key and without a key" + self.reset_in(r))
         return handler
 
-    def drop_key(self, error: Exception) -> None:
+    def next_key(self, used: int, reason: str) -> None:
         with self.lock:
-            if self.keyed:
-                self.keyed = False
-                self.log(f"    [openalex] {error}; continuing without the key")
+            if self.key_no != used:
+                return
+            self.key_no += 1
+            after = (f"switching to key {self.key_no + 1} of {len(self.keys)}" if self.key_no < len(self.keys)
+                     else "continuing without a key")
+            self.log(f"    [openalex] key {used + 1} of {len(self.keys)}: {reason}; {after}")
 
     def call(self, url: str, needed: int, **kwargs) -> requests.Response:
-        if self.keyed:
+        while (used := self.key_no) < len(self.keys):
             try:
                 r = self.http_key.request("GET", url, on_429=self._on_429(needed, True),
-                                          headers={"Authorization": f"Bearer {self.key}"}, **kwargs)
+                                          headers={"Authorization": f"Bearer {self.keys[used]}"}, **kwargs)
             except KeyBudgetSpent as e:
-                self.drop_key(e)
-            else:
-                if r.status_code in (401, 403):
-                    raise SystemExit(f"OpenAlex rejected the key (HTTP {r.status_code}): {r.text[:200]}")
-                return r
+                self.next_key(used, str(e))
+                continue
+            if r.status_code in (401, 403):
+                self.next_key(used, f"rejected (HTTP {r.status_code})")
+                continue
+            return r
         return self.http.request("GET", url, on_429=self._on_429(needed, False), **kwargs)
 
     def get(self, params: dict, needed: int = 1) -> dict:

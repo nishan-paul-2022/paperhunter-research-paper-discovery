@@ -290,7 +290,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 **API keys.**
 
 - Load API keys from the `.env` file.
-- OpenAlex: use one key, the lowest-numbered `OPENALEX_API_KEY_<n>` in `.env`. Every OpenAlex call (batch, single and title search) uses the key first, at up to 30 calls per second. When the key's daily budget is used up, the rest of the run continues without the key, at up to 10 calls per second, using the separate no-key allowance. Single-DOI lookups are free either way. When the no-key allowance is used up too, stage 2 or 5 pauses and its papers wait for the next run; the other stages carry on. Budgets reset at 00:00 UTC.
+- OpenAlex: use every `OPENALEX_API_KEY_<n>` in `.env`, one at a time in number order. Every OpenAlex call (batch, single and title search) uses the current key, at up to 30 calls per second. When a key's daily budget is used up, or OpenAlex rejects it, switch to the next key, once per key. When every key is used up, the rest of the run continues without a key, at up to 10 calls per second, using the separate no-key allowance. Single-DOI lookups are free either way. When the no-key allowance is used up too, stage 2 or 5 pauses and its papers wait for the next run; the other stages carry on. Budgets reset at 00:00 UTC.
 - Semantic Scholar: send `S2_API_KEY` from `.env` in the `x-api-key` header.
 
 **Performance.**
