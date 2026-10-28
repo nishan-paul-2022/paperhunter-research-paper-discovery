@@ -263,6 +263,15 @@ Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its si
 - **Failed calls.** A failed call (timeout, 429, 5xx) leaves the paper at its status for the next run.
 - **Saving.** Write every abstract, arXiv ID and status change to the database the moment it is known. An interruption (Ctrl+C, crash, power loss) loses only the calls in flight. The first Ctrl+C finishes the calls in flight and stops; a second quits at once. A rerun continues from the statuses in the database.
 
+**Wrong copy sweep.** After stage 5, every run checks the whole database for abstracts that a source stored on the wrong paper. An abstract stored on two or more papers is a wrong copy on a paper when all of these hold:
+
+1. The abstract has at least 40 words.
+2. Another paper in the group owns it: at least half of that paper's title words appear in the abstract.
+3. This paper's title shares no word with the abstract.
+4. Both papers have authors, and they share no author name part.
+
+For each wrong copy, ask every source that can answer for it: arXiv (if the paper has an arXiv ID), OpenAlex by DOI and S2 by DOI (if it has a DOI), and OpenAlex by title (always). If the paper has no arXiv ID and one of those answers is the same paper and lists an arXiv ID, store that ID and ask arXiv too (the arXiv fallback). Keep only answers that pass the same-paper and abstract-text checks and differ from the wrong copy. If several remain, use the text most sources agree on; on a tie, use the order arXiv, OpenAlex, S2, title. If every source answered and none has a different abstract, clear the wrong copy, so step D can look for the real one. If a source did not answer, leave the paper as it is for the next run. Only papers at status `C` are changed, so steps D to G never see an abstract change under them; papers at any status count as owners. The owner's abstract and every status stay unchanged.
+
 **Title match check.** A result found by title, or a DOI result whose DOI differs from ours, is accepted only if all three hold:
 
 1. Normalized title similarity ≥ 95%, comparing titles both as they are and with bracketed tags such as "(Extended Abstract)" removed.
