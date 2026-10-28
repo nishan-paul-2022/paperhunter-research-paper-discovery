@@ -11,7 +11,8 @@ import c_fetch as c
 
 DONE_FILE = Path(__file__).resolve().with_name("temp_c_recheck_done.txt")
 SOURCE_BY_NO = {s.no: s.source for s in c.STAGES}
-ORDER = ["arxiv", "oa-batch", "oa-single", "oa-title", "s2-doi"]
+RENAMED = {"oa-title": "title"}
+ORDER = ["arxiv", "oa-batch", "oa-single", "title", "s2-doi"]
 STAGES = [c.Stage(i, s.name, s.source, "C", "C", s.needs)
           for i, s in enumerate(sorted(c.STAGES, key=lambda s: ORDER.index(s.source)), start=1)]
 BASE = "FROM paper_summary WHERE status = 'C' AND abstract IS NULL"
@@ -24,7 +25,7 @@ class RecheckStore(c.Store):
         if DONE_FILE.exists():
             for line in DONE_FILE.read_text().split():
                 pid, _, key = line.partition(":")
-                self.done.add((int(pid), SOURCE_BY_NO[int(key)] if key.isdigit() else key))
+                self.done.add((int(pid), SOURCE_BY_NO[int(key)] if key.isdigit() else RENAMED.get(key, key)))
         self.out = DONE_FILE.open("a", buffering=1)
         self.source = ""
         self.cursor = 0
@@ -125,7 +126,8 @@ def main() -> None:
         if stage.no in fetcher.summary:
             found, missed, failed, _ = fetcher.summary[stage.no]
             print(f"  stage {stage.no} {stage.name:<20} ✓ {found:,}  ✗ {missed:,}  ⚠ {failed:,}")
-    print(f"  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
+    print(f"  title ✓ OpenAlex {fetcher.stats['oa-title']:,}  S2 {fetcher.stats['s2-title']:,}"
+          f"  ·  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
           f"  ·  other paper rejected {fetcher.stats['other paper']:,}")
     print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.calls:,}  "
           f"Semantic Scholar {fetcher.s2.http.calls:,}  |  {c.clock(time.time() - started)}")

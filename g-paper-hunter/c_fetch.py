@@ -85,7 +85,7 @@ TAG_RE = re.compile(r"\s*[(\[][^)\]]*[)\]]")
 SWEEP_MIN_WORDS = 40
 SWEEP_OWNER_SHARE = 0.5
 SWEEP_SAME_TEXT = 0.95
-SWEEP_SOURCES = ("arxiv", "openalex", "s2", "title")
+SWEEP_SOURCES = ("arxiv", "openalex", "s2", "title", "s2-title")
 TITLE_STOP_WORDS = frozenset(
     "with from that this their using based towards into over under between about through when where which while "
     "than more most also such these those other then have been does case study approach method methods analysis "
@@ -480,6 +480,21 @@ class SemanticScholar:
             raise TransientError(f"Semantic Scholar HTTP {r.status_code}")
         return {p.paper_id: w for p, w in zip(papers, r.json())}
 
+    def by_title(self, paper: Paper) -> dict | None:
+        query = normalize_title(paper.title)
+        if not query:
+            return None
+        r = self.request("GET", f"{S2}/paper/search/match",
+                         params={"query": query, "fields": S2_FIELDS,
+                                 "year": f"{paper.year - YEAR_TOLERANCE}-{paper.year + YEAR_TOLERANCE}"})
+        if r.status_code == 404:
+            return None
+        if r.status_code != 200:
+            raise TransientError(f"Semantic Scholar HTTP {r.status_code}")
+        return next((w for w in r.json().get("data") or []
+                     if title_matches(paper, w.get("title"), w.get("year"),
+                                      [a.get("name") or "" for a in w.get("authors") or []])), None)
+
 
 
 @dataclass
@@ -497,7 +512,7 @@ STAGES = [
     Stage(2, "OpenAlex DOI batch", "oa-batch", "B-1", "B-2", "doi IS NOT NULL"),
     Stage(3, "OpenAlex DOI single", "oa-single", "B-2", "B-3", "doi IS NOT NULL"),
     Stage(4, "S2 DOI", "s2-doi", "B-3", "B-4", "doi IS NOT NULL"),
-    Stage(5, "OpenAlex title", "oa-title", "B-4", "C",
+    Stage(5, "Title (OpenAlex, S2)", "title", "B-4", "C",
           "doi IS NULL AND arxiv_id IS NULL AND trim(coalesce(title, '')) <> ''"),
 ]
 OPEN_STATUSES = [stage.takes for stage in STAGES]
@@ -697,6 +712,7 @@ class Fetcher:
         self.progress = progress
         self.store = store
         self.stopping = threading.Event()
+        self.title_budget: QuotaExhausted | None = None
         self.arxiv.http.on_wait = progress.waiter("arXiv")
         self.openalex.watch(progress.waiter("OpenAlex"))
         self.openalex.log = progress.log
@@ -724,22 +740,24 @@ class Fetcher:
             p.abstract = valid_abstract(found.get(p.pending_arxiv, ""), p.title)
             self.stats["arxiv-fb"] += bool(p.abstract)
 
+    def match(self, p: Paper, key: str, work: dict | None, source) -> None:
+        if work is not None and not source.same_paper(work, p):
+            work = None
+            self.stats["other paper"] += 1
+        if work is not None:
+            p.abstract = valid_abstract(source.abstract(work), p.title)
+        if p.abstract:
+            self.stats[key] += 1
+            return
+        found = source.arxiv_id(work) if work is not None and not p.arxiv_id else None
+        if found and not p.new_arxiv:
+            p.new_arxiv = found
+            self.stats["arxiv ids found"] += 1
+        p.pending_arxiv = p.arxiv_id or p.new_arxiv
+
     def accept(self, papers: list[Paper], stage: Stage, results: dict[int, dict | None], source) -> None:
         for p in papers:
-            work = results[p.paper_id]
-            if work is not None and not source.same_paper(work, p):
-                work = None
-                self.stats["other paper"] += 1
-            if work is not None:
-                p.abstract = valid_abstract(source.abstract(work), p.title)
-            if p.abstract:
-                self.stats[stage.source] += 1
-                continue
-            found = source.arxiv_id(work) if work is not None and not p.arxiv_id else None
-            if found:
-                p.new_arxiv = found
-                self.stats["arxiv ids found"] += 1
-            p.pending_arxiv = p.arxiv_id or found
+            self.match(p, stage.source, results[p.paper_id], source)
         self.fallback(papers)
         self.store.save(papers, stage.takes, stage.sets)
 
@@ -807,13 +825,28 @@ class Fetcher:
         with ThreadPoolExecutor(workers) as pool:
             list(pool.map(run, chunks))
 
+    def title_one(self, p: Paper, stage: Stage) -> None:
+        try:
+            if self.title_budget:
+                raise self.title_budget
+            self.match(p, "oa-title", self.openalex.by_title(p), self.openalex)
+        except QuotaExhausted as e:
+            if not self.title_budget:
+                self.title_budget = e
+                self.progress.log(f"    {e}; continuing stage {stage.no} with S2 title")
+            try:
+                self.match(p, "s2-title", self.s2.by_title(p), self.s2)
+            except TransientError as err:
+                self.fail([p], "S2 title", err)
+        except TransientError as e:
+            self.fail([p], "OpenAlex title", e)
+        self.fallback([p])
+        self.store.save([p], stage.takes, stage.sets)
+
     def title_chunk(self, papers: list[Paper], stage: Stage) -> None:
         for p in papers:
             self.check()
-            try:
-                self.accept([p], stage, {p.paper_id: self.openalex.by_title(p)}, self.openalex)
-            except TransientError as e:
-                self.fail([p], stage.name, e)
+            self.title_one(p, stage)
             self.progress.step([p], describe(p))
 
     def wrong_copies(self) -> list[tuple[Paper, str]]:
@@ -848,7 +881,7 @@ class Fetcher:
             if name == "arxiv":
                 text = valid_abstract(work, paper.title)
             else:
-                source = self.s2 if name == "s2" else self.openalex
+                source = self.s2 if name.startswith("s2") else self.openalex
                 text = valid_abstract(source.abstract(work), paper.title) if source.same_paper(work, paper) else None
             if text and not same_text(text, wrong):
                 texts.append((rank, text))
@@ -862,7 +895,7 @@ class Fetcher:
         if not copies:
             return 0, 0, 0
         self.progress.log(f"\n  wrong copy sweep · {len(copies):,} papers hold another paper's abstract · "
-                          "asking arXiv, OpenAlex (DOI and title) and S2 for their own")
+                          "asking arXiv, OpenAlex and S2 (DOI and title) for their own")
         papers = [p for p, _ in copies]
         answers: dict[int, dict] = {p.paper_id: {} for p in papers}
         with_arxiv = [p for p in papers if p.arxiv_id]
@@ -892,16 +925,24 @@ class Fetcher:
             if not (p.title or "").strip():
                 continue
             try:
+                if self.title_budget:
+                    raise self.title_budget
                 answers[p.paper_id]["title"] = self.openalex.by_title(p)
-            except (TransientError, QuotaExhausted):
+            except QuotaExhausted as e:
+                self.title_budget = e
+                try:
+                    answers[p.paper_id]["s2-title"] = self.s2.by_title(p)
+                except TransientError:
+                    answers[p.paper_id]["s2-title"] = TransientError
+            except TransientError:
                 answers[p.paper_id]["title"] = TransientError
         discovered = {}
         for p in papers:
             if p.arxiv_id:
                 continue
-            for name in ("openalex", "s2", "title"):
+            for name in ("openalex", "s2", "title", "s2-title"):
                 work = answers[p.paper_id].get(name)
-                source = self.s2 if name == "s2" else self.openalex
+                source = self.s2 if name.startswith("s2") else self.openalex
                 if isinstance(work, dict) and source.same_paper(work, p) and (found := source.arxiv_id(work)):
                     discovered[p.paper_id] = found
                     break
@@ -930,7 +971,7 @@ class Fetcher:
         self.check()
         passed = self.store.pass_on(stage)
         self.progress.start_stage(stage, self.store.count(stage), passed)
-        work = {"arxiv": self.arxiv_chunk, "oa-title": self.title_chunk}.get(stage.source, self.doi_chunk)
+        work = {"arxiv": self.arxiv_chunk, "title": self.title_chunk}.get(stage.source, self.doi_chunk)
         after = 0
         try:
             while papers := self.store.load(stage, after):
@@ -990,7 +1031,8 @@ def main() -> None:
         if stage.no in fetcher.summary:
             found, missed, failed, passed = fetcher.summary[stage.no]
             print(f"  stage {stage.no} {stage.name:<15} ✓ {found:,}  ✗ {missed:,}  ⚠ {failed:,}  · passed on {passed:,}")
-    print(f"  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
+    print(f"  title ✓ OpenAlex {fetcher.stats['oa-title']:,}  S2 {fetcher.stats['s2-title']:,}"
+          f"  ·  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
           f"  ·  other paper rejected {fetcher.stats['other paper']:,}")
     if sweep:
         cleared, replaced, kept = sweep

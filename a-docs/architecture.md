@@ -250,7 +250,7 @@ DBLP stores arXiv preprints as separate `journals/corr/` records and never links
 | 2 | OpenAlex by DOI, 100 per call      | `B-1` | have a DOI                | `B-2` |
 | 3 | OpenAlex by DOI, one per call      | `B-2` | have a DOI                | `B-3` |
 | 4 | Semantic Scholar by DOI            | `B-3` | have a DOI                | `B-4` |
-| 5 | OpenAlex by title                  | `B-4` | have a title but no DOI and no arXiv ID | `C` |
+| 5 | OpenAlex by title (Semantic Scholar by title when OpenAlex has no budget) | `B-4` | have a title but no DOI and no arXiv ID | `C` |
 
 Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its single-DOI lookup finds. DOIs containing `,` or `|` cannot go in a filter, so stage 2 passes them to stage 3.
 
@@ -259,7 +259,7 @@ Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its si
 - **Same paper.** A DOI result is used only if it is the same paper: its DOI equals ours, or it passes the title match check below, or it is another version of the same work (title similarity ≥ 80% and at least one shared author name part). arXiv results must have the arXiv ID asked for. A result that fails is treated as not found. The rule leans towards accepting: a real abstract must never be rejected.
 - **Abstract text.** Any length is accepted. Text is rejected only if it has no letters, is a placeholder (such as "No abstract available"), is a withdrawal notice (such as "This paper has been withdrawn"), is a known non-abstract text (such as repository or journal boilerplate, "status: Published", "version:NA", a copyright or funding line), or is the same as the title. A rejected text counts as not found, so the next stage still gets its chance.
 - **arXiv fallback.** When stage 2, 3, 4 or 5 finds no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID (or by the paper's existing arXiv ID). If arXiv returns an abstract, the paper moves to `C`.
-- **Title results** (stage 5) are used only if they pass the title match check.
+- **Title results** (stage 5) are used only if they pass the title match check. Each paper is asked of OpenAlex. Once OpenAlex's budget is used up (every key and no key), the rest of stage 5 asks Semantic Scholar's title match (`/paper/search/match`, year ±1) instead. A paper answered by either source is processed: found moves to `C`, not found moves to `C` without an abstract.
 - **Failed calls.** A failed call (timeout, 429, 5xx) leaves the paper at its status for the next run.
 - **Saving.** Write every abstract, arXiv ID and status change to the database the moment it is known. An interruption (Ctrl+C, crash, power loss) loses only the calls in flight. The first Ctrl+C finishes the calls in flight and stops; a second quits at once. A rerun continues from the statuses in the database.
 
@@ -270,7 +270,7 @@ Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its si
 3. This paper's title shares no word with the abstract.
 4. Both papers have authors, and they share no author name part.
 
-For each wrong copy, ask every source that can answer for it: arXiv (if the paper has an arXiv ID), OpenAlex by DOI and S2 by DOI (if it has a DOI), and OpenAlex by title (always). If the paper has no arXiv ID and one of those answers is the same paper and lists an arXiv ID, store that ID and ask arXiv too (the arXiv fallback). Keep only answers that pass the same-paper and abstract-text checks and differ from the wrong copy. If several remain, use the text most sources agree on; on a tie, use the order arXiv, OpenAlex, S2, title. If every source answered and none has a different abstract, clear the wrong copy, so step D can look for the real one. If a source did not answer, leave the paper as it is for the next run. Only papers at status `C` are changed, so steps D to G never see an abstract change under them; papers at any status count as owners. The owner's abstract and every status stay unchanged.
+For each wrong copy, ask every source that can answer for it: arXiv (if the paper has an arXiv ID), OpenAlex by DOI and S2 by DOI (if it has a DOI), and OpenAlex by title (always; Semantic Scholar by title when OpenAlex has no budget). If the paper has no arXiv ID and one of those answers is the same paper and lists an arXiv ID, store that ID and ask arXiv too (the arXiv fallback). Keep only answers that pass the same-paper and abstract-text checks and differ from the wrong copy. If several remain, use the text most sources agree on; on a tie, use the order arXiv, OpenAlex, S2, title. If every source answered and none has a different abstract, clear the wrong copy, so step D can look for the real one. If a source did not answer, leave the paper as it is for the next run. Only papers at status `C` are changed, so steps D to G never see an abstract change under them; papers at any status count as owners. The owner's abstract and every status stay unchanged.
 
 **Title match check.** A result found by title, or a DOI result whose DOI differs from ours, is accepted only if all three hold:
 
@@ -290,7 +290,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 **API keys.**
 
 - Load API keys from the `.env` file.
-- OpenAlex: use every `OPENALEX_API_KEY_<n>` in `.env`, one at a time in number order. Every OpenAlex call (batch, single and title search) uses the current key, at up to 30 calls per second. When a key's daily budget is used up, or OpenAlex rejects it, switch to the next key, once per key. When every key is used up, the rest of the run continues without a key, at up to 10 calls per second, using the separate no-key allowance. Single-DOI lookups are free either way. When the no-key allowance is used up too, stage 2 or 5 pauses and its papers wait for the next run; the other stages carry on. Budgets reset at 00:00 UTC.
+- OpenAlex: use every `OPENALEX_API_KEY_<n>` in `.env`, one at a time in number order. Every OpenAlex call (batch, single and title search) uses the current key, at up to 30 calls per second. When a key's daily budget is used up, or OpenAlex rejects it, switch to the next key, once per key. When every key is used up, the rest of the run continues without a key, at up to 10 calls per second, using the separate no-key allowance. Single-DOI lookups are free either way. When the no-key allowance is used up too, stage 2 pauses and its papers wait for the next run, and stage 5 continues with Semantic Scholar by title; the other stages carry on. Budgets reset at 00:00 UTC.
 - Semantic Scholar: send `S2_API_KEY` from `.env` in the `x-api-key` header.
 
 **Performance.**
