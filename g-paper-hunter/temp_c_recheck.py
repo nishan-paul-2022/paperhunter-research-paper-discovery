@@ -11,7 +11,7 @@ import c_fetch as c
 
 DONE_FILE = Path(__file__).resolve().with_name("temp_c_recheck_done.txt")
 SOURCE_BY_NO = {s.no: s.source for s in c.STAGES}
-ORDER = ["arxiv", "oa-batch", "s2-doi", "oa-single", "oa-title"]
+ORDER = ["arxiv", "oa-batch", "oa-single", "oa-title", "s2-doi"]
 STAGES = [c.Stage(i, s.name, s.source, "C", "C", s.needs)
           for i, s in enumerate(sorted(c.STAGES, key=lambda s: ORDER.index(s.source)), start=1)]
 BASE = "FROM paper_summary WHERE status = 'C' AND abstract IS NULL"
