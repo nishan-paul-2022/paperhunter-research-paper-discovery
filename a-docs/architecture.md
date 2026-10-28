@@ -256,8 +256,8 @@ Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its si
 
 - **Passing on.** At the start of each stage, papers it does not look up move straight to the next status with no call.
 - **Found.** A paper with an abstract moves to `C` at once.
-- **Same paper.** A result is used only if it is the same paper: its DOI equals ours, or its title passes the title match check below. arXiv results must have the arXiv ID asked for. A result that fails is treated as not found.
-- **Abstract text.** Any length is accepted. Text is rejected only if it has no letters, is a placeholder (such as "No abstract available"), is a withdrawal notice (such as "This paper has been withdrawn"), or is the same as the title.
+- **Same paper.** A DOI result is used only if it is the same paper: its DOI equals ours, or it passes the title match check below, or it is another version of the same work (title similarity ≥ 80% and at least one shared author name part). arXiv results must have the arXiv ID asked for. A result that fails is treated as not found. The rule leans towards accepting: a real abstract must never be rejected.
+- **Abstract text.** Any length is accepted. Text is rejected only if it has no letters, is a placeholder (such as "No abstract available"), is a withdrawal notice (such as "This paper has been withdrawn"), is a known non-abstract text (such as repository or journal boilerplate, "status: Published", "version:NA", a copyright or funding line), or is the same as the title. A rejected text counts as not found, so the next stage still gets its chance.
 - **arXiv fallback.** When stage 2, 3, 4 or 5 finds no abstract, run the arXiv ID discovery below. If it yields a new arXiv ID, store it in `paper_field_arxiv` and call arXiv by that ID (or by the paper's existing arXiv ID). If arXiv returns an abstract, the paper moves to `C`.
 - **Title results** (stage 5) are used only if they pass the title match check.
 - **Failed calls.** A failed call (timeout, 429, 5xx) leaves the paper at its status for the next run.
@@ -265,7 +265,7 @@ Stage 3 exists because OpenAlex's filter (stage 2) misses some works that its si
 
 **Title match check.** A result found by title, or a DOI result whose DOI differs from ours, is accepted only if all three hold:
 
-1. Normalized title similarity ≥ 95%.
+1. Normalized title similarity ≥ 95%, comparing titles both as they are and with bracketed tags such as "(Extended Abstract)" removed.
 2. Publication year within ±1 of `paper_dblp.year`.
 3. At least one shared author surname.
 

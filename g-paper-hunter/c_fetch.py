@@ -48,12 +48,33 @@ S2_INTERVAL = 1.0
 S2_FIELDS = "title,year,authors,externalIds,abstract"
 
 TITLE_SIMILARITY = 0.95
+VERSION_SIMILARITY = 0.80
 YEAR_TOLERANCE = 1
 PLACEHOLDER_RE = re.compile(
     r"^(no abstract( is)? available|abstract not available|not available|n/?a|none|"
     r"this article has no abstract|no abstract|abstract|\[no abstract available\])\.?$", re.I)
 WITHDRAWN_RE = re.compile(
     r"^(this|the) (paper|article|submission|manuscript|preprint|work) (has been|was|is|have been) withdrawn", re.I)
+JUNK_RE = re.compile(
+    r"^(?:nema|peer-reviewed|status: ?published|version: ?na|altres ajuts: acords transformatius de la uab"
+    r"|no abstract is available(?: for this (?:article|paper|chapter))?"
+    r"|publisher copyright: ©[^.]*\.(?: all rights reserved)?"
+    r"|the author\(s\) declare that no financial support was received for the research, authorship, and/or publication of this article"
+    r"|\d{4} chi conference on human factors in computing systems, [^.]*"
+    r"|\d+(?:st|nd|rd|th) edition of the interspeech conference, [^.]*"
+    r"|the [a-z]+ language resources and evaluation conference \(lrec \d{4}\), [^.]*)\.?$"
+    r"|^(?:zora \(zurich open repository and archive\) provides open and worldwide access"
+    r"|test 02 - elsevier's scopus, the largest abstract and citation database"
+    r"|views icon views article contents"
+    r"|inderscience is a global company"
+    r"|click on the doi link to access this article at the publishers website"
+    r"|the authors have requested that this preprint be removed from research square"
+    r"|aims and scopesoftware: practice and experience is an internationally respected"
+    r"|overview jis welcomes research and practice articles"
+    r"|where the subscription price includes print issues and delivery is to the recipient's address"
+    r"|the art of discrete and applied mathematics \(adam\) is a modern, dynamic, platinum open access"
+    r"|s mission of unlocking human potential\.for over two centuries, wiley)", re.I)
+TAG_RE = re.compile(r"\s*[(\[][^)\]]*[)\]]")
 LETTER_RE = re.compile(r"[^\W\d_]")
 ARXIV_ID_RE = re.compile(r"(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
 ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?:v\d+)?", re.I)
@@ -167,7 +188,7 @@ def normalize_title(title: str | None) -> str:
 
 def valid_abstract(text: str, title: str | None) -> str | None:
     text = clean_text(text)
-    if not LETTER_RE.search(text) or PLACEHOLDER_RE.match(text) or WITHDRAWN_RE.match(text):
+    if not LETTER_RE.search(text) or PLACEHOLDER_RE.match(text) or WITHDRAWN_RE.match(text) or JUNK_RE.search(text):
         return None
     return None if normalize_title(text) == normalize_title(title) else text
 
@@ -181,13 +202,35 @@ def surname(name: str) -> str:
     return tokens[-1] if tokens else ""
 
 
+def title_similarity(a: str | None, b: str | None) -> float:
+    plain = SequenceMatcher(None, normalize_title(a), normalize_title(b)).ratio()
+    untagged = SequenceMatcher(None, normalize_title(TAG_RE.sub(" ", a or "")),
+                               normalize_title(TAG_RE.sub(" ", b or ""))).ratio()
+    return max(plain, untagged)
+
+
+def name_tokens(names: list[str]) -> set[str]:
+    out = set()
+    for name in names:
+        name = unicodedata.normalize("NFKD", re.sub(r"\s+\d{4}$", "", name or "")).encode("ascii", "ignore").decode()
+        out |= set(re.findall(r"[a-z]{3,}", name.lower()))
+    return out
+
+
 def title_matches(paper: Paper, title: str | None, year, authors: list[str]) -> bool:
-    if SequenceMatcher(None, normalize_title(paper.title), normalize_title(title)).ratio() < TITLE_SIMILARITY:
+    if title_similarity(paper.title, title) < TITLE_SIMILARITY:
         return False
     if not isinstance(year, int) or abs(year - paper.year) > YEAR_TOLERANCE:
         return False
     ours = {surname(a) for a in paper.authors} - {""}
     return bool(ours & ({surname(a) for a in authors} - {""}))
+
+
+def same_work(paper: Paper, title: str | None, year, authors: list[str]) -> bool:
+    if title_matches(paper, title, year, authors):
+        return True
+    return title_similarity(paper.title, title) >= VERSION_SIMILARITY and bool(
+        name_tokens(paper.authors) & name_tokens(authors))
 
 
 def canonical_arxiv(value: str | None) -> str | None:
@@ -300,7 +343,7 @@ class OpenAlex:
     @classmethod
     def same_paper(cls, work: dict, paper: Paper) -> bool:
         doi = (work.get("doi") or "").removeprefix("https://doi.org/").lower()
-        return bool(paper.doi and doi == paper.doi.lower()) or title_matches(paper, *cls.match_fields(work))
+        return bool(paper.doi and doi == paper.doi.lower()) or same_work(paper, *cls.match_fields(work))
 
     def doi_chunks(self, papers: list[Paper]) -> list[list[Paper]]:
         chunks, current, length = [], [], 0
@@ -362,8 +405,8 @@ class SemanticScholar:
         doi = ((work.get("externalIds") or {}).get("DOI") or "").lower()
         if paper.doi and doi == paper.doi.lower():
             return True
-        return title_matches(paper, work.get("title"), work.get("year"),
-                             [a.get("name") or "" for a in work.get("authors") or []])
+        return same_work(paper, work.get("title"), work.get("year"),
+                         [a.get("name") or "" for a in work.get("authors") or []])
 
     def by_doi(self, papers: list[Paper]) -> dict[int, dict | None]:
         r = self.request("POST", f"{S2}/paper/batch", params={"fields": S2_FIELDS},
