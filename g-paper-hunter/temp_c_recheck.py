@@ -10,24 +10,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_fetch as c
 
 DONE_FILE = Path(__file__).resolve().with_name("temp_c_recheck_done.txt")
-STAGES = [c.Stage(s.no, s.name, s.source, "C", "C", s.needs) for s in c.STAGES]
+SOURCE_BY_NO = {s.no: s.source for s in c.STAGES}
+ORDER = ["arxiv", "oa-batch", "s2-doi", "oa-single", "oa-title"]
+STAGES = [c.Stage(i, s.name, s.source, "C", "C", s.needs)
+          for i, s in enumerate(sorted(c.STAGES, key=lambda s: ORDER.index(s.source)), start=1)]
 BASE = "FROM paper_summary WHERE status = 'C' AND abstract IS NULL"
 
 
 class RecheckStore(c.Store):
     def __init__(self, conn):
         super().__init__(conn)
-        self.done: set[tuple[int, int]] = set()
+        self.done: set[tuple[int, str]] = set()
         if DONE_FILE.exists():
             for line in DONE_FILE.read_text().split():
-                pid, _, no = line.partition(":")
-                self.done.add((int(pid), int(no)))
+                pid, _, key = line.partition(":")
+                self.done.add((int(pid), SOURCE_BY_NO[int(key)] if key.isdigit() else key))
         self.out = DONE_FILE.open("a", buffering=1)
-        self.stage_no = 0
+        self.source = ""
         self.cursor = 0
 
     def begin(self, stage: c.Stage) -> None:
-        self.stage_no, self.cursor = stage.no, 0
+        self.source, self.cursor = stage.source, 0
 
     def save(self, papers: list[c.Paper], takes: str, sets: str) -> None:
         with self.lock, self.conn:
@@ -40,15 +43,15 @@ class RecheckStore(c.Store):
         with self.lock:
             for p in papers:
                 if p.abstract or not p.failed:
-                    self.done.add((p.paper_id, self.stage_no))
-                    self.out.write(f"{p.paper_id}:{self.stage_no}\n")
+                    self.done.add((p.paper_id, self.source))
+                    self.out.write(f"{p.paper_id}:{self.source}\n")
 
     def pass_on(self, stage: c.Stage) -> int:
         self.begin(stage)
         return 0
 
     def count(self, stage: c.Stage) -> int:
-        return sum((pid, stage.no) not in self.done
+        return sum((pid, stage.source) not in self.done
                    for (pid,) in self.conn.execute(f"SELECT paper_id {BASE} AND {stage.needs}"))
 
     def load(self, stage: c.Stage, after: int) -> list[c.Paper]:
@@ -60,7 +63,7 @@ class RecheckStore(c.Store):
                 return []
             self.cursor = rows[-1][0]
             papers = [c.Paper(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5]) for r in rows
-                      if (r[0], stage.no) not in self.done]
+                      if (r[0], stage.source) not in self.done]
             if papers:
                 return papers
 
