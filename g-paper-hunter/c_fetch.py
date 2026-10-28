@@ -34,7 +34,8 @@ ARXIV_INTERVAL = 3.1
 
 OPENALEX = "https://api.openalex.org"
 OPENALEX_RPS = 10
-OPENALEX_WORKERS = 8
+OPENALEX_KEY_RPS = 30
+OPENALEX_WORKERS = 24
 OPENALEX_SINGLE_CHUNK = 20
 OPENALEX_URL_LIMIT = 3_800
 OPENALEX_SELECT = "id,doi,ids,display_name,publication_year,abstract_inverted_index,locations,authorships"
@@ -109,6 +110,10 @@ class TransientError(Exception):
 
 
 class QuotaExhausted(Exception):
+    pass
+
+
+class KeyBudgetSpent(Exception):
     pass
 
 
@@ -285,7 +290,18 @@ class OpenAlex:
         if not numbered:
             sys.exit("No OPENALEX_API_KEY_<n> in .env")
         self.key = numbered[0][1]
+        self.keyed = True
+        self.lock = threading.Lock()
+        self.http_key = Http(1.0 / OPENALEX_KEY_RPS)
         self.http = Http(1.0 / OPENALEX_RPS)
+        self.log = print
+
+    @property
+    def calls(self) -> int:
+        return self.http_key.calls + self.http.calls
+
+    def watch(self, on_wait) -> None:
+        self.http_key.on_wait = self.http.on_wait = on_wait
 
     @staticmethod
     def budget_spent(r: requests.Response, needed: int) -> bool:
@@ -305,19 +321,36 @@ class OpenAlex:
                 return f" (resets at 00:00 UTC, in {clock(int(value))})"
         return " (resets at 00:00 UTC)"
 
-    def _on_429(self, needed: int):
+    def _on_429(self, needed: int, keyed: bool):
         def handler(r: requests.Response) -> bool:
-            if self.budget_spent(r, needed):
-                raise QuotaExhausted("OpenAlex free daily budget is used up" + self.reset_in(r))
-            return False
+            if not self.budget_spent(r, needed):
+                return False
+            if keyed:
+                raise KeyBudgetSpent("OpenAlex key's daily budget is used up" + self.reset_in(r))
+            raise QuotaExhausted("OpenAlex daily budget is used up, with and without the key" + self.reset_in(r))
         return handler
 
+    def drop_key(self, error: Exception) -> None:
+        with self.lock:
+            if self.keyed:
+                self.keyed = False
+                self.log(f"    [openalex] {error}; continuing without the key")
+
+    def call(self, url: str, needed: int, **kwargs) -> requests.Response:
+        if self.keyed:
+            try:
+                r = self.http_key.request("GET", url, on_429=self._on_429(needed, True),
+                                          headers={"Authorization": f"Bearer {self.key}"}, **kwargs)
+            except KeyBudgetSpent as e:
+                self.drop_key(e)
+            else:
+                if r.status_code in (401, 403):
+                    raise SystemExit(f"OpenAlex rejected the key (HTTP {r.status_code}): {r.text[:200]}")
+                return r
+        return self.http.request("GET", url, on_429=self._on_429(needed, False), **kwargs)
+
     def get(self, params: dict, needed: int = 1) -> dict:
-        url = f"{OPENALEX}/works?{urllib.parse.urlencode(params, safe=':|/,')}"
-        r = self.http.request("GET", url, on_429=self._on_429(needed),
-                              headers={"Authorization": f"Bearer {self.key}"})
-        if r.status_code in (401, 403):
-            raise SystemExit(f"OpenAlex rejected the key (HTTP {r.status_code}): {r.text[:200]}")
+        r = self.call(f"{OPENALEX}/works?{urllib.parse.urlencode(params, safe=':|/,')}", needed)
         if r.status_code != 200:
             raise TransientError(f"OpenAlex HTTP {r.status_code}")
         return r.json()
@@ -370,7 +403,7 @@ class OpenAlex:
 
     def by_doi_one(self, paper: Paper) -> dict | None:
         url = f"{OPENALEX}/works/https://doi.org/{urllib.parse.quote(paper.doi, safe='/')}"
-        r = self.http.request("GET", url, params={"select": OPENALEX_SELECT})
+        r = self.call(url, 1, params={"select": OPENALEX_SELECT})
         if r.status_code == 404:
             return None
         if r.status_code != 200:
@@ -611,7 +644,8 @@ class Fetcher:
         self.store = store
         self.stopping = threading.Event()
         self.arxiv.http.on_wait = progress.waiter("arXiv")
-        self.openalex.http.on_wait = progress.waiter("OpenAlex")
+        self.openalex.watch(progress.waiter("OpenAlex"))
+        self.openalex.log = progress.log
         self.s2.http.on_wait = progress.waiter("Semantic Scholar")
 
     def check(self) -> None:
@@ -793,7 +827,7 @@ def main() -> None:
             print(f"  stage {stage.no} {stage.name:<15} ✓ {found:,}  ✗ {missed:,}  ⚠ {failed:,}  · passed on {passed:,}")
     print(f"  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
           f"  ·  other paper rejected {fetcher.stats['other paper']:,}")
-    print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.http.calls:,}  "
+    print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.calls:,}  "
           f"Semantic Scholar {fetcher.s2.http.calls:,}  |  {clock(time.time() - started)}")
     print("  status now: " + " · ".join(f"{s} {after.get(s, 0):,}" for s in OPEN_STATUSES + ["C"]))
     if any(after.get(s, 0) for s in OPEN_STATUSES):

@@ -127,7 +127,7 @@ def main() -> None:
             print(f"  stage {stage.no} {stage.name:<20} ✓ {found:,}  ✗ {missed:,}  ⚠ {failed:,}")
     print(f"  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
           f"  ·  other paper rejected {fetcher.stats['other paper']:,}")
-    print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.http.calls:,}  "
+    print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.calls:,}  "
           f"Semantic Scholar {fetcher.s2.http.calls:,}  |  {c.clock(time.time() - started)}")
     print(f"  abstracts added: {before - after:,}  ·  C papers still without an abstract: {after:,}")
     if left:

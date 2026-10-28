@@ -281,14 +281,14 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 **API keys.**
 
 - Load API keys from the `.env` file.
-- OpenAlex: use one key, the lowest-numbered `OPENALEX_API_KEY_<n>` in `.env`. Stage 3 uses free single-DOI lookups without a key. When the key's daily budget is used up, stage 2 or 5 pauses and its papers wait for the next run; the other stages carry on. The budget resets at 00:00 UTC.
+- OpenAlex: use one key, the lowest-numbered `OPENALEX_API_KEY_<n>` in `.env`. Every OpenAlex call (batch, single and title search) uses the key first, at up to 30 calls per second. When the key's daily budget is used up, the rest of the run continues without the key, at up to 10 calls per second, using the separate no-key allowance. Single-DOI lookups are free either way. When the no-key allowance is used up too, stage 2 or 5 pauses and its papers wait for the next run; the other stages carry on. Budgets reset at 00:00 UTC.
 - Semantic Scholar: send `S2_API_KEY` from `.env` in the `x-api-key` header.
 
 **Performance.**
 
 - Each stage reads its papers in chunks of 10,000.
 - Put as many papers as each API allows into one call: 100 IDs per arXiv `id_list` call, up to 100 DOIs per OpenAlex call (keeping the URL within the length limit), and up to 500 IDs per Semantic Scholar batch call.
-- Stages 2 and 3 run 8 calls at once; stages 1, 4 and 5 run one call at a time.
+- Stages 2 and 3 run 24 calls at once; stages 1, 4 and 5 run one call at a time.
 - Retry 429 and 5xx responses with backoff, and honor `Retry-After`.
 
 #### D. `d_abstract.md` — Find Missing Abstracts
