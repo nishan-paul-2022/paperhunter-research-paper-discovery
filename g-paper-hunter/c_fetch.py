@@ -205,7 +205,11 @@ class Paper:
 def clean_text(text: str | None) -> str:
     text = html.unescape(re.sub(r"<[^>]+>", " ", text or ""))
     text = " ".join(re.sub(r"<[^>]+>", " ", text).split())
-    return re.sub(r"^(?i:abstract|summary)(?:\s*[:.\-–—]\s+|\s+(?=[A-Z]))", "", text)
+    text = re.sub(r"^©\s*\d{4}\s+by\s+scitepress\b[^.]*\blda\.\s*", "", text, flags=re.I)
+    for _ in range(2):
+        text = re.sub(r"^[:•\-—–]+\s*", "", text)
+        text = re.sub(r"^(?i:abstract|summary)(?:\s*[:.\-–—]\s+|\s*[:\-–—]\s*(?=[A-Z])|\s+(?=[A-Z]))", "", text)
+    return text
 
 
 def normalize_title(title: str | None) -> str:
