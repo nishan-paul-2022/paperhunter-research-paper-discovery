@@ -19,7 +19,7 @@ REPO_ROOT = HUNTER_DIR.parent
 CONFIG_DIR = REPO_ROOT / "b-config"
 SCOPUS_SRC = CONFIG_DIR / "venue-scopus-computer-science-journal-2025.csv"
 XML_PATH = REPO_ROOT / "d-download" / "dblp.xml"
-DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
 

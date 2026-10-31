@@ -2,10 +2,10 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Fill and audit the table `journal_candidate_ai` in `b-config/paperhunter.db` so that the view `journal_list` contains **every** DBLP journal key (`journals/<name>`) that is a journal of the Scopus 2025 computer-science ranking (quartile Q1–Q4), and **nothing else**. Zero false positives, zero false negatives.
+**Goal.** Fill and audit the table `journal_candidate_ai` in `a-database/paperhunter.db` so that the view `journal_list` contains **every** DBLP journal key (`journals/<name>`) that is a journal of the Scopus 2025 computer-science ranking (quartile Q1–Q4), and **nothing else**. Zero false positives, zero false negatives.
 
 **Ground rules.**
-- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 b-config/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
+- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 a-database/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
 - Change only `journal_candidate_ai`. Never alter the schema or any other table.
 - Trust nothing in the database blindly. `journal_candidate_rule` is a wide machine proposal: most name-only pairs are namesakes, and a true pair can still be missing. Existing `journal_candidate_ai` rows may be wrong or incomplete. You audit both.
 - You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by a method or a pattern alone.

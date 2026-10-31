@@ -362,7 +362,7 @@ Store the ID without its version suffix (`2308.06782`, not `2308.06782v2`).
 When this plan is implemented, the AI removes everything the project no longer needs, across the whole repository: `b-config/`, `c-context/`, `e-conference-hunter/`, `f-journal-hunter/`, `g-paper-hunter/`, `README.md`, `requirements.txt` and any other file.
 
 - **Files:** old g-paper-hunter scripts and prompts replaced by this plan, and any other file no step uses.
-- **Database:** paper tables and views in `b-config/paperhunter.db` that are not in this plan.
+- **Database:** paper tables and views in `a-database/paperhunter.db` that are not in this plan.
 - **Code:** functions, constants and imports that nothing calls.
 - **Dependencies:** packages in `requirements.txt` that no script imports.
 - **Docs:** `README.md` updated to the new run order, with no references to removed files.

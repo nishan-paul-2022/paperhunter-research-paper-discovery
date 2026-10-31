@@ -6,7 +6,7 @@ You are an autonomous research assistant with shell and web access. Complete thi
 
 ## Ground rules
 
-- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. The database is `b-config/paperhunter.db`. Use `.venv/bin/python`. Start every connection with `PRAGMA foreign_keys = ON;`.
+- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. The database is `a-database/paperhunter.db`. Use `.venv/bin/python`. Start every connection with `PRAGMA foreign_keys = ON;`.
 - Write only to `paper_field_abstract.abstract` and `paper_status.status`. Never change the schema or any other table.
 - **Accuracy over coverage.** Store an abstract only when you found it on a trustworthy page and verified it belongs to this paper (same title, same authors). Copy it exactly. Never guess, paraphrase, translate, summarize or generate one. A missing abstract is a correct outcome; a wrong one is not.
 - **Do not use** OpenAlex, Semantic Scholar or arXiv: step C already tried them.
@@ -15,7 +15,7 @@ You are an autonomous research assistant with shell and web access. Complete thi
 ## Step 1: Move papers that already have an abstract
 
 ```sh
-sqlite3 b-config/paperhunter.db "
+sqlite3 a-database/paperhunter.db "
 PRAGMA foreign_keys = ON;
 UPDATE paper_status SET status = 'D'
 WHERE status = 'C' AND paper_id NOT IN (SELECT paper_id FROM paper_review);"
@@ -26,7 +26,7 @@ WHERE status = 'C' AND paper_id NOT IN (SELECT paper_id FROM paper_review);"
 Read a batch of 20 papers at status `C` that are in `paper_review`:
 
 ```sh
-sqlite3 -readonly b-config/paperhunter.db "
+sqlite3 -readonly a-database/paperhunter.db "
 SELECT paper_id, title, authors, year, venue, doi, ee, arxiv_id
 FROM paper_summary
 WHERE status = 'C' AND paper_id IN (SELECT paper_id FROM paper_review)
@@ -46,7 +46,7 @@ For each paper:
 import sqlite3
 paper_id = 123456
 abstract = None
-conn = sqlite3.connect("b-config/paperhunter.db", timeout=120)
+conn = sqlite3.connect("a-database/paperhunter.db", timeout=120)
 conn.execute("PRAGMA foreign_keys = ON")
 with conn:
     if abstract:
@@ -62,7 +62,7 @@ Repeat batches until the query returns nothing. An interrupted session resumes w
 ## Finish
 
 ```sh
-sqlite3 -readonly b-config/paperhunter.db "
+sqlite3 -readonly a-database/paperhunter.db "
 SELECT status, count(*) FROM paper_status GROUP BY status;
 SELECT 'still without abstract', count(*) FROM paper_review;"
 ```

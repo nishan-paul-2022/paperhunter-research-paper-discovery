@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 MIN_NAME_SCORE = 0.6
 MIN_NAME_SHARE = 0.15
 RECENT_NAME_YEARS = 3

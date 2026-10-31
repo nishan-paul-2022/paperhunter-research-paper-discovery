@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 SEMANTIC_PATH = REPO_ROOT / "b-config" / "semantic.json"
 MODEL = "BAAI/bge-small-en-v1.5"
 REVISION = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"

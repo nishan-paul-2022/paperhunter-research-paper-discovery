@@ -6,7 +6,7 @@ You are an autonomous reviewer with shell access and, where needed, web access. 
 
 ## Ground rules
 
-- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. The database is `b-config/paperhunter.db`. Use `.venv/bin/python`. Start every connection with `PRAGMA foreign_keys = ON;`.
+- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. The database is `a-database/paperhunter.db`. Use `.venv/bin/python`. Start every connection with `PRAGMA foreign_keys = ON;`.
 - Write only to `paper_ai_shortlist` and `paper_status.status`. Never change the schema or any other table.
 - Decide from the title, authors, venue, year and abstract. Shortlisting only means the paper reached you; it is not evidence of relevance. Look a paper up online only if it has no abstract and its title alone cannot decide it. Never invent facts.
 - Write each paper's decision and its status change in **one transaction**.
@@ -36,7 +36,7 @@ A paper is **relevant** if it would belong in the related-work or evaluation sec
 ## Step 1: Move papers that were not shortlisted
 
 ```sh
-sqlite3 b-config/paperhunter.db "
+sqlite3 a-database/paperhunter.db "
 PRAGMA foreign_keys = ON;
 UPDATE paper_status SET status = 'G'
 WHERE status = 'F' AND paper_id NOT IN (SELECT paper_id FROM paper_semantic_shortlist);"
@@ -47,7 +47,7 @@ WHERE status = 'F' AND paper_id NOT IN (SELECT paper_id FROM paper_semantic_shor
 Read a batch of 20:
 
 ```sh
-sqlite3 -readonly b-config/paperhunter.db "
+sqlite3 -readonly a-database/paperhunter.db "
 SELECT paper_id, title, authors, venue, year, abstract
 FROM paper_summary
 WHERE status = 'F' AND paper_id IN (SELECT paper_id FROM paper_semantic_shortlist)
@@ -61,7 +61,7 @@ Record each decision. Use a category to accept, or `None` to reject:
 import sqlite3
 paper_id = 123456
 category = None
-conn = sqlite3.connect("b-config/paperhunter.db", timeout=120)
+conn = sqlite3.connect("a-database/paperhunter.db", timeout=120)
 conn.execute("PRAGMA foreign_keys = ON")
 with conn:
     if category:
@@ -77,7 +77,7 @@ Repeat batches until the query returns nothing. An interrupted session resumes w
 ## Finish
 
 ```sh
-sqlite3 -readonly b-config/paperhunter.db "
+sqlite3 -readonly a-database/paperhunter.db "
 SELECT category, count(*) FROM paper_ai_shortlist GROUP BY category;
 SELECT status, count(*) FROM paper_status GROUP BY status;"
 ```

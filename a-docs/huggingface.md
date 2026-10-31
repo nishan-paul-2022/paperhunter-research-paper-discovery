@@ -27,16 +27,16 @@ cd ~/Documents/paperhunter-research-paper-discovery
 ## 3. Upload a version
 
 1. Stop every script and `sqlite3` shell that uses the database.
-2. Checkpoint. Expected: `0|0|0`, then only `b-config/paperhunter.db`.
+2. Checkpoint. Expected: `0|0|0`, then only `a-database/paperhunter.db`.
 
 ```bash
-sqlite3 b-config/paperhunter.db "PRAGMA wal_checkpoint(TRUNCATE);" && ls b-config/paperhunter.db*
+sqlite3 a-database/paperhunter.db "PRAGMA wal_checkpoint(TRUNCATE);" && ls a-database/paperhunter.db*
 ```
 
 3. Upload.
 
 ```bash
-.venv/bin/hf upload XOR-2025/paperhunter-research-paper-discovery b-config/paperhunter.db paperhunter.db \
+.venv/bin/hf upload XOR-2025/paperhunter-research-paper-discovery a-database/paperhunter.db paperhunter.db \
   --repo-type dataset --commit-message "<step and counts>"
 ```
 
@@ -55,7 +55,7 @@ for c in HfApi().list_repo_commits('XOR-2025/paperhunter-research-paper-discover
 2. Download. Omit `--revision` for the latest version.
 
 ```bash
-rm -f b-config/paperhunter.db-wal b-config/paperhunter.db-shm
+rm -f a-database/paperhunter.db-wal a-database/paperhunter.db-shm
 .venv/bin/hf download XOR-2025/paperhunter-research-paper-discovery paperhunter.db \
-  --repo-type dataset --local-dir b-config --revision <commit_id>
+  --repo-type dataset --local-dir a-database --revision <commit_id>
 ```

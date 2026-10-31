@@ -10,7 +10,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 XML_PATH = REPO_ROOT / "d-download" / "dblp.xml"
-DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 RECORD_TAGS = ("article", "inproceedings", "proceedings", "book", "incollection",
                "phdthesis", "mastersthesis", "www", "person", "data")
 YEAR_GAP = 3

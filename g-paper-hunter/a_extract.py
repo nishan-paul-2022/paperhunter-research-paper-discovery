@@ -12,7 +12,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 XML_PATH = REPO_ROOT / "d-download" / "dblp.xml"
-DB_PATH = REPO_ROOT / "b-config" / "paperhunter.db"
+DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 BATCH_SIZE = 5_000
 PAPER_TAGS = ("article", "inproceedings")
 RECORD_TAGS = PAPER_TAGS + ("proceedings", "book", "incollection", "phdthesis", "mastersthesis",

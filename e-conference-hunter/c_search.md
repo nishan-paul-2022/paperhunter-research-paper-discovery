@@ -2,10 +2,10 @@
 
 You are the reviewer. Complete this task end to end with no human help and no questions to the user.
 
-**Goal.** Fill and audit the table `conf_candidate_ai` in `b-config/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
+**Goal.** Fill and audit the table `conf_candidate_ai` in `a-database/paperhunter.db` so that the view `conf_list` contains **every** DBLP series that is a CORE A*–C conference, and **nothing else**. Zero false positives, zero false negatives.
 
 **Ground rules.**
-- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 b-config/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
+- Work from the repository root `/home/nishan/Documents/paperhunter-research-paper-discovery`. Use `sqlite3 a-database/paperhunter.db` or Python's `sqlite3`, and start every connection with `PRAGMA foreign_keys = ON;`.
 - Change only `conf_candidate_ai`. Never alter the schema or any other table.
 - Trust nothing in the database blindly. `conf_candidate_rule` is a wide machine proposal: most pairs that share an acronym are namesakes, and some true pairs are still never proposed. Existing `conf_candidate_ai` rows may be wrong or incomplete. You audit both.
 - You may use scripts to read, filter and batch-insert, but every single decision must rest on evidence you looked at for that pair. Never accept or reject by the candidate method, a pattern or a rule alone.

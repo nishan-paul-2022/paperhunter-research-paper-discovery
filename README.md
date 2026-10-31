@@ -4,7 +4,7 @@
 
 # PaperHunter: Evidence-Grounded Research Paper Discovery and Categorization at Scale
 
-All data lives in `b-config/paperhunter.db`.
+All data lives in `a-database/paperhunter.db`.
 
 ### 1. Environment
 
@@ -37,7 +37,7 @@ python c-context/b_schema.py
 python c-context/c_threshold.py
 ```
 
-**Output:** `d-download/dblp.xml`, `b-config/paperhunter.db` with every table and view, and `paper_semantic_threshold`
+**Output:** `d-download/dblp.xml`, `a-database/paperhunter.db` with every table and view, and `paper_semantic_threshold`
 
 Run `c_threshold.py` again whenever `semantic.json` changes.
 
