@@ -6,6 +6,7 @@ Run every command from the repository root.
 
 ```bash
 cd ~/Documents/paperhunter-research-paper-discovery
+source .venv/bin/activate
 ```
 
 ## Make shortcuts
@@ -24,14 +25,14 @@ make db-pull REV=<commit_id>
 2. Log in. Answer `n` to "Add token as git credential?".
 
 ```bash
-.venv/bin/hf auth login
-.venv/bin/hf auth whoami
+hf auth login
+hf auth whoami
 ```
 
 ## 2. Create the repo (once)
 
 ```bash
-.venv/bin/hf repo create paperhunter-research-paper-discovery --repo-type dataset --private
+hf repo create paperhunter-research-paper-discovery --repo-type dataset --private
 ```
 
 ## 3. Upload a version
@@ -46,14 +47,14 @@ sqlite3 a-database/paperhunter.db "PRAGMA wal_checkpoint(TRUNCATE);" && ls a-dat
 3. Upload.
 
 ```bash
-.venv/bin/hf upload XOR-2025/paperhunter-research-paper-discovery a-database/paperhunter.db paperhunter.db \
+hf upload XOR-2025/paperhunter-research-paper-discovery a-database/paperhunter.db paperhunter.db \
   --repo-type dataset --commit-message "<step and counts>"
 ```
 
 ## 4. List versions
 
 ```bash
-.venv/bin/python -c "
+python -c "
 from huggingface_hub import HfApi
 for c in HfApi().list_repo_commits('XOR-2025/paperhunter-research-paper-discovery', repo_type='dataset'):
     print(c.commit_id[:10], c.created_at.strftime('%Y-%m-%d %H:%M'), c.title)"
@@ -66,6 +67,6 @@ for c in HfApi().list_repo_commits('XOR-2025/paperhunter-research-paper-discover
 
 ```bash
 rm -f a-database/paperhunter.db-wal a-database/paperhunter.db-shm
-.venv/bin/hf download XOR-2025/paperhunter-research-paper-discovery paperhunter.db \
+hf download XOR-2025/paperhunter-research-paper-discovery paperhunter.db \
   --repo-type dataset --local-dir a-database --revision <commit_id>
 ```

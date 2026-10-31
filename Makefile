@@ -1,8 +1,8 @@
 HF_REPO := XOR-2025/paperhunter-research-paper-discovery
 DB_DIR  := a-database
 DB      := $(DB_DIR)/paperhunter.db
-HF      := .venv/bin/hf
-PYTHON  := .venv/bin/python
+HF      := hf
+PYTHON  := python
 
 .PHONY: db-checkpoint db-push db-versions db-pull
 
