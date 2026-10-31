@@ -2,21 +2,11 @@
 
 Repo: [XOR-2025/paperhunter-research-paper-discovery](https://huggingface.co/datasets/XOR-2025/paperhunter-research-paper-discovery)
 
-Run every command from the repository root.
+Run every command from the repository root with the environment active.
 
 ```bash
 cd ~/Documents/paperhunter-research-paper-discovery
 source .venv/bin/activate
-```
-
-## Make shortcuts
-
-```bash
-make db-checkpoint
-make db-push MSG="<step and counts>"
-make db-versions
-make db-pull
-make db-pull REV=<commit_id>
 ```
 
 ## 1. Setup (once per machine)
@@ -35,38 +25,35 @@ hf auth whoami
 hf repo create paperhunter-research-paper-discovery --repo-type dataset --private
 ```
 
-## 3. Upload a version
+## 3. Checkpoint
 
-1. Stop every script and `sqlite3` shell that uses the database.
-2. Checkpoint. Expected: `0|0|0`, then only `a-database/paperhunter.db`.
+Merges pending writes into `paperhunter.db`. Fails if any script or `sqlite3` shell still has it open.
 
 ```bash
-sqlite3 a-database/paperhunter.db "PRAGMA wal_checkpoint(TRUNCATE);" && ls a-database/paperhunter.db*
+make db-checkpoint
 ```
 
-3. Upload.
+## 4. Upload a version
+
+Stop every script first. Runs the checkpoint, then uploads `paperhunter.db` as a new version with your message.
 
 ```bash
-hf upload XOR-2025/paperhunter-research-paper-discovery a-database/paperhunter.db paperhunter.db \
-  --repo-type dataset --commit-message "<step and counts>"
+make db-push MSG="<step and counts>"
 ```
 
-## 4. List versions
+## 5. List versions
+
+Shows every version: commit ID, date, message.
 
 ```bash
-python -c "
-from huggingface_hub import HfApi
-for c in HfApi().list_repo_commits('XOR-2025/paperhunter-research-paper-discovery', repo_type='dataset'):
-    print(c.commit_id[:10], c.created_at.strftime('%Y-%m-%d %H:%M'), c.title)"
+make db-versions
 ```
 
-## 5. Download a version
+## 6. Download a version
 
-1. Stop every script and `sqlite3` shell that uses the database.
-2. Download. Omit `--revision` for the latest version.
+Saves to `a-database/paperhunter-<commit_id>.db`. Never replaces an existing file. Without `REV`, gets the latest.
 
 ```bash
-rm -f a-database/paperhunter.db-wal a-database/paperhunter.db-shm
-hf download XOR-2025/paperhunter-research-paper-discovery paperhunter.db \
-  --repo-type dataset --local-dir a-database --revision <commit_id>
+make db-pull
+make db-pull REV=<commit_id>
 ```

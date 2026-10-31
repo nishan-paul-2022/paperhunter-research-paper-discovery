@@ -22,5 +22,11 @@ db-versions:
 	@$(PYTHON) -c "from huggingface_hub import HfApi; [print(c.commit_id[:10], c.created_at.strftime('%Y-%m-%d %H:%M'), c.title) for c in HfApi().list_repo_commits('$(HF_REPO)', repo_type='dataset')]"
 
 db-pull:
-	rm -f $(DB)-wal $(DB)-shm
-	$(HF) download $(HF_REPO) paperhunter.db --repo-type dataset --local-dir $(DB_DIR) $(if $(REV),--revision $(REV))
+	@id=$$($(PYTHON) -c "import sys; from huggingface_hub import HfApi; m=[c.commit_id for c in HfApi().list_repo_commits('$(HF_REPO)', repo_type='dataset') if c.commit_id.startswith('$(REV)')]; print(m[0]) if m else sys.exit('no commit matches REV=$(REV)')") || exit 1; \
+	short=$$(echo $$id | cut -c1-10); \
+	out=$(DB_DIR)/paperhunter-$$short.db; \
+	if [ -e $$out ]; then echo "$$out already exists"; exit 1; fi; \
+	tmp=$(DB_DIR)/.pull-$$short; \
+	$(HF) download $(HF_REPO) paperhunter.db --repo-type dataset --revision $$id --local-dir $$tmp || { rm -rf $$tmp; exit 1; }; \
+	mv $$tmp/paperhunter.db $$out && rm -rf $$tmp; \
+	ls -lh $$out
