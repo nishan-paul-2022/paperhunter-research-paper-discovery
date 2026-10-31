@@ -123,5 +123,3 @@ SELECT 'at D without an abstract', count(*) FROM paper_status s JOIN paper_field
 ```
 
 Report the counts, how many abstracts this session found, and how many papers ended without one.
-
-**Next:** run `h-paper-hunter/e_embed.py`.
