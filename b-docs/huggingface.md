@@ -35,10 +35,11 @@ make db-checkpoint
 
 ## 4. Upload a version
 
-Stop every script first. Runs the checkpoint, then uploads `paperhunter.db` as a new version with your message.
+Stop every script first. Runs the checkpoint, then uploads `paperhunter.db` with an automatic message: `version <n> | <timestamp>`. `MSG` is optional and gets appended.
 
 ```bash
-make db-push MSG="<step and counts>"
+make db-push
+make db-push MSG="<note>"
 ```
 
 ## 5. List versions
@@ -51,7 +52,7 @@ make db-versions
 
 ## 6. Download a version
 
-Saves to `a-database/paperhunter-<commit_id>.db`. Never replaces an existing file. Without `REV`, gets the latest.
+Saves to `a-database/paperhunter-<version message in kebab-case>.db`, e.g. `paperhunter-version-1-2026-10-31-18-02-14-06.db`. Never replaces an existing file. Without `REV`, gets the latest.
 
 ```bash
 make db-pull

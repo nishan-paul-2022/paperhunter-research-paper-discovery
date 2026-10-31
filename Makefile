@@ -14,19 +14,22 @@ db-checkpoint:
 	ls $(DB)*
 
 db-push:
-	@test -n "$(MSG)" || { echo 'usage: make db-push MSG="<step and counts>"'; exit 1; }
 	@$(MAKE) --no-print-directory db-checkpoint
-	$(HF) upload $(HF_REPO) $(DB) paperhunter.db --repo-type dataset --commit-message "$(MSG)"
+	@n=$$($(PYTHON) -c "from huggingface_hub import HfApi; print(1 + sum(c.title.startswith('version ') for c in HfApi().list_repo_commits('$(HF_REPO)', repo_type='dataset')))") || exit 1; \
+	msg="version $$n | $$(date '+%Y-%m-%d %H:%M:%S %Z')$(if $(MSG), | $(MSG))"; \
+	echo "$$msg"; \
+	$(HF) upload $(HF_REPO) $(DB) paperhunter.db --repo-type dataset --commit-message "$$msg"
 
 db-versions:
 	@$(PYTHON) -c "from huggingface_hub import HfApi; [print(c.commit_id[:10], c.created_at.strftime('%Y-%m-%d %H:%M'), c.title) for c in HfApi().list_repo_commits('$(HF_REPO)', repo_type='dataset')]"
 
 db-pull:
-	@id=$$($(PYTHON) -c "import sys; from huggingface_hub import HfApi; m=[c.commit_id for c in HfApi().list_repo_commits('$(HF_REPO)', repo_type='dataset') if c.commit_id.startswith('$(REV)')]; print(m[0]) if m else sys.exit('no commit matches REV=$(REV)')") || exit 1; \
-	short=$$(echo $$id | cut -c1-10); \
-	out=$(DB_DIR)/paperhunter-$$short.db; \
+	@r=$$($(PYTHON) -c "import re, sys; from huggingface_hub import HfApi; m=[c for c in HfApi().list_repo_commits('$(HF_REPO)', repo_type='dataset') if c.commit_id.startswith('$(REV)')]; print(m[0].commit_id, re.sub(r'[^a-z0-9]+', '-', m[0].title.lower()).strip('-')) if m else sys.exit('no commit matches REV=$(REV)')") || exit 1; \
+	set -- $$r; \
+	id=$$1; \
+	out=$(DB_DIR)/paperhunter-$$2.db; \
 	if [ -e $$out ]; then echo "$$out already exists"; exit 1; fi; \
-	tmp=$(DB_DIR)/.pull-$$short; \
+	tmp=$(DB_DIR)/.pull-$$2; \
 	$(HF) download $(HF_REPO) paperhunter.db --repo-type dataset --revision $$id --local-dir $$tmp || { rm -rf $$tmp; exit 1; }; \
 	mv $$tmp/paperhunter.db $$out && rm -rf $$tmp; \
 	ls -lh $$out
