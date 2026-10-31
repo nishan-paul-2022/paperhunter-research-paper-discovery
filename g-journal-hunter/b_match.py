@@ -189,7 +189,7 @@ def propose(conn: sqlite3.Connection) -> list[tuple]:
 
 def main() -> None:
     if not DB_PATH.exists():
-        sys.exit(f"Database not found: {DB_PATH}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {DB_PATH}  (run d-context/b_schema.py first)")
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
     if not conn.execute("SELECT count(*) FROM journal_dblp_venue").fetchone()[0]:
@@ -217,7 +217,7 @@ def main() -> None:
     print(f"  └─ final list:  {final} keys")
     print()
     if issues:
-        print("  ✗ Review needed → give f-journal-hunter/c_search.md to the AI")
+        print("  ✗ Review needed → give g-journal-hunter/c_search.md to the AI")
     else:
         print("  ✓ Review complete → journal_list is final")
     print()

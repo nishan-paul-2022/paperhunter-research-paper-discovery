@@ -67,4 +67,4 @@ SELECT status, count(*) FROM paper_status GROUP BY status;
 SELECT 'still without abstract', count(*) FROM paper_review;"
 ```
 
-**Next:** run `g-paper-hunter/e_embed.py`.
+**Next:** run `h-paper-hunter/e_embed.py`.

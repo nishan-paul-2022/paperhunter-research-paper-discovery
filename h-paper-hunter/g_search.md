@@ -13,10 +13,10 @@ You are an autonomous reviewer with shell access and, where needed, web access. 
 
 ## Research topic
 
-Read it from `b-config/semantic.json` (`topic`):
+Read it from `c-config/semantic.json` (`topic`):
 
 ```sh
-.venv/bin/python -c "import json; print(json.load(open('b-config/semantic.json'))['topic'])"
+.venv/bin/python -c "import json; print(json.load(open('c-config/semantic.json'))['topic'])"
 ```
 
 ## Relevance and categories

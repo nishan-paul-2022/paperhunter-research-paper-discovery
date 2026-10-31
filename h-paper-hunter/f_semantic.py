@@ -15,7 +15,7 @@ CHUNK = 20_000
 
 
 def semantic():
-    spec = importlib.util.spec_from_file_location("c_threshold", REPO_ROOT / "c-context" / "c_threshold.py")
+    spec = importlib.util.spec_from_file_location("c_threshold", REPO_ROOT / "d-context" / "c_threshold.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -23,7 +23,7 @@ def semantic():
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run d-context/b_schema.py first)")
     conn = sqlite3.connect(path, timeout=120)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -43,7 +43,7 @@ def main() -> None:
     conn = connect()
     thresholds = dict(conn.execute("SELECT basis, threshold FROM paper_semantic_threshold"))
     if set(thresholds) != {"title", "title_abstract"}:
-        sys.exit("paper_semantic_threshold is empty (run c-context/c_threshold.py first)")
+        sys.exit("paper_semantic_threshold is empty (run d-context/c_threshold.py first)")
     ids = [r[0] for r in conn.execute("SELECT paper_id FROM paper_status WHERE status = 'E' ORDER BY paper_id")]
     if not ids:
         print("  No papers at status E.\n")

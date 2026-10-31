@@ -12,7 +12,7 @@ CHUNK = 512
 
 
 def semantic():
-    spec = importlib.util.spec_from_file_location("c_threshold", REPO_ROOT / "c-context" / "c_threshold.py")
+    spec = importlib.util.spec_from_file_location("c_threshold", REPO_ROOT / "d-context" / "c_threshold.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -20,7 +20,7 @@ def semantic():
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run d-context/b_schema.py first)")
     conn = sqlite3.connect(path, timeout=120)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

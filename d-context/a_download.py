@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DOWNLOAD_DIR = Path(__file__).resolve().parent.parent / "d-download"
+DOWNLOAD_DIR = Path(__file__).resolve().parent.parent / "e-download"
 GZ_PATH = DOWNLOAD_DIR / "dblp.xml.gz"
 XML_PATH = DOWNLOAD_DIR / "dblp.xml"
 DTD_PATH = DOWNLOAD_DIR / "dblp.dtd"

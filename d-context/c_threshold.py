@@ -8,7 +8,7 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
-SEMANTIC_PATH = REPO_ROOT / "b-config" / "semantic.json"
+SEMANTIC_PATH = REPO_ROOT / "c-config" / "semantic.json"
 MODEL = "BAAI/bge-small-en-v1.5"
 REVISION = "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
 MARGIN = 0.05
@@ -76,7 +76,7 @@ def thresholds(model, data: dict) -> dict[str, float]:
 def main() -> None:
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DB_PATH
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run d-context/b_schema.py first)")
     data = settings()
     print(f"\n  {len(data['queries'])} queries, {len(data['seeds'])} seeds from {SEMANTIC_PATH.name}")
     print(f"  model {MODEL} @ {REVISION[:7]}  |  margin {MARGIN}\n")

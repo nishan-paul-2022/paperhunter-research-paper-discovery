@@ -119,7 +119,7 @@ def load_env() -> None:
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run d-context/b_schema.py first)")
     conn = sqlite3.connect(path, timeout=120, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")

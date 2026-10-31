@@ -52,12 +52,12 @@ Then check these sources:
     FILTER(STRSTARTS(?dblp, "conf/") && LANG(?label) = "en" && CONTAINS(LCASE(?label), "multimedia")) }
   ```
 - **The conference's own website**, its "previous editions" or history page, and the proceedings front matter (web search), for renames and mergers that `conf_dblp_lineage` lacks (SAIG and GCSE → GPCE).
-- **The local dump** `d-download/dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
+- **The local dump** `e-download/dblp.xml`, with `grep` for a key (`key="conf/x/`) or title words. It holds every paper, so it settles what a key contains.
 - The CORE portal.
 
 **Do not use the dblp.org web pages** or their mirrors: they sit behind a bot wall. What DBLP knows about series lineage is already in `conf_dblp_lineage`.
 
-If `conf_dblp_venue` has no `dblp_acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `c-context/b_schema.py`, then `e-conference-hunter/a_extract.py`, then `e-conference-hunter/b_match.py`.
+If `conf_dblp_venue` has no `dblp_acronym` column, `conf_dblp_proceeding_title` has no `proceeding_key` column, or `conf_dblp_lineage` is missing or empty, stop and tell the humans to run `d-context/b_schema.py`, then `f-conference-hunter/a_extract.py`, then `f-conference-hunter/b_match.py`.
 
 ---
 

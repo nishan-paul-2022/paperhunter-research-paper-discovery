@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-XML_PATH = REPO_ROOT / "d-download" / "dblp.xml"
+XML_PATH = REPO_ROOT / "e-download" / "dblp.xml"
 DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 RECORD_TAGS = ("article", "inproceedings", "proceedings", "book", "incollection",
                "phdthesis", "mastersthesis", "www", "person", "data")
@@ -21,7 +21,7 @@ WRITE_BATCH = 10_000
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run d-context/b_schema.py first)")
     conn = sqlite3.connect(path, timeout=120)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

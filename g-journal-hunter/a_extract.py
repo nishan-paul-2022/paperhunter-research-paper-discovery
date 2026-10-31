@@ -16,9 +16,9 @@ from pathlib import Path
 
 HUNTER_DIR = Path(__file__).resolve().parent
 REPO_ROOT = HUNTER_DIR.parent
-CONFIG_DIR = REPO_ROOT / "b-config"
+CONFIG_DIR = REPO_ROOT / "c-config"
 SCOPUS_SRC = CONFIG_DIR / "venue-scopus-computer-science-journal-2025.csv"
-XML_PATH = REPO_ROOT / "d-download" / "dblp.xml"
+XML_PATH = REPO_ROOT / "e-download" / "dblp.xml"
 DB_PATH = REPO_ROOT / "a-database" / "paperhunter.db"
 ENV_PATH = REPO_ROOT / ".env"
 VALID_QUARTILES = ("Q1", "Q2", "Q3", "Q4")
@@ -53,7 +53,7 @@ def load_env() -> None:
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     if not path.exists():
-        sys.exit(f"Database not found: {path}  (run c-context/b_schema.py first)")
+        sys.exit(f"Database not found: {path}  (run d-context/b_schema.py first)")
     conn = sqlite3.connect(path)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
