@@ -8,6 +8,16 @@ Run every command from the repository root.
 cd ~/Documents/paperhunter-research-paper-discovery
 ```
 
+## Make shortcuts
+
+```bash
+make db-checkpoint
+make db-push MSG="<step and counts>"
+make db-versions
+make db-pull
+make db-pull REV=<commit_id>
+```
+
 ## 1. Setup (once per machine)
 
 1. Create a token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) with "Write access to contents/settings of all repos under your personal namespace".
