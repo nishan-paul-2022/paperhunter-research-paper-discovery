@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import hashlib
 import html
 import json
 import os
@@ -13,7 +12,7 @@ import time
 import unicodedata
 import urllib.parse
 import xml.etree.ElementTree as ET
-from collections import Counter, defaultdict
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -92,15 +91,6 @@ JUNK_RE = re.compile(
     r"|the art of discrete and applied mathematics \(adam\) is a modern, dynamic, platinum open access"
     r"|s mission of unlocking human potential\.for over two centuries, wiley)", re.I)
 TAG_RE = re.compile(r"\s*[(\[][^)\]]*[)\]]")
-SWEEP_MIN_WORDS = 40
-SWEEP_KEY_WORDS = 40
-SWEEP_OWNER_SHARE = 0.5
-SWEEP_SAME_TEXT = 0.95
-SWEEP_SOURCES = ("arxiv", "openalex", "s2", "title", "s2-title")
-TITLE_STOP_WORDS = frozenset(
-    "with from that this their using based towards into over under between about through when where which while "
-    "than more most also such these those other then have been does case study approach method methods analysis "
-    "paper novel efficient effective learning model models system systems data".split())
 LETTER_RE = re.compile(r"[^\W\d_]")
 MIN_WORDS = 2
 ONE_WORD_CHARS = 100
@@ -268,20 +258,6 @@ def same_work(paper: Paper, title: str | None, year, authors: list[str]) -> bool
         return True
     return title_similarity(paper.title, title) >= VERSION_SIMILARITY and bool(
         name_tokens(paper.authors) & name_tokens(authors))
-
-
-def title_words(text: str | None) -> set[str]:
-    return {w for w in re.findall(r"[a-z]{4,}", (text or "").lower()) if w not in TITLE_STOP_WORDS}
-
-
-def title_share(title: str | None, text: str) -> float:
-    words = title_words(title)
-    return len(words & title_words(text)) / len(words) if words else 0.0
-
-
-def same_text(a: str | None, b: str | None) -> bool:
-    a, b = normalize_title(a), normalize_title(b)
-    return a == b or SequenceMatcher(None, a[:2000], b[:2000]).ratio() >= SWEEP_SAME_TEXT
 
 
 def canonical_arxiv(value: str | None) -> str | None:
@@ -686,42 +662,6 @@ class Store:
             (stage.takes, after, CHUNK_PAPERS)).fetchall()
         return [Paper(r[0], r[1], r[2], r[3], json.loads(r[4]), r[5]) for r in rows]
 
-    def abstract_groups(self) -> list[list[int]]:
-        keys: dict[bytes, list[int]] = defaultdict(list)
-        for pid, text in self.conn.execute("SELECT paper_id, abstract FROM paper_field_abstract WHERE abstract IS NOT NULL"):
-            if len(text.split()) < SWEEP_MIN_WORDS:
-                continue
-            words = normalize_title(text).split()
-            for side, part in ((b"h", words[:SWEEP_KEY_WORDS]), (b"t", words[-SWEEP_KEY_WORDS:])):
-                keys[side + hashlib.blake2b(" ".join(part).encode(), digest_size=12).digest()].append(pid)
-        return [group for group in keys.values() if len(group) > 1]
-
-    def sweep_papers(self, ids: set[int]) -> dict[int, tuple[Paper, str, str]]:
-        out, ids = {}, sorted(ids)
-        for i in range(0, len(ids), 900):
-            chunk = ids[i:i + 900]
-            for pid, doi, arxiv_id, title, authors, year, text, status in self.conn.execute(
-                    "SELECT p.paper_id, p.doi, x.arxiv_id, p.title, p.authors, p.year, a.abstract, s.status "
-                    "FROM paper_field_abstract a JOIN paper_dblp p USING (paper_id) "
-                    "JOIN paper_status s USING (paper_id) LEFT JOIN paper_field_arxiv x USING (paper_id) "
-                    f"WHERE a.paper_id IN ({', '.join('?' * len(chunk))})", chunk):
-                out[pid] = (Paper(pid, doi, arxiv_id, title, json.loads(authors), year), text, status)
-        return out
-
-    def add_arxiv_ids(self, found: dict[int, str]) -> None:
-        with self.lock, self.conn:
-            self.conn.executemany(
-                "UPDATE paper_field_arxiv SET arxiv_id = ? WHERE paper_id = ? AND arxiv_id IS NULL "
-                "AND paper_id IN (SELECT paper_id FROM paper_status WHERE status = 'C')",
-                [(arxiv_id, pid) for pid, arxiv_id in found.items()])
-
-    def replace_copies(self, fixes: list[tuple[Paper, str, str | None]]) -> None:
-        with self.lock, self.conn:
-            self.conn.executemany(
-                "UPDATE paper_field_abstract SET abstract = ? WHERE paper_id = ? AND abstract = ? "
-                "AND paper_id IN (SELECT paper_id FROM paper_status WHERE status = 'C')",
-                [(new, p.paper_id, old) for p, old, new in fixes])
-
     def statuses(self) -> dict[str, int]:
         return dict(self.conn.execute(
             f"SELECT status, COUNT(*) FROM paper_status WHERE status IN ({', '.join('?' * len(OPEN_STATUSES))}, 'C') "
@@ -875,141 +815,6 @@ class Fetcher:
             self.title_one(p, stage)
             self.progress.step([p], describe(p))
 
-    def wrong_copies(self) -> list[tuple[Paper, str]]:
-        groups = self.store.abstract_groups()
-        rows = self.store.sweep_papers({pid for group in groups for pid in group})
-        parent = {pid: pid for pid in rows}
-
-        def root(pid: int) -> int:
-            while parent[pid] != pid:
-                parent[pid] = parent[parent[pid]]
-                pid = parent[pid]
-            return pid
-        for group in groups:
-            group = [pid for pid in group if pid in rows]
-            for i, a in enumerate(group):
-                for b in group[i + 1:]:
-                    if root(a) != root(b) and same_text(rows[a][1], rows[b][1]):
-                        parent[root(b)] = root(a)
-        clusters: dict[int, list[int]] = defaultdict(list)
-        for pid in rows:
-            clusters[root(pid)].append(pid)
-        found = []
-        for members in clusters.values():
-            if len(members) < 2:
-                continue
-            share = {pid: title_share(rows[pid][0].title, rows[pid][1]) for pid in members}
-            owner = max(members, key=lambda pid: share[pid])
-            owner_names = name_tokens(rows[owner][0].authors)
-            if share[owner] < SWEEP_OWNER_SHARE or not owner_names:
-                continue
-            for pid in members:
-                paper, text, status = rows[pid]
-                names = name_tokens(paper.authors)
-                if pid != owner and status == "C" and share[pid] == 0 and names and not names & owner_names:
-                    found.append((paper, text))
-        return found
-
-    def replacement(self, paper: Paper, wrong: str, answers: dict) -> tuple[bool, str | None]:
-        answered, texts = True, []
-        for rank, name in enumerate(SWEEP_SOURCES):
-            if name not in answers:
-                continue
-            work = answers[name]
-            if work is TransientError:
-                answered = False
-                continue
-            if work is None:
-                continue
-            if name == "arxiv":
-                text = valid_abstract(work, paper.title)
-            else:
-                source = self.s2 if name.startswith("s2") else self.openalex
-                text = valid_abstract(source.abstract(work), paper.title) if source.same_paper(work, paper) else None
-            if text and not same_text(text, wrong):
-                texts.append((rank, text))
-        if not texts:
-            return answered, None
-        best = max(texts, key=lambda t: (sum(same_text(t[1], other) for _, other in texts), -t[0]))
-        return True, best[1]
-
-    def sweep(self) -> tuple[int, int, int]:
-        copies = self.wrong_copies()
-        if not copies:
-            return 0, 0, 0
-        self.progress.log(f"\n  wrong copy sweep · {len(copies):,} papers hold another paper's abstract · "
-                          "asking arXiv, OpenAlex and S2 (DOI and title) for their own")
-        papers = [p for p, _ in copies]
-        answers: dict[int, dict] = {p.paper_id: {} for p in papers}
-        with_arxiv = [p for p in papers if p.arxiv_id]
-        if with_arxiv:
-            try:
-                found = self.arxiv.fetch(sorted({p.arxiv_id for p in with_arxiv}))
-                for p in with_arxiv:
-                    answers[p.paper_id]["arxiv"] = found.get(p.arxiv_id)
-            except TransientError:
-                for p in with_arxiv:
-                    answers[p.paper_id]["arxiv"] = TransientError
-        with_doi = [p for p in papers if p.doi]
-        for p in with_doi:
-            try:
-                answers[p.paper_id]["openalex"] = self.openalex.by_doi_one(p)
-            except (TransientError, QuotaExhausted):
-                answers[p.paper_id]["openalex"] = TransientError
-        for i in range(0, len(with_doi), S2_BATCH):
-            chunk = with_doi[i:i + S2_BATCH]
-            try:
-                results = self.s2.by_doi(chunk)
-            except TransientError:
-                results = {p.paper_id: TransientError for p in chunk}
-            for p in chunk:
-                answers[p.paper_id]["s2"] = results.get(p.paper_id)
-        for p in papers:
-            if not (p.title or "").strip():
-                continue
-            try:
-                if self.title_budget:
-                    raise self.title_budget
-                answers[p.paper_id]["title"] = self.openalex.by_title(p)
-            except QuotaExhausted as e:
-                self.title_budget = e
-                try:
-                    answers[p.paper_id]["s2-title"] = self.s2.by_title(p)
-                except TransientError:
-                    answers[p.paper_id]["s2-title"] = TransientError
-            except TransientError:
-                answers[p.paper_id]["title"] = TransientError
-        discovered = {}
-        for p in papers:
-            if p.arxiv_id:
-                continue
-            for name in ("openalex", "s2", "title", "s2-title"):
-                work = answers[p.paper_id].get(name)
-                source = self.s2 if name.startswith("s2") else self.openalex
-                if isinstance(work, dict) and source.same_paper(work, p) and (found := source.arxiv_id(work)):
-                    discovered[p.paper_id] = found
-                    break
-        if discovered:
-            try:
-                found = self.arxiv.fetch(sorted(set(discovered.values())))
-                for pid, arxiv_id in discovered.items():
-                    answers[pid]["arxiv"] = found.get(arxiv_id)
-            except TransientError:
-                for pid in discovered:
-                    answers[pid]["arxiv"] = TransientError
-            self.store.add_arxiv_ids(discovered)
-            self.stats["arxiv ids found"] += len(discovered)
-        fixes, kept = [], 0
-        for p, wrong in copies:
-            answered, text = self.replacement(p, wrong, answers[p.paper_id])
-            if answered:
-                fixes.append((p, wrong, text))
-            else:
-                kept += 1
-        self.store.replace_copies(fixes)
-        replaced = sum(text is not None for _, _, text in fixes)
-        return len(fixes) - replaced, replaced, kept
-
     def run_stage(self, stage: Stage) -> None:
         self.check()
         passed = self.store.pass_on(stage)
@@ -1050,7 +855,7 @@ def main() -> None:
         fetcher.stopping.set()
         progress.log("    stopping: finishing requests in flight (Ctrl+C again to quit at once)")
     signal.signal(signal.SIGINT, on_sigint)
-    started, stopped, budget, sweep = time.time(), None, None, None
+    started, stopped, budget = time.time(), None, None
     try:
         for stage in STAGES:
             try:
@@ -1058,7 +863,6 @@ def main() -> None:
             except QuotaExhausted as e:
                 budget = e
                 progress.log(f"    stage {stage.no} paused: {e}; its papers wait for the next run")
-        sweep = fetcher.sweep()
     except Stopped as e:
         stopped = e
     finally:
@@ -1077,10 +881,6 @@ def main() -> None:
     print(f"  title ✓ OpenAlex {fetcher.stats['oa-title']:,}  S2 {fetcher.stats['s2-title']:,}"
           f"  ·  arXiv fallback ✓ {fetcher.stats['arxiv-fb']:,}  ·  arXiv ids recovered {fetcher.stats['arxiv ids found']:,}"
           f"  ·  other paper rejected {fetcher.stats['other paper']:,}")
-    if sweep:
-        cleared, replaced, kept = sweep
-        print(f"  wrong copy sweep: {replaced:,} replaced by the paper's own abstract  ·  {cleared:,} cleared"
-              + (f"  ·  {kept:,} left for the next run (a source did not answer)" if kept else ""))
     print(f"  calls: arXiv {fetcher.arxiv.http.calls:,}  OpenAlex {fetcher.openalex.calls:,}  "
           f"Semantic Scholar {fetcher.s2.http.calls:,}  |  {clock(time.time() - started)}")
     print("  status now: " + " · ".join(f"{s} {after.get(s, 0):,}" for s in OPEN_STATUSES + ["C"]))
